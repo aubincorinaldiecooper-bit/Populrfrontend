@@ -16,11 +16,21 @@ It includes three views toggled client-side via `showPage()`:
 - **For Creators** — Instagram automation tooling + pricing
 - **For Brands** — CPM clipping campaigns + pricing
 
-## Dashboard
+## App flow
 
-`dashboard.html` is a self-contained app shell for managing connected social
-accounts. It uses **Alpine.js** (CDN) for tab state plus Tailwind and Lucide,
-with sections for Connections, Posts, Analytics, Ads, Inbox, Team, and Settings.
+The "Get Started" / "Log in" buttons and the pricing CTAs on the landing page
+link to `onboarding.html`, which is the entry point into the product:
+
+1. **Landing** (`index.html`) → user clicks **Get Started**
+2. **Onboarding** (`onboarding.html`) → 3-step welcome + connect-accounts flow
+3. **Dashboard** → revealed in-place once onboarding completes ("Open Dashboard")
+
+`onboarding.html` is a self-contained app (onboarding **and** dashboard in one
+page) built with **Alpine.js** (CDN) plus Tailwind and Lucide. The dashboard has
+sections for Connections, Posts, Analytics, Ads, Inbox, Team, and Settings.
+
+`dashboard.html` is a standalone version of just the dashboard shell (no
+onboarding), kept for reference.
 
 ## Running locally
 
