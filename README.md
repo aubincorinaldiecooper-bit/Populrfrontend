@@ -16,6 +16,12 @@ It includes three views toggled client-side via `showPage()`:
 - **For Creators** — Instagram automation tooling + pricing
 - **For Brands** — CPM clipping campaigns + pricing
 
+## Dashboard
+
+`dashboard.html` is a self-contained app shell for managing connected social
+accounts. It uses **Alpine.js** (CDN) for tab state plus Tailwind and Lucide,
+with sections for Connections, Posts, Analytics, Ads, Inbox, Team, and Settings.
+
 ## Running locally
 
 No build step required. Open `index.html` directly in a browser, or serve it:
