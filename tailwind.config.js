@@ -63,9 +63,11 @@ export default {
       fontFamily: {
         geist: ['Geist', 'sans-serif'],
         mono: ['GeistMono', 'ui-monospace', 'monospace'],
+        'geist-mono': ['GeistMono', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
         card: '0 4px 16px rgba(17, 17, 17, 0.06)',
+        drawer: '-4px 0 24px rgba(17, 17, 17, 0.08)',
       },
       keyframes: {
         'accordion-down': {
@@ -76,10 +78,15 @@ export default {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'fade-in': 'fade-in 0.2s ease-out',
       },
     },
   },
