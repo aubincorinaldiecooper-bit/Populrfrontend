@@ -1,0 +1,104 @@
+import { useRef, useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router';
+import {
+  Sparkles, Inbox, Megaphone, Settings, Bell, Menu, X,
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { unreadCount, notifications } from '../data';
+import gsap from 'gsap';
+
+const navItems = [
+  { path: '/', label: 'Opportunities', icon: Sparkles },
+  { path: '/campaigns', label: 'Campaigns', icon: Megaphone },
+  { path: '/inbox', label: 'Inbox', icon: Inbox, badge: unreadCount },
+];
+
+export default function Sidebar() {
+  const location = useLocation();
+  const { onboardingComplete, toggleNotifications } = useApp();
+  const sidebarRef = useRef<HTMLElement>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const notifUnread = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    if (sidebarRef.current && onboardingComplete) {
+      gsap.fromTo(sidebarRef.current, { x: -220, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: 'power3.out', delay: 0.1 });
+    }
+  }, [onboardingComplete]);
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
+  };
+
+  const NavContent = () => (
+    <>
+      <Link to="/" className="px-6 pt-6 pb-4 flex items-center gap-2 shrink-0" onClick={() => setMobileOpen(false)}>
+        <div className="w-2 h-2 rounded-full bg-chartreuse" />
+        <span className="font-geist font-bold text-lg text-[#111111]">Populr</span>
+      </Link>
+
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+        {navItems.map(item => {
+          const active = isActive(item.path);
+          const Icon = item.icon;
+          return (
+            <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${active ? 'bg-[rgba(200,255,61,0.08)] text-[#111111] font-semibold border-l-[3px] border-chartreuse' : 'bg-transparent text-[#6B6B6B] font-medium border-l-[3px] border-transparent hover:bg-[#FAFAF8] hover:text-[#111111]'}`}>
+              <Icon size={18} strokeWidth={active ? 2.5 : 2} />
+              <span className="text-[13px]">{item.label}</span>
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className="ml-auto bg-coral text-white text-[10px] font-semibold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">{item.badge}</span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="px-3 pb-3 space-y-0.5 shrink-0 border-t border-[#E8E4DF] pt-2">
+        <button onClick={toggleNotifications}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[#6B6B6B] font-medium hover:bg-[#FAFAF8] hover:text-[#111111]">
+          <Bell size={18} strokeWidth={2} />
+          <span className="text-[13px]">Notifications</span>
+          {notifUnread > 0 && <span className="ml-auto bg-coral text-white text-[10px] font-semibold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">{notifUnread}</span>}
+        </button>
+        <Link to="/settings" onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-[#FAFAF8] transition-all border-t border-[#E8E4DF] mt-1">
+          <img src="/images/avatar-maya.jpg" alt="Maya Chen" className="w-8 h-8 rounded-full object-cover" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[13px] text-[#111111] truncate">Maya Chen</p>
+            <p className="text-[11px] text-[#9B9B8F] truncate">@mayastyle</p>
+          </div>
+          <Settings size={16} className="text-[#9B9B8F]" />
+        </Link>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-[#E8E4DF] z-[55] flex items-center px-4 gap-3">
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#FAFAF8] transition-all">
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+        <Link to="/" className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-chartreuse" />
+          <span className="font-geist font-bold text-lg text-[#111111]">Populr</span>
+        </Link>
+      </div>
+
+      {/* Desktop sidebar */}
+      <aside ref={sidebarRef} className="hidden lg:flex fixed left-0 top-0 h-screen w-[220px] bg-white border-r border-[#E8E4DF] z-50 flex-col">
+        <NavContent />
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      {mobileOpen && <div className="lg:hidden fixed inset-0 bg-[rgba(0,0,0,0.3)] z-[45]" onClick={() => setMobileOpen(false)} />}
+
+      <aside className={`lg:hidden fixed left-0 top-0 h-screen w-[260px] bg-white border-r border-[#E8E4DF] z-[50] flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <NavContent />
+      </aside>
+    </>
+  );
+}

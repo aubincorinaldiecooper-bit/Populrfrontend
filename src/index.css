@@ -1,0 +1,193 @@
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'GeistMono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ─── Brand ─── */
+    --pop-lime: 78 100% 62%;
+    --pop-cream: 30 23% 94%;
+    --pop-black: 0 0% 7%;
+
+    /* ─── Semantic ─── */
+    --pop-green: 152 82% 39%;
+    --pop-amber: 38 92% 50%;
+    --pop-coral: 14 100% 64%;
+    --pop-purple: 262 83% 58%;
+
+    /* ─── shadcn mapping ─── */
+    --background: 30 23% 94%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 78 100% 62%;
+    --primary-foreground: 0 0% 7%;
+    --secondary: 30 14% 95%;
+    --secondary-foreground: 0 0% 7%;
+    --muted: 30 14% 95%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 78 100% 62%;
+    --accent-foreground: 0 0% 7%;
+    --destructive: 14 100% 64%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 12% 90%;
+    --input: 30 12% 90%;
+    --ring: 78 100% 62%;
+    --radius: 0.625rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 7%;
+    --sidebar-primary: 78 100% 62%;
+    --sidebar-primary-foreground: 0 0% 7%;
+    --sidebar-accent: 30 14% 95%;
+    --sidebar-accent-foreground: 0 0% 7%;
+    --sidebar-border: 30 12% 90%;
+    --sidebar-ring: 78 100% 62%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-cream text-foreground font-geist antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: rgba(200, 255, 61, 0.3);
+  }
+
+  input:focus, textarea:focus, select:focus {
+    @apply outline-none ring-2 ring-chartreuse/30 border-chartreuse;
+  }
+
+  button:focus-visible {
+    @apply outline-none ring-2 ring-chartreuse/50 ring-offset-2 ring-offset-cream;
+  }
+}
+
+@layer components {
+  /* ─── Populr Design Tokens ─── */
+
+  /* Page surface */
+  .pop-page {
+    @apply p-6 lg:p-8 max-w-[1200px] mx-auto;
+  }
+
+  /* Cards */
+  .pop-card {
+    @apply bg-white rounded-2xl border border-[#E8E4DF];
+  }
+  .pop-card-hover {
+    @apply hover:border-[#D4CFC8] hover:shadow-card transition-all;
+  }
+  .pop-card-compact {
+    @apply bg-white rounded-2xl border border-[#E8E4DF] p-4;
+  }
+
+  /* Inputs */
+  .pop-input {
+    @apply bg-white border border-[#E8E4DF] rounded-xl px-4 py-2.5 text-sm placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
+  }
+
+  /* Search input (shared across all pages) */
+  .pop-search {
+    @apply w-full bg-white border border-[#E8E4DF] rounded-xl pl-9 pr-3 py-2 text-sm placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
+  }
+
+  /* ─── CTA Hierarchy ─── */
+
+  /* Primary: Acid lime */
+  .pop-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-chartreuse text-[#111111] rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-chartreuse-hover transition-all;
+  }
+
+  /* Secondary: Black */
+  .pop-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-[#111111] text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-[#333] transition-all;
+  }
+
+  /* Tertiary: Outline */
+  .pop-btn-tertiary {
+    @apply inline-flex items-center justify-center gap-2 border border-[#E8E4DF] text-[#111111] rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-[#FAFAF8] transition-all;
+  }
+
+  /* Ghost: Text only */
+  .pop-btn-ghost {
+    @apply inline-flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#111111] transition-colors;
+  }
+
+  /* ─── Typography ─── */
+
+  .pop-title {
+    @apply font-geist font-bold text-2xl lg:text-[32px] text-[#111111] tracking-tight leading-tight;
+  }
+
+  .pop-section-heading {
+    @apply font-geist font-bold text-xl lg:text-2xl text-[#111111];
+  }
+
+  .pop-card-title {
+    @apply font-geist font-semibold text-base text-[#111111];
+  }
+
+  .pop-body {
+    @apply text-sm text-[#6B6B6B] leading-relaxed;
+  }
+
+  .pop-meta {
+    @apply text-xs text-[#9B9B8F];
+  }
+
+  /* ─── Status badges ─── */
+
+  .pop-badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium;
+  }
+
+  /* ─── Semantic colors (applied via badges) ─── */
+
+  /* Intent: strongest signal */
+  .pop-intent-conversion { @apply bg-[#FEE2E2] text-[#DC2626]; }
+  .pop-intent-pricing { @apply bg-[#FFF3E0] text-[#D97706]; }
+  .pop-intent-collaboration { @apply bg-[#EFF6FF] text-[#3B82F6]; }
+  .pop-intent-support { @apply bg-[#F3F4F6] text-[#6B7280]; }
+  .pop-intent-casual { @apply bg-[#F3F4F6] text-[#6B7280]; }
+
+  /* Relationship: soft semantic */
+  .pop-rel-warm { @apply bg-[#E0F5E9] text-[#059669]; }
+  .pop-rel-ready { @apply bg-[#FFF3E0] text-[#D97706]; }
+  .pop-rel-engaged { @apply bg-[#EFF6FF] text-[#3B82F6]; }
+  .pop-rel-new { @apply bg-[#F3F4F6] text-[#6B7280]; }
+  .pop-rel-atrisk { @apply bg-[#FEE2E2] text-[#DC2626]; }
+
+  /* Stage: compact label */
+  .pop-stage-discovered { @apply bg-[#F3F4F6] text-[#6B7280]; }
+  .pop-stage-engaged { @apply bg-[#EFF6FF] text-[#3B82F6]; }
+  .pop-stage-interested { @apply bg-[#FFF3E0] text-[#D97706]; }
+  .pop-stage-converted { @apply bg-[#E0F5E9] text-[#059669]; }
+
+  /* Status: general */
+  .pop-status-active { @apply bg-[#E0F5E9] text-[#059669]; }
+  .pop-status-paused { @apply bg-[#FFF3E0] text-[#D97706]; }
+  .pop-status-draft { @apply bg-[#F3F4F6] text-[#6B7280]; }
+}
