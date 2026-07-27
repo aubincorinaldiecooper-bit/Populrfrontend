@@ -10,6 +10,7 @@ import {
   contacts as initialContacts,
 } from '../data';
 import type { Contact } from '../data';
+import { isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts } from '../lib/api';
 
 export interface Toast {
   id: string;
@@ -60,6 +61,8 @@ interface AppContextType extends AppState {
   setSmartReply: (reply: { text: string; editing: boolean } | null) => void;
   // Onboarding platform connection
   connectPlatform: (id: string) => void;
+  beginPlatformConnect: (id: string) => void;
+  refreshConnectedAccounts: () => void;
   setSelectedAudienceGoal: (goal: string) => void;
   // Connected accounts (rich)
   updateAccountStatus: (id: string, status: ConnectedAccountStatus) => void;
@@ -370,6 +373,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, toasts: prev.toasts.filter(t => t.id !== id) }));
   }, []);
 
+  // Real Instagram/TikTok/YouTube/X connect, backed by the Zernio-powered
+  // backend. Falls back to the local simulated connect when no backend is
+  // configured (VITE_API_BASE_URL unset), so the app still demos standalone.
+  const beginPlatformConnect = useCallback((id: string) => {
+    if (!isBackendConfigured()) {
+      connectPlatform(id);
+      return;
+    }
+    setState(prev => ({
+      ...prev,
+      connectedPlatforms: prev.connectedPlatforms.map(p =>
+        p.id === id ? { ...p, status: 'connecting' as const } : p
+      ),
+    }));
+    const to = `${window.location.origin}${window.location.pathname}?connected=${id}`;
+    getPlatformConnectUrl(id, to)
+      .then(url => {
+        window.location.href = url;
+      })
+      .catch(err => {
+        console.error(`[connect] failed to start ${id} connect:`, err);
+        setState(prev => ({
+          ...prev,
+          connectedPlatforms: prev.connectedPlatforms.map(p =>
+            p.id === id ? { ...p, status: 'idle' as const } : p
+          ),
+        }));
+        showToast(`Couldn't connect ${id} right now. Please try again.`, 'error');
+      });
+  }, [connectPlatform, showToast]);
+
+  // Pulls real synced accounts from the backend and reflects them onto the
+  // onboarding platform list — used after returning from the OAuth redirect.
+  const refreshConnectedAccounts = useCallback(() => {
+    if (!isBackendConfigured()) return;
+    fetchConnectedAccounts()
+      .then(accounts => {
+        setState(prev => ({
+          ...prev,
+          connectedPlatforms: prev.connectedPlatforms.map(p => {
+            const match = accounts.find(a => a.platform === p.id && a.is_connected);
+            if (!match) return p;
+            return {
+              ...p,
+              status: 'connected' as const,
+              handle: match.username ? `@${match.username}` : match.display_name ?? p.handle,
+            };
+          }),
+        }));
+      })
+      .catch(err => {
+        console.error('[connect] failed to refresh connected accounts:', err);
+      });
+  }, []);
+
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));
   }, []);
@@ -388,6 +446,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeNotifications,
       setSmartReply,
       connectPlatform,
+      beginPlatformConnect,
+      refreshConnectedAccounts,
       setSelectedAudienceGoal,
       updateAccountStatus,
       setPrimaryAccount,
