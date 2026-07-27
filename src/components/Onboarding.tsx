@@ -85,7 +85,7 @@ function GradientOverlay({ status }: { status: string }) {
 }
 
 export default function Onboarding() {
-  const { completeOnboarding, connectedPlatforms, connectPlatform, setSelectedAudienceGoal } = useApp();
+  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, refreshConnectedAccounts, setSelectedAudienceGoal } = useApp();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -107,8 +107,21 @@ export default function Onboarding() {
     const platformId = searchParams.get("connect");
     if (!platformId) return;
     const platform = connectedPlatforms.find(p => p.id === platformId);
-    if (platform && platform.status === "idle") connectPlatform(platformId);
+    if (platform && platform.status === "idle") beginPlatformConnect(platformId);
     // Only run once on mount, driven by the CTA that landed the user here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Returning from the Zernio OAuth redirect (?connected=<platform>): pull the
+  // real synced account from the backend instead of trusting the URL alone.
+  useEffect(() => {
+    const connectedPlatformId = searchParams.get("connected");
+    if (!connectedPlatformId) return;
+    refreshConnectedAccounts();
+    const url = new URL(window.location.href);
+    url.searchParams.delete("connected");
+    window.history.replaceState(null, "", url.toString());
+    // Only run once on mount, driven by the OAuth provider's return redirect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -148,7 +161,7 @@ export default function Onboarding() {
       id: p.id, title: p.name,
       status: st === "connected" ? "completed" as const : st === "connecting" ? "syncing" as const : "idle" as const,
       icon: p.icon, iconColor: p.color,
-      onConnect: () => { if (st === "idle") connectPlatform(p.id); },
+      onConnect: () => { if (st === "idle") beginPlatformConnect(p.id); },
     };
   });
 
