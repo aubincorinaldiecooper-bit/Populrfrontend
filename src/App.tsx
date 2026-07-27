@@ -27,9 +27,15 @@ export default function App() {
   const { isLoading, onboardingComplete } = useApp();
   const location = useLocation();
 
-  if (location.pathname === '/landing') return <LandingPage />;
   if (isLoading) return <LoadingState />;
-  if (!onboardingComplete) return <Onboarding />;
+
+  // Before onboarding, /connect is the connect flow; every other path (the
+  // site's root included) is the marketing landing page, whose CTA links
+  // into /connect. (Not "/onboarding" — a static onboarding.html prototype
+  // file at the repo root shadows that path in `vite dev`.)
+  if (!onboardingComplete) {
+    return location.pathname === '/connect' ? <Onboarding /> : <LandingPage />;
+  }
 
   return (
     <Routes>

@@ -255,7 +255,7 @@ export default function LandingPage() {
             opportunities, building your pipeline. Takes less than a minute.
           </p>
           <Link
-            to="/?connect=instagram"
+            to="/connect?platform=instagram"
             className="group inline-flex shrink-0 items-center justify-center gap-3 rounded-2xl bg-black px-8 py-5 text-base font-semibold text-white shadow-xl shadow-black/20 transition-transform hover:scale-[1.02]"
           >
             <Instagram className="h-5 w-5" />
