@@ -444,9 +444,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return {
               ...acc,
               status: 'connected' as const,
-              displayName: match.display_name ?? acc.displayName,
-              handle: match.username ? `@${match.username}` : acc.handle,
-              avatar: match.avatar_url ?? acc.avatar,
+              // Once a real match exists, never keep the seeded demo
+              // identity fields (e.g. "Maya Chen") for a null backend value.
+              displayName: match.display_name ?? '',
+              handle: match.username ? `@${match.username}` : '',
+              avatar: match.avatar_url ?? '',
               lastSynced: 'Just now',
             };
           }),
