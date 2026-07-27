@@ -387,7 +387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Real Instagram/TikTok/YouTube/X connect, backed by the Zernio-powered
   // backend. Falls back to the local simulated connect when no backend is
-  // configured (VITE_API_BASE_URL unset), so the app still demos standalone.
+  // configured (VITE_API_URL unset), so the app still demos standalone.
   const beginPlatformConnect = useCallback((id: string) => {
     if (!isBackendConfigured()) {
       connectPlatform(id);
