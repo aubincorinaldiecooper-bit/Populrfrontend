@@ -104,7 +104,7 @@ export default function Onboarding() {
   }, [shouldReduceMotion]);
 
   useEffect(() => {
-    const platformId = searchParams.get("connect");
+    const platformId = searchParams.get("platform");
     if (!platformId) return;
     const platform = connectedPlatforms.find(p => p.id === platformId);
     if (platform && platform.status === "idle") beginPlatformConnect(platformId);
