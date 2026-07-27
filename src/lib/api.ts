@@ -2,12 +2,12 @@
 // Populr — Backend API client
 // Talks to the populrbackend service (Express + Zernio) that handles the
 // real Instagram/TikTok/YouTube/X OAuth connect flow and stores synced
-// accounts. Base URL is baked in at build time via VITE_API_BASE_URL.
+// accounts. Base URL is baked in at build time via VITE_API_URL.
 // ============================================================
 
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
-/** True once VITE_API_BASE_URL is set — gates real API calls vs. local demo behavior. */
+/** True once VITE_API_URL is set — gates real API calls vs. local demo behavior. */
 export function isBackendConfigured(): boolean {
   return API_BASE_URL !== '';
 }

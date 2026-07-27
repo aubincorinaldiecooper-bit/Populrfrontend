@@ -12,6 +12,18 @@ import {
 import type { Contact } from '../data';
 import { isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts } from '../lib/api';
 
+// The rich `connectedAccounts` model (Settings > Connections) predates the
+// backend integration and keys accounts by its own short ids (`defaultConnectedAccounts`
+// in ../data), distinct from the backend's lowercase platform names used by
+// `connectedPlatforms` and the connect API. This bridges the two so a real
+// connection reflects in both places instead of only onboarding.
+const RICH_ACCOUNT_PLATFORM_BY_ID: Record<string, string> = {
+  ig: 'instagram',
+  tt: 'tiktok',
+  yt: 'youtube',
+  tw: 'twitter',
+};
+
 export interface Toast {
   id: string;
   message: string;
@@ -375,7 +387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Real Instagram/TikTok/YouTube/X connect, backed by the Zernio-powered
   // backend. Falls back to the local simulated connect when no backend is
-  // configured (VITE_API_BASE_URL unset), so the app still demos standalone.
+  // configured (VITE_API_URL unset), so the app still demos standalone.
   const beginPlatformConnect = useCallback((id: string) => {
     if (!isBackendConfigured()) {
       connectPlatform(id);
@@ -404,8 +416,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
   }, [connectPlatform, showToast]);
 
-  // Pulls real synced accounts from the backend and reflects them onto the
-  // onboarding platform list — used after returning from the OAuth redirect.
+  // Pulls real synced accounts from the backend and reflects them onto both
+  // the onboarding platform list and the richer Settings "Connections" model
+  // — used after returning from the OAuth redirect. Both slices are derived
+  // from the same backend response so they can't drift out of sync with
+  // each other or with reality.
   const refreshConnectedAccounts = useCallback(() => {
     if (!isBackendConfigured()) return;
     fetchConnectedAccounts()
@@ -419,6 +434,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ...p,
               status: 'connected' as const,
               handle: match.username ? `@${match.username}` : match.display_name ?? p.handle,
+            };
+          }),
+          connectedAccounts: prev.connectedAccounts.map(acc => {
+            const platformId = RICH_ACCOUNT_PLATFORM_BY_ID[acc.id];
+            if (!platformId) return acc;
+            const match = accounts.find(a => a.platform === platformId && a.is_connected);
+            if (!match) return acc;
+            return {
+              ...acc,
+              status: 'connected' as const,
+              // Once a real match exists, never keep the seeded demo
+              // identity fields (e.g. "Maya Chen") for a null backend value.
+              displayName: match.display_name ?? '',
+              handle: match.username ? `@${match.username}` : '',
+              avatar: match.avatar_url ?? '',
+              lastSynced: 'Just now',
             };
           }),
         }));
