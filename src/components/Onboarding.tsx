@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ChevronLeft, Instagram, Music, Youtube, Twitter } from "lucide-react";
+import { useSearchParams } from "react-router";
 import { useApp } from "../context/AppContext";
 
 const PLATFORMS = [
@@ -85,6 +86,7 @@ function GradientOverlay({ status }: { status: string }) {
 
 export default function Onboarding() {
   const { completeOnboarding, connectedPlatforms, connectPlatform, setSelectedAudienceGoal } = useApp();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [selectedGoal, setSelectedGoal] = useState("");
@@ -100,6 +102,15 @@ export default function Onboarding() {
     const interval = setInterval(() => setActiveDashIndex(prev => (prev + 1) % 8), 100);
     return () => clearInterval(interval);
   }, [shouldReduceMotion]);
+
+  useEffect(() => {
+    const platformId = searchParams.get("connect");
+    if (!platformId) return;
+    const platform = connectedPlatforms.find(p => p.id === platformId);
+    if (platform && platform.status === "idle") connectPlatform(platformId);
+    // Only run once on mount, driven by the CTA that landed the user here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (step !== 3) return;

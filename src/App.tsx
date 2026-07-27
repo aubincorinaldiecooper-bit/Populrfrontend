@@ -1,10 +1,11 @@
-import { Routes, Route, Navigate } from 'react-router';
+import { Routes, Route, Navigate, useLocation } from 'react-router';
 import { useApp } from './context/AppContext';
 import { lazy, Suspense } from 'react';
 
 import Onboarding from './components/Onboarding';
 import Layout from './components/Layout';
 import LoadingState from './components/LoadingState';
+import LandingPage from './pages/LandingPage';
 
 // MVP pages
 import OpportunitiesPage from './pages/OpportunitiesPage';
@@ -24,7 +25,9 @@ const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 export default function App() {
   const { isLoading, onboardingComplete } = useApp();
+  const location = useLocation();
 
+  if (location.pathname === '/landing') return <LandingPage />;
   if (isLoading) return <LoadingState />;
   if (!onboardingComplete) return <Onboarding />;
 
