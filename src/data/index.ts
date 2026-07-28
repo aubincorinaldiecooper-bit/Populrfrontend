@@ -27,7 +27,7 @@ export const creator: CreatorProfile = {
 };
 
 // ─── Contacts ──────────────────────────────────────────────
-export type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter';
+export type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'linkedin';
 export type Relationship = 'new' | 'engaged' | 'warm' | 'ready' | 'subscriber' | 'high-value' | 'at-risk';
 // ─── Contact Notes ─────────────────────────────────────────
 export interface ContactNote {
@@ -728,6 +728,7 @@ export const platformColors: Record<Platform, string> = {
   tiktok: 'bg-black',
   youtube: 'bg-red-600',
   twitter: 'bg-black',
+  linkedin: 'bg-[#0A66C2]',
 };
 
 // Semantic color system
@@ -933,14 +934,15 @@ export interface OnboardingPlatform {
   icon: string;
   status: AccountStatus;
   handle?: string;
+  /** Set when status is 'error' — the backend's own failure reason, never fabricated. */
+  errorMessage?: string;
 }
 
+// Populr's supported connection surface: Instagram, TikTok, and LinkedIn only.
 export const defaultOnboardingPlatforms: OnboardingPlatform[] = [
   { id: 'instagram', name: 'Instagram', icon: 'instagram', status: 'idle' },
   { id: 'tiktok', name: 'TikTok', icon: 'tiktok', status: 'idle' },
-
-  { id: 'twitter', name: 'X / Twitter', icon: 'twitter', status: 'idle' },
-  { id: 'youtube', name: 'YouTube', icon: 'youtube', status: 'idle' },
+  { id: 'linkedin', name: 'LinkedIn', icon: 'linkedin', status: 'idle' },
 ];
 
 // Audience goals for onboarding

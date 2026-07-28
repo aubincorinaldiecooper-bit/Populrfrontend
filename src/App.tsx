@@ -10,6 +10,7 @@ import ToastContainer from './components/ToastContainer';
 
 // MVP pages
 import OpportunitiesPage from './pages/OpportunitiesPage';
+import ConnectionsPage from './pages/ConnectionsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import InboxPage from './pages/InboxPage';
@@ -42,6 +43,7 @@ function AppContent() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<OpportunitiesPage />} />
+        <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
         <Route path="/campaigns/new" element={<CampaignBuilderPage />} />
         <Route path="/inbox" element={<InboxPage />} />

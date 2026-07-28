@@ -1,16 +1,19 @@
 import { useRef, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import {
-  Sparkles, Inbox, Megaphone, Settings, Bell, Menu, X,
+  Sparkles, Link2, Settings, Bell, Menu, X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { unreadCount, notifications } from '../data';
+import { notifications } from '../data';
 import gsap from 'gsap';
 
+// Primary nav is intentionally limited to the two-step Populr journey:
+// find opportunities, and manage the connections that feed them. Campaigns,
+// Inbox, and other broader surfaces still exist and are reachable directly
+// by URL — they're hidden from primary nav, not deleted.
 const navItems = [
   { path: '/', label: 'Opportunities', icon: Sparkles },
-  { path: '/campaigns', label: 'Campaigns', icon: Megaphone },
-  { path: '/inbox', label: 'Inbox', icon: Inbox, badge: unreadCount },
+  { path: '/connections', label: 'Connections', icon: Link2 },
 ];
 
 export default function Sidebar() {
@@ -47,9 +50,6 @@ export default function Sidebar() {
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${active ? 'bg-[rgba(200,255,61,0.08)] text-[#111111] font-semibold border-l-[3px] border-chartreuse' : 'bg-transparent text-[#6B6B6B] font-medium border-l-[3px] border-transparent hover:bg-[#FAFAF8] hover:text-[#111111]'}`}>
               <Icon size={18} strokeWidth={active ? 2.5 : 2} />
               <span className="text-[13px]">{item.label}</span>
-              {item.badge !== undefined && item.badge > 0 && (
-                <span className="ml-auto bg-coral text-white text-[10px] font-semibold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">{item.badge}</span>
-              )}
             </Link>
           );
         })}
