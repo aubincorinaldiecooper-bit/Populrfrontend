@@ -108,9 +108,27 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// Onboarding completion outlives the tab because the OAuth connect flow leaves
+// the app entirely and comes back via a full page load. Without this, the
+// return trip lands on the marketing page instead of the route that reads
+// ?connected= and pulls the freshly linked account. It also delivers the
+// intended return experience: a creator who's already connected an account
+// lands straight on Opportunities.
+const ONBOARDING_STORAGE_KEY = 'populr.onboardingComplete';
+
+function readOnboardingComplete(): boolean {
+  try {
+    return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === 'true';
+  } catch {
+    // Storage can be unavailable (private mode, blocked cookies) — fall back
+    // to the pre-onboarding experience rather than breaking the app.
+    return false;
+  }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>({
-    onboardingComplete: false,
+    onboardingComplete: readOnboardingComplete(),
     selectedConversationId: '1',
     selectedContactId: null,
     showContactDrawer: false,
@@ -133,6 +151,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const completeOnboarding = useCallback(() => {
+    try {
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+    } catch {
+      // Non-fatal: the session still proceeds, it just won't survive a reload.
+    }
     setState(prev => ({ ...prev, onboardingComplete: true }));
   }, []);
 

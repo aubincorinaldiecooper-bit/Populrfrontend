@@ -32,21 +32,23 @@ export default function ConnectionsPage() {
       });
   }, [backendConfigured]);
 
-  // Returning from the Zernio OAuth redirect (?connected=<platform>), same as
-  // Onboarding's handling — this route is also a valid OAuth return target
-  // once onboarding is already complete.
-  const handleOAuthReturn = useCallback(() => {
-    const connectedPlatformId = searchParams.get('connected');
-    if (!connectedPlatformId) return;
+  // Connection state lives in memory, so after any full page load (including
+  // the return trip from the OAuth redirect) it has to be re-read from the
+  // backend — otherwise a genuinely connected account renders as "Not
+  // connected". Also clears the ?connected= marker the callback leaves behind.
+  const syncFromBackend = useCallback(() => {
+    if (!backendConfigured) return;
     refreshConnectedAccounts();
-    const url = new URL(window.location.href);
-    url.searchParams.delete('connected');
-    window.history.replaceState(null, '', url.toString());
-  }, [searchParams, refreshConnectedAccounts]);
+    if (searchParams.get('connected')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('connected');
+      window.history.replaceState(null, '', url.toString());
+    }
+  }, [backendConfigured, searchParams, refreshConnectedAccounts]);
 
   useEffect(() => {
-    handleOAuthReturn();
-  }, [handleOAuthReturn]);
+    syncFromBackend();
+  }, [syncFromBackend]);
 
   const connectedCount = connectedPlatforms.filter(p => p.status === 'connected').length;
 
