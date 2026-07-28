@@ -6,6 +6,7 @@ import Onboarding from './components/Onboarding';
 import Layout from './components/Layout';
 import LoadingState from './components/LoadingState';
 import LandingPage from './pages/LandingPage';
+import ToastContainer from './components/ToastContainer';
 
 // MVP pages
 import OpportunitiesPage from './pages/OpportunitiesPage';
@@ -23,7 +24,7 @@ const ContentPage = lazy(() => import('./pages/ContentPage'));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
-export default function App() {
+function AppContent() {
   const { isLoading, onboardingComplete } = useApp();
   const location = useLocation();
 
@@ -55,5 +56,16 @@ export default function App() {
       <Route path="/dashboard" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <>
+      <AppContent />
+      {/* Rendered unconditionally: connect errors happen before onboardingComplete
+          is true, and Layout (which normally owns this) isn't mounted yet. */}
+      <ToastContainer />
+    </>
   );
 }

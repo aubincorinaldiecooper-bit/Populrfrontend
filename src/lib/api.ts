@@ -25,7 +25,15 @@ export interface ConnectedAccount {
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`);
   if (!res.ok) {
-    throw new Error(`Populr API ${path} failed with ${res.status}`);
+    // Surface the backend's own error/message when it sends one (e.g.
+    // { error: "disallowed_return_url", message: "..." }), not just the
+    // HTTP status — that's the difference between "connect is broken" and
+    // "ALLOWED_FRONTEND_ORIGINS isn't set" being visible without devtools.
+    const reason = await res
+      .json()
+      .then((body: { error?: string; message?: string }) => body.message || body.error)
+      .catch(() => undefined);
+    throw new Error(reason || `Populr API ${path} failed with ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
