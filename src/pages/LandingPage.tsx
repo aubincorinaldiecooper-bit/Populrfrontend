@@ -40,7 +40,7 @@ function SectionPhoto({
       <img
         src={src}
         alt={alt}
-        className={`pointer-events-none absolute rounded-2xl object-cover shadow-2xl lg:hidden ${mobileClassName}`}
+        className={`pointer-events-none absolute inset-x-[6vw] rounded-2xl object-cover shadow-2xl lg:hidden ${mobileClassName}`}
       />
     </>
   );
@@ -54,7 +54,7 @@ export default function LandingPage() {
           src="/images/landing/friends-reacting.webp"
           alt="Three friends reacting to something on a phone together"
           bg={BLACK}
-          mobileClassName="right-[5vw] bottom-[4vw] h-[20vh] w-[32vw] max-w-[190px]"
+          mobileClassName="top-[28vh] h-[42vh]"
         />
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold uppercase tracking-[0.2em]">01 — What is Populr</p>
@@ -85,7 +85,7 @@ export default function LandingPage() {
           src="/images/landing/creator-glam.webp"
           alt="A creator applying makeup while filming content"
           bg={LIME}
-          mobileClassName="right-[5vw] top-[38vh] h-[16vh] w-[30vw] max-w-[170px]"
+          mobileClassName="top-[47vh] h-[20vh]"
         />
         <p className="text-xs font-bold uppercase tracking-[0.2em]">02 — The mission</p>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
@@ -104,7 +104,7 @@ export default function LandingPage() {
           with no way to turn them into a business. Populr reads the signals so you don&apos;t have to.
         </p>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <div className="flex flex-wrap gap-[3vw] lg:max-w-[62%]">
+        <div className="mt-auto flex flex-wrap gap-[3vw] lg:max-w-[62%]">
           <div className="min-w-[180px] flex-1">
             <p className={GRID_LABEL}>Connect</p>
             <p className={GRID_BODY}>
@@ -131,7 +131,7 @@ export default function LandingPage() {
           src="/images/landing/connect-selfie.webp"
           alt="A creator holding up her phone, framing a selfie"
           bg={CREAM}
-          mobileClassName="right-[5vw] top-[36vh] h-[16vh] w-[30vw] max-w-[170px]"
+          mobileClassName="top-[47vh] h-[20vh]"
         />
         <p className="text-xs font-bold uppercase tracking-[0.2em]">03 — How it works</p>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
@@ -179,7 +179,7 @@ export default function LandingPage() {
           src="/images/landing/audience-crowd.webp"
           alt="A performer on stage in front of a crowd holding up their phones"
           bg={BLACK}
-          mobileClassName="right-[5vw] top-[36vh] h-[17vh] w-[32vw] max-w-[190px]"
+          mobileClassName="top-[47vh] h-[20vh]"
         />
         <p className="text-xs font-bold uppercase tracking-[0.2em]">04 — The vision</p>
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
@@ -232,7 +232,7 @@ export default function LandingPage() {
           src="/images/landing/creator-fitness.webp"
           alt="Two creators posing together in a gym"
           bg={LIME}
-          mobileClassName="right-[5vw] top-[10vh] h-[16vh] w-[28vw] max-w-[160px]"
+          mobileClassName="top-[30vh] h-[32vh]"
         />
         <p className="text-xs font-bold uppercase tracking-[0.2em]">05 — Get started</p>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
