@@ -216,7 +216,13 @@ export default function Onboarding() {
             variants={{ visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
             initial="hidden" animate="visible">
             <AnimatePresence mode="popLayout">
-              {sorted.map(card => (
+              {sorted.map(card => {
+                const isInteractive = card.status === "idle" && !card.isInput;
+                const activate = () => {
+                  if (step === 1) card.onConnect?.();
+                  else if (step === 2) card.onSelect?.();
+                };
+                return (
                 <motion.div key={card.id} layout layoutId={card.id}
                   variants={{
                     hidden: { opacity: 0, y: 20, scale: 0.98 },
@@ -224,15 +230,17 @@ export default function Onboarding() {
                   }}
                   exit={{ opacity: 0, y: -20, scale: 0.98, transition: { duration: shouldReduceMotion ? 0.15 : 0.2 } }}
                   transition={{ layout: { type: "spring", stiffness: 400, damping: 30, duration: shouldReduceMotion ? 0.2 : 0.5 } }}
-                  className="relative" onMouseEnter={() => setHoveredCard(card.id)} onMouseLeave={() => setHoveredCard(null)}
-                  onClick={() => {
-                    if (card.status !== "idle") return;
-                    if (step === 1) card.onConnect?.();
-                    else if (step === 2 && !card.isInput) card.onSelect?.();
-                  }}>
+                  className={`relative rounded-xl ${isInteractive ? "outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/50 focus-visible:ring-offset-2" : ""}`}
+                  onMouseEnter={() => setHoveredCard(card.id)} onMouseLeave={() => setHoveredCard(null)}
+                  role={isInteractive ? "button" : undefined}
+                  tabIndex={isInteractive ? 0 : undefined}
+                  onClick={isInteractive ? activate : undefined}
+                  onKeyDown={isInteractive ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+                  } : undefined}>
 
                   <motion.div
-                    className={`relative bg-neutral-100/60 border border-neutral-200/50 rounded-xl p-4 overflow-hidden ${card.status === "idle" && !card.isInput ? "cursor-pointer" : ""}`}
+                    className={`relative bg-neutral-100/60 border border-neutral-200/50 rounded-xl p-4 overflow-hidden ${isInteractive ? "cursor-pointer" : ""}`}
                     whileHover={{ y: -1, transition: { type: "spring", stiffness: 400, damping: 25 } }}
                     animate={card.status === "completed" ? { scale: [1, 1.02, 1], transition: { duration: shouldReduceMotion ? 0 : 0.6, ease: [0.04, 0.62, 0.23, 0.98], times: [0, 0.3, 1] } } : {}}>
                     <GradientOverlay status={card.status} />
@@ -289,7 +297,8 @@ export default function Onboarding() {
                     </div>
                   </motion.div>
                 </motion.div>
-              ))}
+                );
+              })}
             </AnimatePresence>
           </motion.div>
 
