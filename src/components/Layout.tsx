@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import Sidebar from './Sidebar';
 import ContactProfileDrawer from './ContactProfileDrawer';
 import NotificationDrawer from './NotificationDrawer';
-import ToastContainer from './ToastContainer';
 import { useApp } from '../context/AppContext';
 
 export default function Layout({ children }: { children?: ReactNode }) {
@@ -17,7 +16,9 @@ export default function Layout({ children }: { children?: ReactNode }) {
       </main>
       {showContactDrawer && <ContactProfileDrawer />}
       <NotificationDrawer open={showNotifications} onClose={closeNotifications} />
-      <ToastContainer />
+      {/* ToastContainer is rendered once, unconditionally, in App.tsx — it
+          needs to be visible before onboarding completes (Layout isn't
+          mounted yet), not just after. */}
     </div>
   );
 }

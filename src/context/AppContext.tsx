@@ -412,7 +412,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             p.id === id ? { ...p, status: 'idle' as const } : p
           ),
         }));
-        showToast(`Couldn't connect ${id} right now. Please try again.`, 'error');
+        const reason = err instanceof Error && err.message ? err.message : undefined;
+        showToast(
+          reason ? `Couldn't connect ${id}: ${reason}` : `Couldn't connect ${id} right now. Please try again.`,
+          'error'
+        );
       });
   }, [connectPlatform, showToast]);
 
