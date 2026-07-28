@@ -26,17 +26,17 @@ export default function LandingPage() {
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
         <div>
           <h1 className={HEADLINE}>
-            Comments
+            Find The People
             <br />
-            Into
+            Ready To Take
             <br />
-            Customers
+            The Next Step
           </h1>
         </div>
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
         <p className={`mt-auto ${BODY}`}>
-          Populr turns your social comments, DMs, and followers into a real, sellable audience. No
-          spreadsheets, no guesswork — just your next customer, found automatically.
+          Populr reviews engagement across Instagram, TikTok, and LinkedIn, then surfaces the people
+          showing real interest.
         </p>
       </FlowSection>
 
@@ -60,21 +60,21 @@ export default function LandingPage() {
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
         <div className="flex flex-wrap gap-[3vw]">
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>Import</p>
+            <p className={GRID_LABEL}>Connect</p>
             <p className={GRID_BODY}>
-              Instagram, TikTok, YouTube, and X — every follower and fan in one place, automatically.
+              Instagram, TikTok, and LinkedIn — every comment and message reviewed in one place.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
             <p className={GRID_LABEL}>Detect</p>
             <p className={GRID_BODY}>
-              Populr reads every comment and DM to spot who&apos;s ready to buy, book, or collaborate.
+              Populr reviews every comment and DM to spot who&apos;s ready to buy, book, or collaborate.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>Convert</p>
+            <p className={GRID_LABEL}>Respond</p>
             <p className={GRID_BODY}>
-              Turn interest into income with segments, campaigns, and automations built for creators.
+              Know exactly who to respond to next, and why they&apos;re worth your time.
             </p>
           </div>
         </div>
@@ -87,35 +87,35 @@ export default function LandingPage() {
           <h2 className={HEADLINE}>
             Connect.
             <br />
-            Detect.
+            Review.
             <br />
-            Convert.
+            Respond.
           </h2>
         </div>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
         <p className={BODY}>
-          Three steps. Populr does the heavy lifting from your first comment to your next sale.
+          Three steps. Populr does the work of finding who&apos;s worth your attention.
         </p>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
         <div className="mt-auto flex flex-wrap gap-[3vw]">
           <div className="min-w-[180px] flex-1">
             <p className={GRID_LABEL}>01 — Connect</p>
             <p className={GRID_BODY}>
-              Link your socials in one tap. Instagram, TikTok, YouTube, and X — whenever you&apos;re
+              Link your socials in one tap. Instagram, TikTok, and LinkedIn — whenever you&apos;re
               ready.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>02 — Detect</p>
+            <p className={GRID_LABEL}>02 — Review</p>
             <p className={GRID_BODY}>
               Populr scans every comment and DM, flagging pricing questions, bookings, and collab
               requests instantly.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>03 — Convert</p>
+            <p className={GRID_LABEL}>03 — Respond</p>
             <p className={GRID_BODY}>
-              Contacts move from discovered to converted automatically — no manual tagging, no
+              See exactly who&apos;s showing real intent and what to say next — no manual tagging, no
               spreadsheets.
             </p>
           </div>
@@ -143,27 +143,27 @@ export default function LandingPage() {
         <div className="mt-auto flex flex-wrap gap-[3vw]">
           <div className="min-w-[180px] flex-1">
             <p className={GRID_LABEL} style={{ color: LIME }}>
-              4 platforms
+              3 platforms
             </p>
             <p className={GRID_BODY}>
-              Instagram, TikTok, YouTube, and X — connect them all, manage them from one inbox.
+              Instagram, TikTok, and LinkedIn — connect them all, review what matters from one place.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
             <p className={GRID_LABEL} style={{ color: CORAL }}>
-              10 intent signals
+              8 intent categories
             </p>
             <p className={GRID_BODY}>
-              From casual engagement to conversion-ready, every message gets classified
-              automatically.
+              Pricing questions, bookings, collaboration requests, and more — plainly labeled, never
+              a mystery score.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
             <p className={GRID_LABEL} style={{ color: LIME }}>
-              4-stage pipeline
+              One clear queue
             </p>
             <p className={GRID_BODY}>
-              Discovered, engaged, interested, converted — know exactly where every contact stands.
+              New, reviewed, responded, dismissed — know exactly where every opportunity stands.
             </p>
           </div>
         </div>
@@ -184,8 +184,8 @@ export default function LandingPage() {
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
         <div className="mt-auto flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
           <p className="max-w-[45ch] text-[clamp(0.95rem,1.8vw,1.375rem)] font-normal leading-relaxed">
-            Connect your socials and Populr gets to work immediately — scanning comments, flagging
-            opportunities, building your pipeline. Takes less than a minute.
+            Connect your socials and Populr gets to work immediately — reviewing engagement and
+            surfacing who&apos;s ready to hear from you. Takes less than a minute.
           </p>
           <Link
             to="/connect"

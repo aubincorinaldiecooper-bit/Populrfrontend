@@ -22,6 +22,7 @@ const RICH_ACCOUNT_PLATFORM_BY_ID: Record<string, string> = {
   tt: 'tiktok',
   yt: 'youtube',
   tw: 'twitter',
+  li: 'linkedin',
 };
 
 export interface Toast {
@@ -183,7 +184,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({
         ...prev,
         connectedPlatforms: prev.connectedPlatforms.map(p =>
-          p.id === id ? { ...p, status: 'connected' as const, handle: p.id === 'instagram' || p.id === 'tiktok' ? '@mayastyle' : p.id === 'youtube' ? 'Maya Chen' : undefined } : p
+          p.id === id ? { ...p, status: 'connected' as const, handle: '@mayastyle', errorMessage: undefined } : p
         ),
       }));
     }, 1200);
@@ -396,7 +397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({
       ...prev,
       connectedPlatforms: prev.connectedPlatforms.map(p =>
-        p.id === id ? { ...p, status: 'connecting' as const } : p
+        p.id === id ? { ...p, status: 'connecting' as const, errorMessage: undefined } : p
       ),
     }));
     const to = `${window.location.origin}${window.location.pathname}?connected=${id}`;
@@ -406,13 +407,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(err => {
         console.error(`[connect] failed to start ${id} connect:`, err);
+        // Persist as a visible "Connection failed" card state (with the
+        // backend's own reason) rather than silently reverting to idle —
+        // a toast alone disappears before the user can act on it.
+        const reason = err instanceof Error && err.message ? err.message : undefined;
         setState(prev => ({
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p =>
-            p.id === id ? { ...p, status: 'idle' as const } : p
+            p.id === id ? { ...p, status: 'error' as const, errorMessage: reason } : p
           ),
         }));
-        const reason = err instanceof Error && err.message ? err.message : undefined;
         showToast(
           reason ? `Couldn't connect ${id}: ${reason}` : `Couldn't connect ${id} right now. Please try again.`,
           'error'
@@ -438,6 +442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ...p,
               status: 'connected' as const,
               handle: match.username ? `@${match.username}` : match.display_name ?? p.handle,
+              errorMessage: undefined,
             };
           }),
           connectedAccounts: prev.connectedAccounts.map(acc => {

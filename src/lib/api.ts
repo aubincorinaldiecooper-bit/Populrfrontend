@@ -22,8 +22,15 @@ export interface ConnectedAccount {
   connected_at: string | null;
 }
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`);
+async function apiFetch<T>(
+  path: string,
+  init?: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown },
+): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: init?.method ?? 'GET',
+    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: init?.body ? JSON.stringify(init.body) : undefined,
+  });
   if (!res.ok) {
     // Surface the backend's own error/message when it sends one (e.g.
     // { error: "disallowed_return_url", message: "..." }), not just the
@@ -54,4 +61,131 @@ export async function getPlatformConnectUrl(platform: string, to: string): Promi
 export async function fetchConnectedAccounts(): Promise<ConnectedAccount[]> {
   const data = await apiFetch<{ accounts: ConnectedAccount[] }>('/api/accounts');
   return data.accounts;
+}
+
+// ============================================================
+// Opportunities — the prioritized engagement feed
+// ============================================================
+
+export type OpportunityPlatform = 'instagram' | 'tiktok' | 'linkedin' | string;
+export type OpportunityStatus = 'new' | 'reviewed' | 'responded' | 'dismissed';
+export type OpportunityAction =
+  | 'reply'
+  | 'message'
+  | 'open_on_platform'
+  | 'copy_response'
+  | 'mark_reviewed'
+  | 'mark_responded'
+  | 'dismiss';
+
+export interface Opportunity {
+  id: string;
+  platform: OpportunityPlatform;
+  person: {
+    id: string | null;
+    username: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+  interaction: {
+    type: 'comment' | 'message' | 'reply' | 'mention' | 'other';
+    text: string;
+    occurredAt: string;
+    externalUrl: string | null;
+  };
+  source: {
+    id: string | null;
+    title: string | null;
+    caption: string | null;
+    mediaUrl: string | null;
+    externalUrl: string | null;
+  } | null;
+  intent: {
+    category: string;
+    label: string;
+    reason: string;
+    confidence: number | null;
+  };
+  status: OpportunityStatus;
+  availableActions: OpportunityAction[];
+  suggestedResponse: string | null;
+}
+
+export interface OpportunitySummary {
+  total: number;
+  new: number;
+  reviewed: number;
+  responded: number;
+  dismissed: number;
+  byPlatform: Record<string, number>;
+  byIntent: Record<string, number>;
+}
+
+/** GET /api/opportunities — prioritized, normalized engagement feed. */
+export async function fetchOpportunities(params: {
+  platform?: string;
+  intent?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ opportunities: Opportunity[]; total: number; summary: OpportunitySummary }> {
+  const qs = new URLSearchParams();
+  if (params.platform) qs.set('platform', params.platform);
+  if (params.intent) qs.set('intent', params.intent);
+  if (params.status) qs.set('status', params.status);
+  if (params.limit !== undefined) qs.set('limit', String(params.limit));
+  if (params.offset !== undefined) qs.set('offset', String(params.offset));
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiFetch(`/api/opportunities${suffix}`);
+}
+
+/** GET /api/opportunities/:id — single opportunity detail. */
+export async function fetchOpportunity(id: string): Promise<Opportunity> {
+  const data = await apiFetch<{ opportunity: Opportunity }>(`/api/opportunities/${id}`);
+  return data.opportunity;
+}
+
+/** PATCH /api/opportunities/:id — resolution status only (reviewed/responded/dismissed). */
+export async function updateOpportunityStatus(
+  id: string,
+  status: 'reviewed' | 'responded' | 'dismissed',
+): Promise<Opportunity> {
+  const data = await apiFetch<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, {
+    method: 'PATCH',
+    body: { status },
+  });
+  return data.opportunity;
+}
+
+/**
+ * POST /api/inbox/:id/reply — send a reply/message for an opportunity.
+ * The opportunity id *is* the inbox_item id, so this reuses the existing,
+ * capability-gated inbox reply endpoint directly rather than adding a
+ * parallel one. Marks the opportunity responded on the backend.
+ */
+export async function sendOpportunityReply(
+  id: string,
+  text: string,
+): Promise<{ sentText: string; channel: string }> {
+  return apiFetch(`/api/inbox/${id}/reply`, { method: 'POST', body: { text } });
+}
+
+// ============================================================
+// Platform capabilities — the backend's capability matrix, used to show
+// honest "limited access" messaging per platform instead of assuming parity.
+// ============================================================
+
+export interface PlatformCapabilities {
+  platform: string;
+  supportsComments: boolean;
+  supportsCommentReplies: boolean;
+  supportsDMs: boolean;
+  readiness: string;
+  caveat: string;
+}
+
+/** GET /api/capabilities — what each connected platform actually supports. */
+export async function fetchCapabilities(): Promise<PlatformCapabilities[]> {
+  const data = await apiFetch<{ platforms: PlatformCapabilities[] }>('/api/capabilities');
+  return data.platforms;
 }
