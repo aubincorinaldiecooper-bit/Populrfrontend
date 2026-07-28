@@ -224,10 +224,15 @@ export default function Onboarding() {
                   }}
                   exit={{ opacity: 0, y: -20, scale: 0.98, transition: { duration: shouldReduceMotion ? 0.15 : 0.2 } }}
                   transition={{ layout: { type: "spring", stiffness: 400, damping: 30, duration: shouldReduceMotion ? 0.2 : 0.5 } }}
-                  className="relative" onMouseEnter={() => setHoveredCard(card.id)} onMouseLeave={() => setHoveredCard(null)}>
+                  className="relative" onMouseEnter={() => setHoveredCard(card.id)} onMouseLeave={() => setHoveredCard(null)}
+                  onClick={() => {
+                    if (card.status !== "idle") return;
+                    if (step === 1) card.onConnect?.();
+                    else if (step === 2 && !card.isInput) card.onSelect?.();
+                  }}>
 
                   <motion.div
-                    className="relative bg-neutral-100/60 border border-neutral-200/50 rounded-xl p-4 overflow-hidden"
+                    className={`relative bg-neutral-100/60 border border-neutral-200/50 rounded-xl p-4 overflow-hidden ${card.status === "idle" && !card.isInput ? "cursor-pointer" : ""}`}
                     whileHover={{ y: -1, transition: { type: "spring", stiffness: 400, damping: 25 } }}
                     animate={card.status === "completed" ? { scale: [1, 1.02, 1], transition: { duration: shouldReduceMotion ? 0 : 0.6, ease: [0.04, 0.62, 0.23, 0.98], times: [0, 0.3, 1] } } : {}}>
                     <GradientOverlay status={card.status} />
