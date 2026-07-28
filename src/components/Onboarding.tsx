@@ -214,7 +214,7 @@ export default function Onboarding() {
             <span className="text-xs font-bold uppercase tracking-[0.2em]">Populr</span>
           </div>
           <p className="text-2xl font-semibold leading-snug">
-            Find the people in your audience ready to take the next step.
+            Engagement shouldn't end with a notification.
           </p>
         </div>
       </div>

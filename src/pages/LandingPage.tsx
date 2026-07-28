@@ -1,11 +1,10 @@
 import { Link } from 'react-router';
-import { Link2, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import FlowArt, { FlowSection } from '../components/ui/story-scroll.tsx';
 
 const LIME = '#C5FF3D';
 const CREAM = '#F3F0EC';
 const BLACK = '#111111';
-const CORAL = '#FF7247';
 
 const HEADLINE = 'text-[clamp(2.5rem,9vw,8rem)] font-bold leading-[0.9] uppercase tracking-tight';
 const BODY = 'max-w-[50ch] text-[clamp(0.95rem,1.8vw,1.375rem)] font-normal leading-relaxed';
@@ -15,8 +14,8 @@ const GRID_BODY = 'text-[clamp(0.8rem,1.1vw,0.95rem)] leading-relaxed opacity-75
 // Every photo is absolutely positioned so it never adds to a section's flow
 // height — sections are min-h-screen and GSAP-pinned per section, so any
 // layout-flow content would grow a section past 100vh and force extra
-// scroll. Desktop gets a full-height side panel; mobile gets a small framed
-// card tucked into open space near the bottom of the section.
+// scroll. Desktop gets a full-height side panel; mobile gets a large framed
+// banner filling the open space between the headline and the bottom content.
 function SectionPhoto({
   src,
   alt,
@@ -46,18 +45,45 @@ function SectionPhoto({
   );
 }
 
+// Two CTAs styled for a dark section: "Creator" is the primary action (fills
+// the site's existing chartreuse-as-primary convention), "Brand" is
+// secondary. Both currently point at the same real connect flow — there's
+// no separate brand-signup path yet, only a different label.
+function JoinButtons() {
+  return (
+    <div className="flex flex-col gap-3 xs:flex-row">
+      <Link
+        to="/connect"
+        className="group inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl px-6 py-4 text-sm font-semibold text-[#111111] shadow-xl shadow-black/20 transition-transform hover:scale-[1.02]"
+        style={{ backgroundColor: LIME }}
+      >
+        Join as a Creator
+        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+      </Link>
+      <Link
+        to="/connect"
+        className="group inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl border border-white/30 px-6 py-4 text-sm font-semibold text-white transition-all hover:border-white/70 hover:bg-white/5"
+      >
+        Join as a Brand
+        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+      </Link>
+    </div>
+  );
+}
+
 export default function LandingPage() {
   return (
     <FlowArt aria-label="Populr">
-      <FlowSection aria-label="What is Populr" style={{ backgroundColor: BLACK, color: '#fff' }}>
+      {/* 01 — Hero */}
+      <FlowSection aria-label="Engagement shouldn't end with a notification" style={{ backgroundColor: BLACK, color: '#fff' }}>
         <SectionPhoto
           src="/images/landing/friends-reacting.webp"
           alt="Three friends reacting to something on a phone together"
           bg={BLACK}
-          mobileClassName="top-[28vh] h-[42vh]"
+          mobileClassName="top-[36vh] h-[23vh]"
         />
         <div className="flex items-center justify-between">
-          <p className="text-xs font-bold uppercase tracking-[0.2em]">01 — What is Populr</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em]">01 — Why Populr</p>
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full" style={{ backgroundColor: LIME }} />
             <span className="text-xs font-bold uppercase tracking-[0.2em]">Populr</span>
@@ -66,199 +92,212 @@ export default function LandingPage() {
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
         <div className="lg:max-w-[62%]">
           <h1 className={HEADLINE}>
-            Find The People
+            Engagement
             <br />
-            Ready To Take
-            <br />
-            The Next Step
+            Shouldn&apos;t End With
+            <br />A Notification.
           </h1>
         </div>
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
-        <p className={`mt-auto lg:max-w-[62%] ${BODY}`}>
-          Populr reviews engagement across Instagram, TikTok, and LinkedIn, then surfaces the people
-          showing real interest.
-        </p>
-      </FlowSection>
-
-      <FlowSection aria-label="The mission" style={{ backgroundColor: LIME, color: BLACK }}>
-        <SectionPhoto
-          src="/images/landing/creator-glam.webp"
-          alt="A creator applying makeup while filming content"
-          bg={LIME}
-          mobileClassName="top-[47vh] h-[20vh]"
-        />
-        <p className="text-xs font-bold uppercase tracking-[0.2em]">02 — The mission</p>
-        <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <div>
-          <h2 className={HEADLINE}>
-            Built
-            <br />
-            For
-            <br />
-            Creators
-          </h2>
-        </div>
-        <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <p className={`lg:max-w-[62%] ${BODY}`}>
-          We built Populr because creators sit on gold every day — thousands of comments and DMs —
-          with no way to turn them into a business. Populr reads the signals so you don&apos;t have to.
-        </p>
-        <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <div className="mt-auto flex flex-wrap gap-[3vw] lg:max-w-[62%]">
-          <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>Connect</p>
-            <p className={GRID_BODY}>
-              Instagram, TikTok, and LinkedIn — every comment and message reviewed in one place.
+        <div className="mt-auto flex flex-col gap-8 lg:max-w-[62%]">
+          <div className="space-y-3">
+            <p className={BODY}>
+              Comments and messages are easy to miss — and even harder to follow up on across
+              different platforms.
+            </p>
+            <p className={BODY}>
+              Populr helps you respond automatically, organize the people engaging with your
+              content, and keep important conversations moving.
             </p>
           </div>
-          <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>Detect</p>
-            <p className={GRID_BODY}>
-              Populr reviews every comment and DM to spot who&apos;s ready to buy, book, or collaborate.
-            </p>
-          </div>
-          <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>Respond</p>
-            <p className={GRID_BODY}>
-              Know exactly who to respond to next, and why they&apos;re worth your time.
-            </p>
-          </div>
+          <JoinButtons />
         </div>
       </FlowSection>
 
-      <FlowSection aria-label="How it works" style={{ backgroundColor: CREAM, color: BLACK }}>
+      {/* 02 — Automated follow-up */}
+      <FlowSection aria-label="Respond while their interest is still there" style={{ backgroundColor: LIME, color: BLACK }}>
         <SectionPhoto
           src="/images/landing/connect-selfie.webp"
           alt="A creator holding up her phone, framing a selfie"
-          bg={CREAM}
-          mobileClassName="top-[47vh] h-[20vh]"
+          bg={LIME}
+          mobileClassName="top-[32vh] h-[44vh]"
         />
-        <p className="text-xs font-bold uppercase tracking-[0.2em]">03 — How it works</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em]">02 — Automated follow-up</p>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <div>
+        <div className="lg:max-w-[62%]">
           <h2 className={HEADLINE}>
-            Connect.
+            Respond While
             <br />
-            Review.
+            Their Interest
             <br />
-            Respond.
+            Is Still There.
           </h2>
         </div>
         <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <p className={`lg:max-w-[62%] ${BODY}`}>
-          Three steps. Populr does the work of finding who&apos;s worth your attention.
-        </p>
-        <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <div className="mt-auto flex flex-wrap gap-[3vw] lg:max-w-[62%]">
-          <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>01 — Connect</p>
-            <p className={GRID_BODY}>
-              Link your socials in one tap. Instagram, TikTok, and LinkedIn — whenever you&apos;re
-              ready.
-            </p>
-          </div>
-          <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>02 — Review</p>
-            <p className={GRID_BODY}>
-              Populr scans every comment and DM, flagging pricing questions, bookings, and collab
-              requests instantly.
-            </p>
-          </div>
-          <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL}>03 — Respond</p>
-            <p className={GRID_BODY}>
-              See exactly who&apos;s showing real intent and what to say next — no manual tagging, no
-              spreadsheets.
-            </p>
-          </div>
+        <div className="mt-auto space-y-3 lg:max-w-[62%]">
+          <p className={BODY}>
+            Automatically send a message when someone comments on your content or reaches out
+            directly.
+          </p>
+          <p className={BODY}>
+            Answer common questions, share useful information, and give interested followers a
+            clear next step without manually replying to every interaction.
+          </p>
         </div>
       </FlowSection>
 
-      <FlowSection aria-label="The vision" style={{ backgroundColor: BLACK, color: '#fff' }}>
+      {/* 03 — Connected inbox */}
+      <FlowSection aria-label="Your social conversations, together" style={{ backgroundColor: CREAM, color: BLACK }}>
+        <SectionPhoto
+          src="/images/landing/creator-glam.webp"
+          alt="A creator applying makeup while filming content"
+          bg={CREAM}
+          mobileClassName="top-[32vh] h-[44vh]"
+        />
+        <p className="text-xs font-bold uppercase tracking-[0.2em]">03 — Connected inbox</p>
+        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+        <div className="lg:max-w-[62%]">
+          <h2 className="text-[clamp(2.5rem,9vw,6rem)] font-bold uppercase leading-[0.9] tracking-tight">
+            Your Social
+            <br />
+            Conversations,
+            <br />
+            Together.
+          </h2>
+        </div>
+        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+        <div className="mt-auto space-y-3 lg:max-w-[62%]">
+          <p className={BODY}>
+            Stop switching between platforms to find messages, remember conversations, or figure
+            out who still needs a response.
+          </p>
+          <p className={BODY}>
+            Populr brings your audience conversations into one place so you can see what is
+            happening and focus on what needs your attention.
+          </p>
+        </div>
+      </FlowSection>
+
+      {/* 04 — Audience context */}
+      <FlowSection aria-label="Know who you're talking to" style={{ backgroundColor: BLACK, color: '#fff' }}>
         <SectionPhoto
           src="/images/landing/audience-crowd.webp"
           alt="A performer on stage in front of a crowd holding up their phones"
           bg={BLACK}
-          mobileClassName="top-[47vh] h-[20vh]"
+          mobileClassName="top-[32vh] h-[47vh]"
         />
-        <p className="text-xs font-bold uppercase tracking-[0.2em]">04 — The vision</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em]">04 — Audience context</p>
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
-        <div>
+        <div className="lg:max-w-[62%]">
           <h2 className={HEADLINE}>
-            Own
+            Know Who You&apos;re
             <br />
-            Your
-            <br />
-            Audience
+            Talking To.
           </h2>
         </div>
         <hr className="my-[1.5vw] border-none border-t border-white/20" />
-        <p className={`lg:max-w-[62%] ${BODY}`}>
-          Your followers already trust you. Populr makes sure that trust turns into a business you
-          actually own — not just an algorithm&apos;s attention.
-        </p>
-        <hr className="my-[1.5vw] border-none border-t border-white/20" />
-        <div className="mt-auto flex flex-wrap gap-[3vw] lg:max-w-[62%]">
+        <div className="mt-auto space-y-3 lg:max-w-[62%]">
+          <p className={BODY}>
+            See where each contact came from, what they engaged with, and how the conversation
+            started.
+          </p>
+          <p className={BODY}>
+            Instead of searching through old notifications and message threads, you have the
+            context you need before responding.
+          </p>
+        </div>
+      </FlowSection>
+
+      {/* 05 — Turn interest into a next step */}
+      <FlowSection aria-label="Do more with the attention you already have" style={{ backgroundColor: LIME, color: BLACK }}>
+        <SectionPhoto
+          src="/images/landing/creator-fitness.webp"
+          alt="Two creators posing together in a gym"
+          bg={LIME}
+          mobileClassName="top-[36vh] h-[43vh]"
+        />
+        <p className="text-xs font-bold uppercase tracking-[0.2em]">05 — Turn interest into a next step</p>
+        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+        <div className="lg:max-w-[62%]">
+          <h2 className={HEADLINE}>
+            Do More With
+            <br />
+            The Attention
+            <br />
+            You Already Have.
+          </h2>
+        </div>
+        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+        <div className="mt-auto space-y-3 lg:max-w-[62%]">
+          <p className={BODY}>
+            Send a resource, share product details, answer a question, support a booking, or
+            direct someone to the right destination.
+          </p>
+          <p className={BODY}>
+            Populr helps you move people forward while their interest is still active.
+          </p>
+        </div>
+      </FlowSection>
+
+      {/* 06 — How Populr works */}
+      <FlowSection aria-label="How Populr works" style={{ backgroundColor: CREAM, color: BLACK }}>
+        <p className="text-xs font-bold uppercase tracking-[0.2em]">06 — How Populr works</p>
+        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+        <div>
+          <h2 className={HEADLINE}>
+            How
+            <br />
+            Populr
+            <br />
+            Works
+          </h2>
+        </div>
+        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+        <div className="mt-auto flex flex-wrap gap-[3vw]">
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL} style={{ color: LIME }}>
-              3 platforms
-            </p>
+            <p className={GRID_LABEL}>01 — Connect your accounts</p>
             <p className={GRID_BODY}>
-              Instagram, TikTok, and LinkedIn — connect them all, review what matters from one place.
+              Bring your supported social accounts and audience conversations into Populr.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL} style={{ color: CORAL }}>
-              8 intent categories
-            </p>
+            <p className={GRID_LABEL}>02 — Set your response</p>
             <p className={GRID_BODY}>
-              Pricing questions, bookings, collaboration requests, and more — plainly labeled, never
-              a mystery score.
+              Choose what Populr should send when someone comments on your content or sends you a
+              message.
             </p>
           </div>
           <div className="min-w-[180px] flex-1">
-            <p className={GRID_LABEL} style={{ color: LIME }}>
-              One clear queue
-            </p>
+            <p className={GRID_LABEL}>03 — Keep track of the conversation</p>
             <p className={GRID_BODY}>
-              New, reviewed, responded, dismissed — know exactly where every opportunity stands.
+              See who engaged, understand where they came from, and continue the conversation from
+              one organized workspace.
             </p>
           </div>
         </div>
       </FlowSection>
 
-      <FlowSection aria-label="Get started" style={{ backgroundColor: LIME, color: BLACK }}>
-        <SectionPhoto
-          src="/images/landing/creator-fitness.webp"
-          alt="Two creators posing together in a gym"
-          bg={LIME}
-          mobileClassName="top-[30vh] h-[32vh]"
-        />
-        <p className="text-xs font-bold uppercase tracking-[0.2em]">05 — Get started</p>
-        <hr className="my-[1.5vw] border-none border-t border-black/20" />
+      {/* 07 — Closing CTA */}
+      <FlowSection aria-label="Make more of the audience you already have" style={{ backgroundColor: BLACK, color: '#fff' }}>
+        <p className="text-xs font-bold uppercase tracking-[0.2em]">07 — Get started</p>
+        <hr className="my-[1.5vw] border-none border-t border-white/20" />
         <div>
           <h2 className={HEADLINE}>
-            Ready
+            Make More Of
             <br />
-            To
+            The Audience
             <br />
-            Connect?
+            You Already Have.
           </h2>
         </div>
-        <hr className="my-[1.5vw] border-none border-t border-black/20" />
-        <div className="mt-auto flex flex-col gap-8 lg:max-w-[62%] sm:flex-row sm:items-end sm:justify-between">
+        <hr className="my-[1.5vw] border-none border-t border-white/20" />
+        <div className="mt-auto flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
           <p className="max-w-[45ch] text-[clamp(0.95rem,1.8vw,1.375rem)] font-normal leading-relaxed">
-            Connect your socials and Populr gets to work immediately — reviewing engagement and
-            surfacing who&apos;s ready to hear from you. Takes less than a minute.
+            You are already creating the content and earning the attention. Populr helps you
+            respond, stay organized, and turn that engagement into something you can continue
+            building on.
           </p>
-          <Link
-            to="/connect"
-            className="group inline-flex shrink-0 items-center justify-center gap-3 rounded-2xl bg-black px-8 py-5 text-base font-semibold text-white shadow-xl shadow-black/20 transition-transform hover:scale-[1.02]"
-          >
-            <Link2 className="h-5 w-5" />
-            Connect Your Socials
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </Link>
+          <JoinButtons />
         </div>
       </FlowSection>
     </FlowArt>
