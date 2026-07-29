@@ -12,6 +12,8 @@ export function isBackendConfigured(): boolean {
   return API_BASE_URL !== '';
 }
 
+export type AccountStatus = 'connected' | 'disconnected' | 'reconnect_required';
+
 export interface ConnectedAccount {
   id: string;
   platform: string;
@@ -19,6 +21,7 @@ export interface ConnectedAccount {
   display_name: string | null;
   avatar_url: string | null;
   is_connected: boolean;
+  status: AccountStatus;
   connected_at: string | null;
 }
 
@@ -61,6 +64,19 @@ export async function getPlatformConnectUrl(platform: string, to: string): Promi
 export async function fetchConnectedAccounts(): Promise<ConnectedAccount[]> {
   const data = await apiFetch<{ accounts: ConnectedAccount[] }>('/api/accounts');
   return data.accounts;
+}
+
+/**
+ * POST /api/accounts/:id/disconnect — revokes the account through Zernio and
+ * marks it disconnected once that's confirmed. Never simulated locally: on
+ * failure the caller sees the backend's real error and the account stays
+ * connected, matching what actually happened.
+ */
+export async function disconnectAccount(id: string): Promise<ConnectedAccount> {
+  const data = await apiFetch<{ account: ConnectedAccount }>(`/api/accounts/${id}/disconnect`, {
+    method: 'POST',
+  });
+  return data.account;
 }
 
 // ============================================================

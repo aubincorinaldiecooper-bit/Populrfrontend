@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Loader2, RefreshCw, Inbox as InboxIcon, AlertCircle, ExternalLink, Copy, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -27,8 +27,13 @@ const INTENT_OPTIONS: { value: string; label: string }[] = [
   { value: 'general_engagement', label: 'General engagement' },
 ];
 
-const STATUS_OPTIONS: { value: 'all' | OpportunityStatus; label: string }[] = [
-  { value: 'all', label: 'Active' },
+// 'active' is a server-side pseudo-status meaning "not dismissed", so the
+// working queue stays calm without the client hiding rows the server counted
+// — which would desync the summary and pagination from what's on screen.
+type StatusFilter = 'active' | OpportunityStatus;
+
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: 'active', label: 'Active' },
   { value: 'new', label: 'New' },
   { value: 'reviewed', label: 'Reviewed' },
   { value: 'responded', label: 'Responded' },
@@ -154,42 +159,95 @@ function OpportunityRow({
   );
 }
 
+const PAGE_SIZE = 25;
+/** Server caps `limit` at 100; refreshes never ask for more than it will give. */
+const MAX_LIMIT = 100;
+
 export default function OpportunitiesPage() {
   const { showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const [platformFilter, setPlatformFilter] = useState<string | undefined>(undefined);
   const [intentFilter, setIntentFilter] = useState<string | undefined>(undefined);
-  const [statusFilter, setStatusFilter] = useState<'all' | OpportunityStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [summary, setSummary] = useState<OpportunitySummary | null>(null);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Held as an object rather than looked up in `opportunities`, so the drawer
+  // survives a refresh that drops the row from the current filter.
+  const [selected, setSelected] = useState<Opportunity | null>(null);
 
-  const load = useCallback(async () => {
-    if (!backendConfigured) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchOpportunities({
-        platform: platformFilter,
-        intent: intentFilter,
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        limit: 100,
-      });
-      setOpportunities(result.opportunities);
-      setSummary(result.summary);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load opportunities right now.');
-    } finally {
-      setLoading(false);
-    }
-  }, [backendConfigured, platformFilter, intentFilter, statusFilter]);
+  // Monotonic request id: only the newest in-flight fetch may write state, so
+  // a slow earlier request can't overwrite results for filters the user has
+  // already moved on from.
+  const requestSeq = useRef(0);
+
+  const runFetch = useCallback(
+    async ({ offset, limit, append }: { offset: number; limit: number; append: boolean }) => {
+      if (!backendConfigured) {
+        setLoading(false);
+        return;
+      }
+      const seq = ++requestSeq.current;
+      if (append) setLoadingMore(true);
+      else {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const result = await fetchOpportunities({
+          platform: platformFilter,
+          intent: intentFilter,
+          status: statusFilter,
+          limit,
+          offset,
+        });
+        if (seq !== requestSeq.current) return; // superseded
+        setOpportunities(prev => (append ? [...prev, ...result.opportunities] : result.opportunities));
+        setSummary(result.summary);
+        setTotal(result.total);
+      } catch (err) {
+        if (seq !== requestSeq.current) return;
+        const message = err instanceof Error ? err.message : 'Could not load opportunities right now.';
+        if (append) showToast(message, 'error');
+        else setError(message);
+      } finally {
+        if (seq === requestSeq.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [backendConfigured, platformFilter, intentFilter, statusFilter, showToast],
+  );
+
+  const load = useCallback(
+    () => runFetch({ offset: 0, limit: PAGE_SIZE, append: false }),
+    [runFetch],
+  );
+
+  const loadMore = useCallback(
+    () => runFetch({ offset: opportunities.length, limit: PAGE_SIZE, append: true }),
+    [runFetch, opportunities.length],
+  );
+
+  /**
+   * After a mutation, re-read the span the user currently has open. A status
+   * change can move a row out of the active filter and always shifts the
+   * summary counts, so patching the row in place would leave both wrong.
+   */
+  const refreshLoaded = useCallback(
+    () => runFetch({
+      offset: 0,
+      limit: Math.min(Math.max(opportunities.length, PAGE_SIZE), MAX_LIMIT),
+      append: false,
+    }),
+    [runFetch, opportunities.length],
+  );
 
   useEffect(() => {
     // Data fetch from the backend, not derived state — the setState calls
@@ -198,26 +256,20 @@ export default function OpportunitiesPage() {
     load();
   }, [load]);
 
-  // Default "Active" view hides dismissed items so the queue stays calm;
-  // they remain fully reachable via the Dismissed status filter above.
-  const visibleOpportunities = statusFilter === 'all'
-    ? opportunities.filter(o => o.status !== 'dismissed')
-    : opportunities;
-
-  const selected = selectedId ? opportunities.find(o => o.id === selectedId) ?? null : null;
-
   async function handleStatusChange(id: string, status: 'reviewed' | 'responded' | 'dismissed') {
     try {
       const updated = await updateOpportunityStatus(id, status);
-      setOpportunities(prev => prev.map(o => (o.id === id ? updated : o)));
+      setSelected(prev => (prev && prev.id === id ? updated : prev));
+      await refreshLoaded();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not update this opportunity.', 'error');
     }
   }
 
-  function handleReplySent(id: string, result: { sentText: string; channel: string }) {
+  async function handleReplySent(id: string, result: { sentText: string; channel: string }) {
     showToast(`Reply sent on ${result.channel}.`, 'success');
-    setOpportunities(prev => prev.map(o => (o.id === id ? { ...o, status: 'responded' } : o)));
+    setSelected(prev => (prev && prev.id === id ? { ...prev, status: 'responded' } : prev));
+    await refreshLoaded();
   }
 
   const newCount = summary?.new ?? 0;
@@ -341,7 +393,7 @@ export default function OpportunitiesPage() {
           )}
 
           {/* Empty states */}
-          {!loading && !error && summary && summary.total === 0 && !platformFilter && !intentFilter && (
+          {!loading && !error && total === 0 && !platformFilter && !intentFilter && statusFilter === 'active' && (
             <div className="pop-card p-8 text-center">
               <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">No opportunities yet</p>
@@ -352,7 +404,7 @@ export default function OpportunitiesPage() {
             </div>
           )}
 
-          {!loading && !error && summary && summary.total > 0 && visibleOpportunities.length === 0 && (
+          {!loading && !error && total === 0 && (platformFilter || intentFilter || statusFilter !== 'active') && (
             <div className="pop-card p-8 text-center">
               <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">Nothing matches these filters</p>
@@ -361,17 +413,34 @@ export default function OpportunitiesPage() {
           )}
 
           {/* Rows */}
-          {!loading && !error && visibleOpportunities.length > 0 && (
-            <div className="space-y-2.5">
-              {visibleOpportunities.map(o => (
-                <OpportunityRow
-                  key={o.id}
-                  opportunity={o}
-                  onOpen={() => setSelectedId(o.id)}
-                  onDismiss={() => handleStatusChange(o.id, 'dismissed')}
-                />
-              ))}
-            </div>
+          {!loading && !error && opportunities.length > 0 && (
+            <>
+              <div className="space-y-2.5">
+                {opportunities.map(o => (
+                  <OpportunityRow
+                    key={o.id}
+                    opportunity={o}
+                    onOpen={() => setSelected(o)}
+                    onDismiss={() => handleStatusChange(o.id, 'dismissed')}
+                  />
+                ))}
+              </div>
+              {opportunities.length < total && (
+                <div className="flex flex-col items-center gap-2 mt-5">
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="pop-btn-secondary text-[12px] py-2 px-4 disabled:opacity-60"
+                  >
+                    {loadingMore ? <Loader2 size={13} className="animate-spin" /> : null}
+                    {loadingMore ? 'Loading...' : 'Load more'}
+                  </button>
+                  <p className="text-[11px] text-[#9B9B8F]">
+                    Showing {opportunities.length} of {total}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -379,7 +448,7 @@ export default function OpportunitiesPage() {
       {selected && (
         <OpportunityDetailDrawer
           opportunity={selected}
-          onClose={() => setSelectedId(null)}
+          onClose={() => setSelected(null)}
           onStatusChange={(status) => handleStatusChange(selected.id, status)}
           onReplySent={(result) => handleReplySent(selected.id, result)}
         />

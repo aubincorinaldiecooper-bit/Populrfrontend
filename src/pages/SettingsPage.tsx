@@ -1,33 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  Instagram, Video, Youtube, Twitter, Facebook, Linkedin, MessageSquare,
-  Check, Shield, Trash2, Download, X, AlertTriangle,
-  RefreshCw, Loader2, Clock, Link2, ChevronDown, Sparkles,
+  Instagram, Video, Linkedin, Link2,
+  Check, Shield, Trash2, Download, AlertTriangle,
+  Loader2, Clock, ChevronDown, RefreshCw,
 } from 'lucide-react';
-import type { ConnectedAccountStatus } from '../data';
 import PageHeader from '../components/PageHeader';
+import { isBackendConfigured } from '../lib/api';
+import type { ConnectedAccount, AccountStatus } from '../lib/api';
 
 const iconMap: Record<string, React.ElementType> = {
-  instagram: Instagram, tiktok: Video, youtube: Youtube, twitter: Twitter,
-  facebook: Facebook, threads: MessageSquare, linkedin: Linkedin,
+  instagram: Instagram, tiktok: Video, linkedin: Linkedin,
 };
 
-const statusConfig: Record<ConnectedAccountStatus, { label: string; color: string; bg: string }> = {
-  idle: { label: 'Not connected', color: 'text-[#9B9B8F]', bg: 'bg-[#FAFAF8]' },
-  connecting: { label: 'Connecting...', color: 'text-[#D97706]', bg: 'bg-[#FFF3E0]' },
-  syncing: { label: 'Syncing', color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
+const statusConfig: Record<AccountStatus, { label: string; color: string; bg: string }> = {
   connected: { label: 'Connected', color: 'text-[#059669]', bg: 'bg-[#E0F5E9]' },
-  'needs-attention': { label: 'Needs attention', color: 'text-[#DC2626]', bg: 'bg-[#FEE2E2]' },
   disconnected: { label: 'Disconnected', color: 'text-[#6B6B6B]', bg: 'bg-[#FAFAF8]' },
+  reconnect_required: { label: 'Reconnect required', color: 'text-[#DC2626]', bg: 'bg-[#FEE2E2]' },
 };
 
 type Tab = 'profile' | 'accounts' | 'privacy' | 'data';
 
 export default function SettingsPage() {
   const {
-    connectedAccounts, updateAccountStatus,
-    disconnectAccount, reconnectAccount,
+    accounts, accountsLoading, refreshAccounts, disconnectAccount, beginPlatformConnect,
     privacySettings, updatePrivacySetting, deleteAudienceData, showToast,
   } = useApp();
 
@@ -35,14 +31,21 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [mobileTabsOpen, setMobileTabsOpen] = useState(false);
 
-  // Modal states
-  const [connectModal, setConnectModal] = useState<string | null>(null);
   const [disconnectModal, setDisconnectModal] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [confirmDeleteData, setConfirmDeleteData] = useState(false);
 
-  // Export states
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportReady, setExportReady] = useState<string | null>(null);
+
+  // Fetch the authoritative list whenever this tab is opened, not just once
+  // on app load — an account connected or disconnected elsewhere (e.g. the
+  // Connections page) must show up here without a full page reload.
+  useEffect(() => {
+    if (activeTab === 'accounts') {
+      refreshAccounts();
+    }
+  }, [activeTab, refreshAccounts]);
 
   const handleSave = () => {
     setSaved(true);
@@ -50,25 +53,17 @@ export default function SettingsPage() {
     showToast('Settings saved', 'success');
   };
 
-  // Simulate connect flow
-  const handleConnect = (id: string) => {
-    setConnectModal(null);
-    updateAccountStatus(id, 'connecting');
-    setTimeout(() => {
-      updateAccountStatus(id, 'syncing');
-      setTimeout(() => {
-        updateAccountStatus(id, 'connected');
-      }, 1500);
-    }, 1200);
-  };
-
-  const handleDisconnect = (id: string) => {
-    disconnectAccount(id);
-    setDisconnectModal(null);
-  };
-
-  const handleReconnect = (id: string) => {
-    reconnectAccount(id);
+  const handleDisconnect = async (id: string) => {
+    setDisconnecting(id);
+    try {
+      await disconnectAccount(id);
+      showToast('Account disconnected', 'success');
+      setDisconnectModal(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not disconnect this account.', 'error');
+    } finally {
+      setDisconnecting(null);
+    }
   };
 
   const handleExport = (type: string) => {
@@ -88,6 +83,8 @@ export default function SettingsPage() {
   ];
 
   const activeLabel = tabs.find(t => t.key === activeTab)?.label || 'Account';
+  const connectedAccounts = accounts.filter((a: ConnectedAccount) => a.status === 'connected');
+  const backendConfigured = isBackendConfigured();
 
   return (
     <div className="p-6 lg:p-8 max-w-[900px] mx-auto">
@@ -131,26 +128,28 @@ export default function SettingsPage() {
               <div>
                 <p className="font-geist font-bold text-base text-[#111111]">Maya Chen</p>
                 <p className="text-[13px] text-[#6B6B6B]">@mayastyle</p>
-                <p className="text-[11px] text-[#9B9B8F] mt-1">{connectedAccounts.filter(a => a.status === 'connected').length} platforms connected</p>
+                <p className="text-[11px] text-[#9B9B8F] mt-1">{connectedAccounts.length} platforms connected</p>
               </div>
             </div>
           </div>
 
           {/* Connected identities */}
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Connected social identities</h2>
-            <div className="flex flex-wrap gap-2">
-              {connectedAccounts.filter(a => a.status === 'connected').map(acc => {
-                const Icon = iconMap[acc.icon] || Link2;
-                return (
-                  <div key={acc.id} className="flex items-center gap-2 bg-[#FAFAF8] rounded-lg px-3 py-2">
-                    <Icon size={14} className="text-[#6B6B6B]" />
-                    <span className="text-[12px] text-[#111111]">{acc.handle}</span>
-                  </div>
-                );
-              })}
+          {connectedAccounts.length > 0 && (
+            <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+              <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Connected social identities</h2>
+              <div className="flex flex-wrap gap-2">
+                {connectedAccounts.map((acc: ConnectedAccount) => {
+                  const Icon = iconMap[acc.platform] || Link2;
+                  return (
+                    <div key={acc.id} className="flex items-center gap-2 bg-[#FAFAF8] rounded-lg px-3 py-2">
+                      <Icon size={14} className="text-[#6B6B6B]" />
+                      <span className="text-[12px] text-[#111111]">{acc.username ? `@${acc.username}` : acc.display_name || acc.platform}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           <button onClick={handleSave} className="bg-chartreuse text-[#111111] rounded-[10px] px-6 py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center gap-2">
             {saved && <Check size={14} />}{saved ? 'Saved!' : 'Save changes'}
@@ -163,88 +162,84 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <h2 className="font-geist font-semibold text-sm text-[#111111]">Connected platforms</h2>
-              <p className="text-[12px] text-[#6B6B6B] mt-0.5">Manage your social accounts and their sync status</p>
+              <h2 className="font-geist font-semibold text-sm text-[#111111]">Connected accounts</h2>
+              <p className="text-[12px] text-[#6B6B6B] mt-0.5">View and manage the accounts Populr can review for engagement.</p>
             </div>
-            <span className="text-[11px] text-[#9B9B8F]">{connectedAccounts.filter(a => a.status === 'connected').length} of {connectedAccounts.length} connected</span>
+            {accounts.length > 0 && (
+              <span className="text-[11px] text-[#9B9B8F]">{connectedAccounts.length} of {accounts.length} connected</span>
+            )}
           </div>
 
-          {connectedAccounts.map(acc => {
-            const Icon = iconMap[acc.icon] || Link2;
+          {!backendConfigured && (
+            <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF] flex items-start gap-3">
+              <AlertTriangle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+                <p className="text-[12px] text-[#6B6B6B] mt-1">Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to see real connected accounts here.</p>
+              </div>
+            </div>
+          )}
+
+          {backendConfigured && accountsLoading && (
+            <div className="flex items-center justify-center py-12 text-[#6B6B6B]">
+              <Loader2 size={20} className="animate-spin mr-2" /> Loading connected accounts...
+            </div>
+          )}
+
+          {backendConfigured && !accountsLoading && accounts.length === 0 && (
+            <div className="bg-white rounded-2xl p-8 border border-[#E8E4DF] text-center">
+              <Link2 size={22} className="text-[#9B9B8F] mx-auto mb-3" />
+              <p className="text-[14px] font-semibold text-[#111111]">No accounts connected yet</p>
+              <p className="text-[12px] text-[#6B6B6B] mt-1.5">Connect Instagram, TikTok, or LinkedIn from the Connections page.</p>
+            </div>
+          )}
+
+          {backendConfigured && !accountsLoading && accounts.map((acc: ConnectedAccount) => {
+            const Icon = iconMap[acc.platform] || Link2;
             const status = statusConfig[acc.status];
-            const isIdle = acc.status === 'idle';
-            const isDisconnected = acc.status === 'disconnected';
             const isConnected = acc.status === 'connected';
-            const isConnecting = acc.status === 'connecting';
-            const isSyncing = acc.status === 'syncing';
+            const needsReconnect = acc.status === 'reconnect_required';
+            const isDisconnected = acc.status === 'disconnected';
 
             return (
-              <div key={acc.id} className={`bg-white rounded-2xl border transition-all ${acc.status === 'needs-attention' ? 'border-coral' : 'border-[#E8E4DF]'}`}>
+              <div key={acc.id} className={`bg-white rounded-2xl border transition-all ${needsReconnect ? 'border-[#FECACA]' : 'border-[#E8E4DF]'}`}>
                 <div className="p-5">
                   <div className="flex items-center gap-4 flex-wrap">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#FAFAF8]">
-                      <Icon size={22} className={isConnected ? 'text-[#111111]' : 'text-[#9B9B8F]'} />
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#FAFAF8] overflow-hidden">
+                      {acc.avatar_url ? (
+                        <img src={acc.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Icon size={22} className={isConnected ? 'text-[#111111]' : 'text-[#9B9B8F]'} />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[14px] font-semibold text-[#111111]">{acc.platform}</p>
+                        <p className="text-[14px] font-semibold text-[#111111] capitalize">{acc.platform}</p>
                         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>{status.label}</span>
                       </div>
-                      {isConnected && (
-                        <p className="text-[11px] text-[#6B6B6B] mt-0.5">{acc.displayName} · {acc.handle} · Synced {acc.lastSynced}</p>
-                      )}
-                      {(isConnecting || isSyncing) && (
-                        <p className="text-[11px] text-[#D97706] mt-0.5 flex items-center gap-1">
-                          <Loader2 size={10} className="animate-spin" />
-                          {isConnecting ? 'Authorizing with platform...' : 'Pulling in your audience data...'}
-                        </p>
-                      )}
-                      {isIdle && <p className="text-[11px] text-[#9B9B8F] mt-0.5">Connect to sync audience data</p>}
+                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                        {acc.username ? `@${acc.username}` : acc.display_name || 'Unknown account'}
+                      </p>
+                      {needsReconnect && <p className="text-[11px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>}
                       {isDisconnected && <p className="text-[11px] text-[#6B6B6B] mt-0.5">Historical data preserved. New activity will not sync.</p>}
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
-                      {isIdle && (
-                        <button onClick={() => setConnectModal(acc.id)}
-                          className="bg-chartreuse text-[#111111] rounded-lg px-4 py-2 text-[12px] font-semibold hover:bg-chartreuse-hover transition-all whitespace-nowrap">
-                          Connect
+                      {isConnected && (
+                        <button onClick={() => setDisconnectModal(acc.id)}
+                          className="p-2 text-[#9B9B8F] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-all" title="Disconnect">
+                          <Trash2 size={16} />
                         </button>
                       )}
-                      {isConnected && (
-                        <>
-                          <button className="p-2 text-[#9B9B8F] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded-lg transition-all" title="Sync now">
-                            <RefreshCw size={16} />
-                          </button>
-                          <button onClick={() => setDisconnectModal(acc.id)}
-                            className="p-2 text-[#9B9B8F] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-all" title="Disconnect">
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
-                      {(isDisconnected) && (
-                        <button onClick={() => handleReconnect(acc.id)}
+                      {(needsReconnect || isDisconnected) && (
+                        <button onClick={() => beginPlatformConnect(acc.platform)}
                           className="flex items-center gap-1.5 border border-[#E8E4DF] text-[#111111] rounded-lg px-3 py-2 text-[12px] font-medium hover:bg-[#FAFAF8] transition-all">
                           <RefreshCw size={14} />Reconnect
                         </button>
                       )}
-                      {(isConnecting || isSyncing) && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-[#D97706] whitespace-nowrap">
-                          <Loader2 size={14} className="animate-spin" />Working...
-                        </div>
-                      )}
                     </div>
                   </div>
-
-                  {/* Permissions (visible for connected) */}
-                  {isConnected && (
-                    <div className="mt-3 pt-3 border-t border-[#E8E4DF] flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] text-[#9B9B8F] mr-1">Permissions:</span>
-                      {acc.permissions.map(p => (
-                        <span key={p} className="text-[10px] text-[#6B6B6B] bg-[#FAFAF8] px-2 py-0.5 rounded-full">{p}</span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -395,54 +390,11 @@ export default function SettingsPage() {
 
       {/* ─── MODALS ─── */}
 
-      {/* Connect Account Modal */}
-      {connectModal && (() => {
-        const acc = connectedAccounts.find(a => a.id === connectModal);
-        if (!acc) return null;
-        const Icon = iconMap[acc.icon] || Link2;
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-6">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#FAFAF8] flex items-center justify-center">
-                    <Icon size={20} className="text-[#111111]" />
-                  </div>
-                  <h3 className="font-geist font-bold text-base text-[#111111]">Connect {acc.platform}</h3>
-                </div>
-                <button onClick={() => setConnectModal(null)} className="p-1.5 hover:bg-[#FAFAF8] rounded-lg transition-all">
-                  <X size={18} className="text-[#6B6B6B]" />
-                </button>
-              </div>
-              <p className="text-[13px] text-[#6B6B6B] mb-4">Populr will request the following permissions from your {acc.platform} account:</p>
-              <div className="space-y-2 mb-5">
-                {acc.permissions.map(p => (
-                  <div key={p} className="flex items-center gap-3 bg-[#FAFAF8] rounded-lg px-3 py-2.5">
-                    <Check size={14} className="text-[#059669] flex-shrink-0" />
-                    <span className="text-[13px] text-[#111111]">{p}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-[#9B9B8F] mb-5">You can disconnect at any time from Settings. Historical data will be preserved.</p>
-              <div className="flex gap-2.5">
-                <button onClick={() => setConnectModal(null)}
-                  className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2.5 text-[13px] font-medium hover:bg-[#FAFAF8] transition-all">
-                  Cancel
-                </button>
-                <button onClick={() => handleConnect(connectModal)}
-                  className="flex-1 bg-chartreuse text-[#111111] rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center justify-center gap-2">
-                  <Sparkles size={14} />Continue
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Disconnect Confirmation Modal */}
       {disconnectModal && (() => {
-        const acc = connectedAccounts.find(a => a.id === disconnectModal);
+        const acc = accounts.find((a: ConnectedAccount) => a.id === disconnectModal);
         if (!acc) return null;
+        const isDisconnecting = disconnecting === disconnectModal;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-6">
@@ -450,21 +402,21 @@ export default function SettingsPage() {
                 <div className="w-10 h-10 rounded-xl bg-[#FEE2E2] flex items-center justify-center">
                   <AlertTriangle size={20} className="text-[#DC2626]" />
                 </div>
-                <h3 className="font-geist font-bold text-base text-[#111111]">Disconnect {acc.platform}?</h3>
+                <h3 className="font-geist font-bold text-base text-[#111111] capitalize">Disconnect {acc.platform}?</h3>
               </div>
               <div className="bg-[#FAFAF8] rounded-xl p-4 mb-5 space-y-2">
-                <p className="text-[12px] text-[#6B6B6B]">Historical contacts, conversations, and analytics will <span className="font-semibold text-[#111111]">remain visible</span>.</p>
-                <p className="text-[12px] text-[#6B6B6B]">Populr will <span className="font-semibold text-[#DC2626]">stop syncing</span> new activity.</p>
-                <p className="text-[12px] text-[#6B6B6B]">Active campaigns using {acc.platform} will be <span className="font-semibold text-[#D97706]">paused</span>.</p>
+                <p className="text-[12px] text-[#6B6B6B]">Historical opportunities and conversations will <span className="font-semibold text-[#111111]">remain visible</span>.</p>
+                <p className="text-[12px] text-[#6B6B6B]">Populr will <span className="font-semibold text-[#DC2626]">stop syncing</span> new engagement from this account.</p>
               </div>
               <div className="flex gap-2.5">
-                <button onClick={() => setDisconnectModal(null)}
-                  className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2.5 text-[13px] font-medium hover:bg-[#FAFAF8] transition-all">
+                <button onClick={() => setDisconnectModal(null)} disabled={isDisconnecting}
+                  className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2.5 text-[13px] font-medium hover:bg-[#FAFAF8] transition-all disabled:opacity-50">
                   Cancel
                 </button>
-                <button onClick={() => handleDisconnect(disconnectModal)}
-                  className="flex-1 bg-[#DC2626] text-white rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-[#B91C1C] transition-all">
-                  Disconnect account
+                <button onClick={() => handleDisconnect(disconnectModal)} disabled={isDisconnecting}
+                  className="flex-1 bg-[#DC2626] text-white rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-[#B91C1C] transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                  {isDisconnecting && <Loader2 size={14} className="animate-spin" />}
+                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect account'}
                 </button>
               </div>
             </div>
