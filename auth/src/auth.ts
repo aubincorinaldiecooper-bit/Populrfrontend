@@ -36,6 +36,25 @@ export const authOptions: BetterAuthOptions = {
   // for the OAuth-style `callbackURL` params Better Auth accepts.
   trustedOrigins: [env.populrFrontendUrl],
 
+  // BETTER_AUTH_URL (this service's own Railway domain) and
+  // POPULR_FRONTEND_URL are expected to be different sites in production,
+  // not just different paths on the same origin. Being in trustedOrigins
+  // only gets a cross-site request past CORS/CSRF checks — it does nothing
+  // about the session cookie itself. Better Auth's default cookie is
+  // SameSite=Lax, and Lax cookies are withheld by the browser on
+  // cross-site fetch/XHR (only same-site requests, or top-level
+  // navigations, carry them). Without this, sign-in succeeds (the
+  // Set-Cookie response doesn't need the cookie to be sent), but every
+  // later request — get-session, token, sign-out — arrives with no cookie
+  // and looks unauthenticated. SameSite=None requires Secure, which is why
+  // this is production-only: a Secure cookie is dropped by the browser
+  // entirely over plain http://, which is what local dev uses.
+  advanced: {
+    defaultCookieAttributes: env.isProduction
+      ? { sameSite: "none", secure: true }
+      : undefined,
+  },
+
   // Prepared but left out entirely until real credentials exist — Google
   // sign-in is unreachable, not just failing, until GOOGLE_CLIENT_ID and
   // GOOGLE_CLIENT_SECRET are both set.

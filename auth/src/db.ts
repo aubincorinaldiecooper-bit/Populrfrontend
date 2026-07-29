@@ -27,7 +27,15 @@ import { env } from "./env.js";
 export const pool = new Pool({
   connectionString: env.authDatabaseUrl,
   options: "-c search_path=auth,public",
-  ssl: env.isProduction ? { rejectUnauthorized: false } : undefined,
+  // No ssl override here on purpose: `pg` parses `sslmode` straight out of
+  // AUTH_DATABASE_URL (see pg-connection-string), so TLS policy — including
+  // certificate verification — is controlled entirely by the connection
+  // string, not hardcoded here. `?sslmode=verify-full` (or `require`) gets
+  // a normal verified TLS connection; only `?sslmode=no-verify` disables
+  // certificate checking, and that has to be an explicit, deliberate
+  // choice in the connection string for a specific database that's known
+  // to need it — never a blanket "every production deploy skips
+  // verification" default baked into the code. See .env.example.
   max: 10,
   idleTimeoutMillis: 30_000,
 });
