@@ -38,6 +38,17 @@ export const env = {
     clientId: optional("GOOGLE_CLIENT_ID"),
     clientSecret: optional("GOOGLE_CLIENT_SECRET"),
   },
+
+  // Resend for magic-link delivery. The API key is required to actually
+  // send email in production, but leaving it optional here keeps the
+  // service bootable in local dev/tests where a mocked mailer is injected.
+  // mailerFromEmail defaults to "Populr <login@populr.space>" (the
+  // documented sender on the verified domain) so a misconfigured deploy
+  // still sends from the correct address rather than an empty From: header.
+  resend: {
+    apiKey: optional("RESEND_API_KEY"),
+    fromEmail: optional("RESEND_FROM_EMAIL", "Populr <login@populr.space>"),
+  },
 };
 
 // Google sign-in is wired up but only switched on once real credentials are

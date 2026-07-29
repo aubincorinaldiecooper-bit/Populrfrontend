@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import {
-  Instagram, Video, Linkedin, Link2,
+  Instagram, Video, Linkedin, Link2, LogOut,
   Check, Shield, Trash2, Download, AlertTriangle,
   Loader2, Clock, ChevronDown, RefreshCw,
 } from 'lucide-react';
@@ -26,6 +28,8 @@ export default function SettingsPage() {
     accounts, accountsLoading, refreshAccounts, disconnectAccount, beginPlatformConnect,
     privacySettings, updatePrivacySetting, deleteAudienceData, showToast,
   } = useApp();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [saved, setSaved] = useState(false);
@@ -34,9 +38,31 @@ export default function SettingsPage() {
   const [disconnectModal, setDisconnectModal] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [confirmDeleteData, setConfirmDeleteData] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportReady, setExportReady] = useState<string | null>(null);
+
+  /** Ends the Better Auth session (server-side) and clears the frontend's
+   * local view. Deliberately does NOT touch:
+   *   - onboardingComplete: signing out doesn't undo product setup.
+   *   - Connected social accounts / their Zernio-side state: those live
+   *     server-side and belong to the user across sessions. Sign-out ≠
+   *     "delete my account".
+   * The routing itself happens here (not inside AuthContext.signOut) so
+   * callers can compose without every one of them owning navigation. */
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Sign out failed.', 'error');
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   // Fetch the authoritative list whenever this tab is opened, not just once
   // on app load — an account connected or disconnected elsewhere (e.g. the
@@ -154,6 +180,30 @@ export default function SettingsPage() {
           <button onClick={handleSave} className="bg-chartreuse text-[#111111] rounded-[10px] px-6 py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center gap-2">
             {saved && <Check size={14} />}{saved ? 'Saved!' : 'Save changes'}
           </button>
+
+          {/* Session */}
+          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Session</h2>
+            <p className="text-[13px] text-[#6B6B6B] mb-4">
+              {user?.email
+                ? <>Signed in as <span className="font-medium text-[#111111]">{user.email}</span>.</>
+                : 'Signed in.'}
+            </p>
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="inline-flex items-center gap-2 rounded-[10px] border border-[#E8E4DF] px-4 py-2.5 text-[13px] font-semibold text-[#111111] hover:bg-[#FAFAF8] transition-all disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {signingOut ? (
+                <><Loader2 size={14} className="animate-spin" /> Signing out…</>
+              ) : (
+                <><LogOut size={14} /> Sign out</>
+              )}
+            </button>
+            <p className="text-[11px] text-[#9B9B8F] mt-3">
+              Signing out ends your session on this device. It doesn't disconnect your social accounts.
+            </p>
+          </div>
         </div>
       )}
 

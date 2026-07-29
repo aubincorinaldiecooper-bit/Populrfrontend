@@ -6,7 +6,11 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // `auth/` is a fully isolated Node service (its own package.json,
+  // tsconfig, node_modules) — it has its own tsc pipeline for type
+  // safety. Linting it from the frontend picks up its Node-style code
+  // under the frontend's browser-only rules, which is nonsense.
+  globalIgnores(['dist', 'auth']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

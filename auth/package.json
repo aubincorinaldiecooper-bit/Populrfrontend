@@ -21,7 +21,8 @@
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "kysely": "^0.28.17",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "resend": "^4.8.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
