@@ -965,34 +965,6 @@ export const analysisSteps = [
   { id: 'sentiment', label: 'Intent sentiment analysis', count: 50 },
 ];
 
-// ─── Connected Accounts (richer state for Settings) ────────
-export type ConnectedAccountStatus = 'idle' | 'connecting' | 'syncing' | 'connected' | 'needs-attention' | 'disconnected';
-
-export interface ConnectedAccount {
-  id: string;
-  platform: string;
-  icon: string;
-  displayName: string;
-  handle: string;
-  avatar: string;
-  status: ConnectedAccountStatus;
-  isPrimary: boolean;
-  lastSynced: string;
-  permissions: string[];
-}
-
-export const defaultConnectedAccounts: ConnectedAccount[] = [
-  { id: 'ig', platform: 'Instagram', icon: 'instagram', displayName: 'Maya Chen', handle: '@mayastyle', avatar: '/images/avatar-maya.jpg', status: 'connected', isPrimary: true, lastSynced: '2 min ago', permissions: ['Read DMs', 'Read comments', 'Read profile', 'Send messages'] },
-  { id: 'tt', platform: 'TikTok', icon: 'tiktok', displayName: 'Maya Chen', handle: '@mayastyle', avatar: '/images/avatar-maya.jpg', status: 'connected', isPrimary: false, lastSynced: '5 min ago', permissions: ['Read comments', 'Read profile', 'Read videos'] },
-  { id: 'yt', platform: 'YouTube', icon: 'youtube', displayName: 'Maya Chen', handle: 'Maya Chen', avatar: '/images/avatar-maya.jpg', status: 'connected', isPrimary: false, lastSynced: '1h ago', permissions: ['Read comments', 'Read profile'] },
-  { id: 'tw', platform: 'X / Twitter', icon: 'twitter', displayName: '', handle: '', avatar: '', status: 'idle', isPrimary: false, lastSynced: '', permissions: ['Read DMs', 'Read mentions', 'Read profile', 'Post tweets'] },
-  { id: 'fb', platform: 'Facebook', icon: 'facebook', displayName: '', handle: '', avatar: '', status: 'idle', isPrimary: false, lastSynced: '', permissions: ['Read page messages', 'Read comments', 'Read profile'] },
-  { id: 'li', platform: 'LinkedIn', icon: 'linkedin', displayName: '', handle: '', avatar: '', status: 'idle', isPrimary: false, lastSynced: '', permissions: ['Read messages', 'Read profile', 'Read posts'] },
-  { id: 'th', platform: 'Threads', icon: 'threads', displayName: '', handle: '', avatar: '', status: 'idle', isPrimary: false, lastSynced: '', permissions: ['Read replies', 'Read profile'] },
-  { id: 'wa', platform: 'WhatsApp', icon: 'whatsapp', displayName: '', handle: '', avatar: '', status: 'idle', isPrimary: false, lastSynced: '', permissions: ['Read messages', 'Send messages', 'Read profile'] },
-  { id: 'pi', platform: 'Pinterest', icon: 'pinterest', displayName: '', handle: '', avatar: '', status: 'idle', isPrimary: false, lastSynced: '', permissions: ['Read pins', 'Read profile', 'Read boards'] },
-];
-
 // ─── Team Members ──────────────────────────────────────────
 export type TeamRole = 'owner' | 'manager' | 'community-manager' | 'viewer';
 

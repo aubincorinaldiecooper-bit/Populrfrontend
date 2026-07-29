@@ -198,7 +198,28 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-neutral-50 lg:grid lg:grid-cols-2">
+      {/* Photo panel — desktop only. Mobile stays a lean, single-column flow
+          so onboarding never competes with marketing imagery for space. */}
+      <div className="relative hidden lg:block">
+        <img
+          src="/images/landing/friends-reacting.webp"
+          alt="Three friends reacting to something on a phone together"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/10" />
+        <div className="absolute bottom-10 left-10 right-10 text-white">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-2 w-2 rounded-full bg-[#C5FF3D]" />
+            <span className="text-xs font-bold uppercase tracking-[0.2em]">Populr</span>
+          </div>
+          <p className="text-2xl font-semibold leading-snug">
+            Engagement shouldn't end with a notification.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center p-6 min-h-screen lg:min-h-0">
       <div className="w-full max-w-[520px]">
         {/* Card */}
         <div className="border border-neutral-200/60 rounded-2xl p-6 bg-white">
@@ -338,6 +359,7 @@ export default function Onboarding() {
             </motion.button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
