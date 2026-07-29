@@ -47,13 +47,13 @@ function SectionPhoto({
 
 // Two CTAs styled for a dark section: "Creator" is the primary action (fills
 // the site's existing chartreuse-as-primary convention), "Brand" is
-// secondary. Both currently point at the same real connect flow — there's
-// no separate brand-signup path yet, only a different label.
+// secondary. Both currently point at the same passwordless sign-in — there's
+// no separate brand-signup account system yet, only a different label.
 function JoinButtons() {
   return (
     <div className="flex flex-col gap-3 xs:flex-row">
       <Link
-        to="/connect"
+        to="/login"
         className="group inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl px-6 py-4 text-sm font-semibold text-[#111111] shadow-xl shadow-black/20 transition-transform hover:scale-[1.02]"
         style={{ backgroundColor: LIME }}
       >
@@ -61,7 +61,7 @@ function JoinButtons() {
         <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
       </Link>
       <Link
-        to="/connect"
+        to="/login"
         className="group inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl border border-white/30 px-6 py-4 text-sm font-semibold text-white transition-all hover:border-white/70 hover:bg-white/5"
       >
         Join as a Brand

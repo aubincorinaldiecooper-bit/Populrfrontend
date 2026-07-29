@@ -54,3 +54,14 @@ export async function ensureAuthSchema(): Promise<void> {
 }
 
 export const dialect = new PostgresDialect({ pool });
+
+/** Small helper mirroring the populrbackend `query()` convention: unwraps
+ * rows and lets callers type the result. Only used by tests and by the
+ * one-off repair paths — Better Auth itself talks to the pool via Kysely. */
+export async function query<T = Record<string, unknown>>(
+  text: string,
+  params?: unknown[]
+): Promise<T[]> {
+  const result = await pool.query(text, params as never[]);
+  return result.rows as T[];
+}
