@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { ChevronLeft, Instagram, Music, Youtube, Twitter } from "lucide-react";
+import { ChevronLeft, Instagram, Music, Linkedin, AlertCircle } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useApp } from "../context/AppContext";
 
+// Populr's supported connection surface: exactly Instagram, TikTok, LinkedIn.
 const PLATFORMS = [
   { id: "instagram", name: "Instagram", icon: Instagram, color: "#E4405F" },
   { id: "tiktok", name: "TikTok", icon: Music, color: "#000000" },
-  { id: "youtube", name: "YouTube", icon: Youtube, color: "#FF0000" },
-  { id: "twitter", name: "Twitter", icon: Twitter, color: "#000000" },
+  { id: "linkedin", name: "LinkedIn", icon: Linkedin, color: "#0A66C2" },
 ];
 
 const GOALS = [
@@ -77,7 +77,7 @@ function EmptyCircle() {
 
 function GradientOverlay({ status }: { status: string }) {
   if (status === "completed" || status === "idle") return null;
-  const cls = status === "updates-found" ? "from-red-500/20" : "from-green-500/20";
+  const cls = status === "updates-found" || status === "failed" ? "from-red-500/20" : "from-green-500/20";
   return (
     <div className={`absolute inset-0 bg-gradient-to-l ${cls} to-transparent pointer-events-none`}
       style={{ backgroundSize: "40% 100%", backgroundPosition: "right", backgroundRepeat: "no-repeat" }} />
@@ -159,9 +159,12 @@ export default function Onboarding() {
     const st = cp?.status || "idle";
     return {
       id: p.id, title: p.name,
-      status: st === "connected" ? "completed" as const : st === "connecting" ? "syncing" as const : "idle" as const,
+      status: st === "connected" ? "completed" as const
+        : st === "connecting" ? "syncing" as const
+        : st === "error" ? "failed" as const
+        : "idle" as const,
       icon: p.icon, iconColor: p.color,
-      onConnect: () => { if (st === "idle") beginPlatformConnect(p.id); },
+      onConnect: () => { if (st === "idle" || st === "error") beginPlatformConnect(p.id); },
     };
   });
 
@@ -183,9 +186,10 @@ export default function Onboarding() {
     return 0;
   });
 
-  const statusText = (s: string) => { switch (s) { case "updates-found": return "PENDING"; case "syncing": return "SYNCING"; default: return null; } };
+  const statusText = (s: string) => { switch (s) { case "updates-found": return "PENDING"; case "syncing": return "SYNCING"; case "failed": return "FAILED"; default: return null; } };
 
   const iconFor = (card: any) => {
+    if (card.status === "failed") return <AlertCircle size={16} className="text-red-500" />;
     if (card.status === "completed") return <CompletedIcon />;
     if (card.status === "syncing") return <SyncingIcon activeDashIndex={activeDashIndex} />;
     if (step === 3) return <UpdatesFoundIcon />;
@@ -194,7 +198,28 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-neutral-50 lg:grid lg:grid-cols-2">
+      {/* Photo panel — desktop only. Mobile stays a lean, single-column flow
+          so onboarding never competes with marketing imagery for space. */}
+      <div className="relative hidden lg:block">
+        <img
+          src="/images/landing/friends-reacting.webp"
+          alt="Three friends reacting to something on a phone together"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/10" />
+        <div className="absolute bottom-10 left-10 right-10 text-white">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-2 w-2 rounded-full bg-[#C5FF3D]" />
+            <span className="text-xs font-bold uppercase tracking-[0.2em]">Populr</span>
+          </div>
+          <p className="text-2xl font-semibold leading-snug">
+            Engagement shouldn't end with a notification.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center p-6 min-h-screen lg:min-h-0">
       <div className="w-full max-w-[520px]">
         {/* Card */}
         <div className="border border-neutral-200/60 rounded-2xl p-6 bg-white">
@@ -217,7 +242,7 @@ export default function Onboarding() {
             initial="hidden" animate="visible">
             <AnimatePresence mode="popLayout">
               {sorted.map(card => {
-                const isInteractive = card.status === "idle" && !card.isInput;
+                const isInteractive = (card.status === "idle" || (step === 1 && card.status === "failed")) && !card.isInput;
                 const activate = () => {
                   if (step === 1) card.onConnect?.();
                   else if (step === 2) card.onSelect?.();
@@ -278,7 +303,14 @@ export default function Onboarding() {
                               Connect
                             </motion.button>
                           ) : step === 1 && card.status === "idle" ? null
-                          : step === 2 && card.status === "idle" && hoveredCard === card.id && !card.isInput ? (
+                          : step === 1 && card.status === "failed" && hoveredCard === card.id ? (
+                            <motion.button key="r" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
+                              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                              onClick={e => { e.stopPropagation(); card.onConnect?.(); }}
+                              className="px-2.5 py-1 bg-white text-red-600 text-xs font-medium rounded-md border border-red-200 whitespace-nowrap cursor-pointer hover:bg-red-50">
+                              Retry
+                            </motion.button>
+                          ) : step === 2 && card.status === "idle" && hoveredCard === card.id && !card.isInput ? (
                             <motion.button key="s" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
                               transition={{ type: "spring", stiffness: 400, damping: 25 }}
                               onClick={e => { e.stopPropagation(); card.onSelect?.(); }}
@@ -288,7 +320,7 @@ export default function Onboarding() {
                           ) : step === 2 && card.status === "idle" ? null
                           : statusText(card.status) ? (
                             <motion.span key="st" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                              className="text-xs font-mono font-medium text-neutral-400 tracking-wider whitespace-nowrap">
+                              className={`text-xs font-mono font-medium tracking-wider whitespace-nowrap ${card.status === "failed" ? "text-red-500" : "text-neutral-400"}`}>
                               {statusText(card.status)}
                             </motion.span>
                           ) : null}
@@ -327,6 +359,7 @@ export default function Onboarding() {
             </motion.button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

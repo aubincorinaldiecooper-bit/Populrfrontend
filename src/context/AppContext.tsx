@@ -1,28 +1,20 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type {
   OnboardingPlatform, Campaign, Broadcast,
-  ConnectedAccount, ConnectedAccountStatus, TeamMember, PendingInvitation, TeamRole, PrivacySettings,
+  TeamMember, PendingInvitation, TeamRole, PrivacySettings,
   ContactNote,
 } from '../data';
 import {
   campaigns as initialCampaigns, broadcasts as initialBroadcasts,
-  defaultOnboardingPlatforms, defaultConnectedAccounts, defaultTeamMembers, defaultPrivacySettings,
+  defaultOnboardingPlatforms, defaultTeamMembers, defaultPrivacySettings,
   contacts as initialContacts,
 } from '../data';
 import type { Contact } from '../data';
-import { isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts } from '../lib/api';
-
-// The rich `connectedAccounts` model (Settings > Connections) predates the
-// backend integration and keys accounts by its own short ids (`defaultConnectedAccounts`
-// in ../data), distinct from the backend's lowercase platform names used by
-// `connectedPlatforms` and the connect API. This bridges the two so a real
-// connection reflects in both places instead of only onboarding.
-const RICH_ACCOUNT_PLATFORM_BY_ID: Record<string, string> = {
-  ig: 'instagram',
-  tt: 'tiktok',
-  yt: 'youtube',
-  tw: 'twitter',
-};
+import {
+  isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
+  disconnectAccount as disconnectAccountApi,
+} from '../lib/api';
+import type { ConnectedAccount } from '../lib/api';
 
 export interface Toast {
   id: string;
@@ -42,9 +34,10 @@ interface AppState {
   // Connected account state
   connectedPlatforms: OnboardingPlatform[];
   selectedAudienceGoal: string;
-  // Rich connected accounts
-  connectedAccounts: ConnectedAccount[];
-  primaryAccountId: string;
+  // Authoritative connected accounts, straight from the backend (Settings >
+  // Connected accounts). Empty until refreshAccounts() resolves.
+  accounts: ConnectedAccount[];
+  accountsLoading: boolean;
   // Contacts
   contacts: Contact[];
   // Campaign / broadcast
@@ -76,11 +69,9 @@ interface AppContextType extends AppState {
   beginPlatformConnect: (id: string) => void;
   refreshConnectedAccounts: () => void;
   setSelectedAudienceGoal: (goal: string) => void;
-  // Connected accounts (rich)
-  updateAccountStatus: (id: string, status: ConnectedAccountStatus) => void;
-  setPrimaryAccount: (id: string) => void;
-  disconnectAccount: (id: string) => void;
-  reconnectAccount: (id: string) => void;
+  // Connected accounts (authoritative, backend-backed)
+  refreshAccounts: () => Promise<void>;
+  disconnectAccount: (id: string) => Promise<void>;
   // Campaign/broadcast
   addCampaign: (campaign: Campaign) => void;
   addBroadcast: (broadcast: Broadcast) => void;
@@ -107,9 +98,27 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// Onboarding completion outlives the tab because the OAuth connect flow leaves
+// the app entirely and comes back via a full page load. Without this, the
+// return trip lands on the marketing page instead of the route that reads
+// ?connected= and pulls the freshly linked account. It also delivers the
+// intended return experience: a creator who's already connected an account
+// lands straight on Opportunities.
+const ONBOARDING_STORAGE_KEY = 'populr.onboardingComplete';
+
+function readOnboardingComplete(): boolean {
+  try {
+    return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === 'true';
+  } catch {
+    // Storage can be unavailable (private mode, blocked cookies) — fall back
+    // to the pre-onboarding experience rather than breaking the app.
+    return false;
+  }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>({
-    onboardingComplete: false,
+    onboardingComplete: readOnboardingComplete(),
     selectedConversationId: '1',
     selectedContactId: null,
     showContactDrawer: false,
@@ -119,8 +128,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     contactDrawerContext: null,
     connectedPlatforms: defaultOnboardingPlatforms.map(p => ({ ...p })),
     selectedAudienceGoal: '',
-    connectedAccounts: defaultConnectedAccounts.map(a => ({ ...a })),
-    primaryAccountId: 'ig',
+    accounts: [],
+    accountsLoading: false,
     contacts: initialContacts.map(c => ({ ...c })),
     campaigns: initialCampaigns.map(c => ({ ...c })),
     broadcasts: initialBroadcasts.map(b => ({ ...b })),
@@ -132,6 +141,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const completeOnboarding = useCallback(() => {
+    try {
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+    } catch {
+      // Non-fatal: the session still proceeds, it just won't survive a reload.
+    }
     setState(prev => ({ ...prev, onboardingComplete: true }));
   }, []);
 
@@ -183,7 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({
         ...prev,
         connectedPlatforms: prev.connectedPlatforms.map(p =>
-          p.id === id ? { ...p, status: 'connected' as const, handle: p.id === 'instagram' || p.id === 'tiktok' ? '@mayastyle' : p.id === 'youtube' ? 'Maya Chen' : undefined } : p
+          p.id === id ? { ...p, status: 'connected' as const, handle: '@mayastyle', errorMessage: undefined } : p
         ),
       }));
     }, 1200);
@@ -193,46 +207,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, selectedAudienceGoal: goal }));
   }, []);
 
-  // Rich connected accounts
-  const updateAccountStatus = useCallback((id: string, status: ConnectedAccountStatus) => {
-    setState(prev => ({
-      ...prev,
-      connectedAccounts: prev.connectedAccounts.map(a => a.id === id ? { ...a, status } : a),
-    }));
+  // Authoritative connected accounts — always the backend's own list, never
+  // inferred or held only in the frontend, per the "no fake success" rule
+  // that governs the rest of this app's real-data surfaces.
+  const refreshAccounts = useCallback(async () => {
+    if (!isBackendConfigured()) return;
+    setState(prev => ({ ...prev, accountsLoading: true }));
+    try {
+      const accounts = await fetchConnectedAccounts();
+      setState(prev => ({ ...prev, accounts, accountsLoading: false }));
+    } catch (err) {
+      console.error('[accounts] failed to load connected accounts:', err);
+      setState(prev => ({ ...prev, accountsLoading: false }));
+    }
   }, []);
 
-  const setPrimaryAccount = useCallback((id: string) => {
+  // Disconnect goes through the real backend endpoint and only updates local
+  // state once Zernio has actually confirmed the revoke — never optimistic,
+  // never hidden/deleted client-side only.
+  const disconnectAccount = useCallback(async (id: string) => {
+    const updated = await disconnectAccountApi(id);
     setState(prev => ({
       ...prev,
-      primaryAccountId: id,
-      connectedAccounts: prev.connectedAccounts.map(a => ({ ...a, isPrimary: a.id === id })),
+      accounts: prev.accounts.map(a => (a.id === id ? updated : a)),
     }));
-  }, []);
-
-  const disconnectAccount = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      connectedAccounts: prev.connectedAccounts.map(a =>
-        a.id === id ? { ...a, status: 'disconnected' as const, isPrimary: a.isPrimary ? false : a.isPrimary } : a
-      ),
-    }));
-  }, []);
-
-  const reconnectAccount = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      connectedAccounts: prev.connectedAccounts.map(a =>
-        a.id === id ? { ...a, status: 'connecting' as const } : a
-      ),
-    }));
-    setTimeout(() => {
-      setState(prev => ({
-        ...prev,
-        connectedAccounts: prev.connectedAccounts.map(a =>
-          a.id === id ? { ...a, status: 'connected' as const, lastSynced: 'Just now' } : a
-        ),
-      }));
-    }, 1500);
   }, []);
 
   // Campaign management
@@ -396,7 +394,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({
       ...prev,
       connectedPlatforms: prev.connectedPlatforms.map(p =>
-        p.id === id ? { ...p, status: 'connecting' as const } : p
+        p.id === id ? { ...p, status: 'connecting' as const, errorMessage: undefined } : p
       ),
     }));
     const to = `${window.location.origin}${window.location.pathname}?connected=${id}`;
@@ -406,13 +404,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(err => {
         console.error(`[connect] failed to start ${id} connect:`, err);
+        // Persist as a visible "Connection failed" card state (with the
+        // backend's own reason) rather than silently reverting to idle —
+        // a toast alone disappears before the user can act on it.
+        const reason = err instanceof Error && err.message ? err.message : undefined;
         setState(prev => ({
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p =>
-            p.id === id ? { ...p, status: 'idle' as const } : p
+            p.id === id ? { ...p, status: 'error' as const, errorMessage: reason } : p
           ),
         }));
-        const reason = err instanceof Error && err.message ? err.message : undefined;
         showToast(
           reason ? `Couldn't connect ${id}: ${reason}` : `Couldn't connect ${id} right now. Please try again.`,
           'error'
@@ -421,10 +422,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [connectPlatform, showToast]);
 
   // Pulls real synced accounts from the backend and reflects them onto both
-  // the onboarding platform list and the richer Settings "Connections" model
-  // — used after returning from the OAuth redirect. Both slices are derived
-  // from the same backend response so they can't drift out of sync with
-  // each other or with reality.
+  // the onboarding platform list and the authoritative `accounts` list —
+  // used after returning from the OAuth redirect, so both stay derived from
+  // the same backend response instead of drifting out of sync.
   const refreshConnectedAccounts = useCallback(() => {
     if (!isBackendConfigured()) return;
     fetchConnectedAccounts()
@@ -438,30 +438,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ...p,
               status: 'connected' as const,
               handle: match.username ? `@${match.username}` : match.display_name ?? p.handle,
+              errorMessage: undefined,
             };
           }),
-          connectedAccounts: prev.connectedAccounts.map(acc => {
-            const platformId = RICH_ACCOUNT_PLATFORM_BY_ID[acc.id];
-            if (!platformId) return acc;
-            const match = accounts.find(a => a.platform === platformId && a.is_connected);
-            if (!match) return acc;
-            return {
-              ...acc,
-              status: 'connected' as const,
-              // Once a real match exists, never keep the seeded demo
-              // identity fields (e.g. "Maya Chen") for a null backend value.
-              displayName: match.display_name ?? '',
-              handle: match.username ? `@${match.username}` : '',
-              avatar: match.avatar_url ?? '',
-              lastSynced: 'Just now',
-            };
-          }),
+          accounts,
         }));
       })
       .catch(err => {
         console.error('[connect] failed to refresh connected accounts:', err);
       });
   }, []);
+
+  // On application load, fetch the authoritative connected-account list —
+  // it's server-persisted, not client state, so a fresh tab/browser/session
+  // must never show stale or empty data before this resolves.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshAccounts();
+  }, [refreshAccounts]);
 
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));
@@ -484,10 +478,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       beginPlatformConnect,
       refreshConnectedAccounts,
       setSelectedAudienceGoal,
-      updateAccountStatus,
-      setPrimaryAccount,
+      refreshAccounts,
       disconnectAccount,
-      reconnectAccount,
       addCampaign,
       addBroadcast,
       saveCampaignAsDraft,

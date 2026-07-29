@@ -1,0 +1,11 @@
+node_modules
+dist
+*.tsbuildinfo
+.env
+.env.local
+*.log
+
+# The repo root's .gitignore excludes a bare "package-lock.json" at every
+# depth (it has no leading slash), which would also swallow this
+# directory's lockfile. Un-ignore it explicitly — it must be committed.
+!package-lock.json
