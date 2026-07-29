@@ -3,6 +3,7 @@
  * populrbackend test suites: a plain check() assertion helper, no test
  * framework, run directly via tsx. */
 import http from "node:http";
+import { spawn } from "node:child_process";
 import { createApp } from "../src/app.js";
 import { pool } from "../src/db.js";
 
@@ -150,6 +151,56 @@ async function main() {
   check("the configured POPULR_FRONTEND_URL origin is still allowed", trustedStillWorks.status === 200, trustedStillWorks.body);
 
   await server.close();
+
+  console.log("\n== Production session cookies are SameSite=None; Secure ==");
+  // BETTER_AUTH_URL and POPULR_FRONTEND_URL are different sites in
+  // production, so the session cookie has to survive a cross-site fetch —
+  // which requires SameSite=None + Secure (see auth.ts). That's gated on
+  // NODE_ENV=production, and env.ts reads NODE_ENV once at module load, so
+  // proving it actually takes effect means booting a real second instance
+  // with NODE_ENV=production rather than just re-importing this process's
+  // already-loaded config.
+  const prodPort = 4099;
+  const prodChild = spawn("npx", ["tsx", "src/index.ts"], {
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      PORT: String(prodPort),
+      BETTER_AUTH_URL: `http://localhost:${prodPort}`,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    const ready = await Promise.race([
+      new Promise<boolean>((resolve) => {
+        const tryHealth = async () => {
+          try {
+            const res = await req(prodPort, "GET", "/health");
+            if (res.status === 200) return resolve(true);
+          } catch {
+            // not up yet
+          }
+          setTimeout(tryHealth, 200);
+        };
+        tryHealth();
+      }),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10_000)),
+    ]);
+    check("production instance boots", ready);
+
+    if (ready) {
+      const prodSignUp = await req(prodPort, "POST", "/api/auth/sign-up/email", {
+        body: { name: "Prod Cookie Test", email: `prodcookie_${runId}@example.com`, password },
+      });
+      const setCookie = prodSignUp.headers["set-cookie"]?.[0] ?? "";
+      check("sign-up succeeds against the production instance", prodSignUp.status === 200, prodSignUp.body);
+      check("session cookie is SameSite=None", /SameSite=None/i.test(setCookie), setCookie);
+      check("session cookie is Secure", /(^|;\s*)Secure(;|$)/i.test(setCookie), setCookie);
+    }
+  } finally {
+    prodChild.kill();
+  }
+
   console.log(`\n===== RESULTS: ${pass} passed, ${fail} failed =====`);
   await pool.end();
   process.exit(fail > 0 ? 1 : 0);
