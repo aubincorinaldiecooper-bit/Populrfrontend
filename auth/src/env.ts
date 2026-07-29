@@ -15,6 +15,13 @@ function optional(name: string, fallback = ""): string {
   return value && value.trim() !== "" ? value.trim() : fallback;
 }
 
+// Better Auth requires a fully-qualified URL (with protocol) for its base
+// URL. Railway's generated domains are sometimes injected as bare hostnames,
+// so we defensively add the protocol rather than fail the deploy.
+function withProtocol(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
 export const env = {
   nodeEnv: optional("NODE_ENV", "development"),
   isProduction: optional("NODE_ENV", "development") === "production",
@@ -26,7 +33,7 @@ export const env = {
   // service booting with a placeholder secret or no known frontend origin
   // is a security bug, not a degraded-but-usable state.
   betterAuthSecret: required("BETTER_AUTH_SECRET"),
-  betterAuthUrl: required("BETTER_AUTH_URL"),
+  betterAuthUrl: withProtocol(required("BETTER_AUTH_URL")),
   populrFrontendUrl: required("POPULR_FRONTEND_URL"),
 
   // Populr's existing Postgres database, reached through a dedicated
