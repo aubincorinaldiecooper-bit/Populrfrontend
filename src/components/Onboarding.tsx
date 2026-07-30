@@ -85,7 +85,7 @@ function GradientOverlay({ status }: { status: string }) {
 }
 
 export default function Onboarding() {
-  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn, openSubscriptionModal, setSelectedAudienceGoal } = useApp();
+  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn, openSubscriptionModal, setSelectedAudienceGoal, showToast } = useApp();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -129,6 +129,27 @@ export default function Onboarding() {
     const platform = connectedPlatforms.find(p => p.id === platformId);
     if (platform && platform.status === "idle") beginPlatformConnect(platformId);
     // Only run once on mount, driven by the CTA that landed the user here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Returning from the $12/month checkout (see SubscriptionModal — it now
+  // returns here when it was opened while not yet onboarded, instead of
+  // always going to /connections). Never marks anything subscribed locally
+  // — that's not this frontend's to claim — just clears the way for the
+  // user to manually retry the platform they were trying to connect.
+  useEffect(() => {
+    if (searchParams.get("subscription") !== "success") return;
+    const retryId = searchParams.get("retry");
+    const label = retryId ? PLATFORMS.find(p => p.id === retryId)?.name ?? retryId : null;
+    showToast(
+      label ? `Subscription confirmed. Try connecting ${label} again.` : "Subscription confirmed.",
+      "success"
+    );
+    const url = new URL(window.location.href);
+    url.searchParams.delete("subscription");
+    url.searchParams.delete("retry");
+    window.history.replaceState(null, "", url.toString());
+    // Only run once on mount, driven by the checkout provider's return redirect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

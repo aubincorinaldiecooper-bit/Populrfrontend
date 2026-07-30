@@ -23,8 +23,15 @@ export default function SubscriptionModal({
     // Preserves which platform the user was trying to connect so it can be
     // retried after checkout, without ever marking them subscribed locally
     // — that state only becomes real once they've actually paid and come
-    // back through this return URL.
-    const returnUrl = new URL('/connections', window.location.origin);
+    // back through this return URL. Returns to wherever the modal was
+    // opened from (mirrors how beginPlatformConnect builds its own OAuth
+    // return URL from the current page) rather than a URL hard-coded to
+    // /connections: a not-yet-onboarded user opens this modal from
+    // /connect, and the route gate only renders /connect pre-onboarding —
+    // everything else redirects there without preserving the query string,
+    // so a hard-coded /connections silently dropped subscription=success
+    // and retry= for exactly that user.
+    const returnUrl = new URL(window.location.pathname, window.location.origin);
     returnUrl.searchParams.set('subscription', 'success');
     if (platform) returnUrl.searchParams.set('retry', platform);
     let target: URL;
