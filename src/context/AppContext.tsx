@@ -1,18 +1,18 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type {
   OnboardingPlatform, Campaign, Broadcast,
-  TeamMember, PendingInvitation, TeamRole, PrivacySettings,
+  TeamMember, PendingInvitation, TeamRole,
   ContactNote,
 } from '../data';
 import {
   campaigns as initialCampaigns, broadcasts as initialBroadcasts,
-  defaultOnboardingPlatforms, defaultTeamMembers, defaultPrivacySettings,
+  defaultOnboardingPlatforms, defaultTeamMembers,
   contacts as initialContacts,
 } from '../data';
 import type { Contact } from '../data';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
-  syncConnectedAccounts, disconnectAccount as disconnectAccountApi,
+  syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
 } from '../lib/api';
 import type { ConnectedAccount } from '../lib/api';
 
@@ -27,8 +27,6 @@ interface AppState {
   selectedConversationId: string | null;
   selectedContactId: string | null;
   showContactDrawer: boolean;
-  unreadCount: number;
-  showNotifications: boolean;
   smartReply: { text: string; editing: boolean } | null;
   contactDrawerContext: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics' | null;
   // Connected account state
@@ -46,11 +44,13 @@ interface AppState {
   // Team
   teamMembers: TeamMember[];
   pendingInvitations: PendingInvitation[];
-  // Privacy
-  privacySettings: PrivacySettings;
   // UI
   toasts: Toast[];
   isLoading: boolean;
+  // $12/month subscription modal (Zernio 402 -> subscription_required).
+  // null = closed. `platform` is remembered so it can be retried once the
+  // user returns from checkout.
+  subscriptionModal: { platform: string | null } | null;
 }
 
 interface AppContextType extends AppState {
@@ -60,9 +60,6 @@ interface AppContextType extends AppState {
   openContactDrawer: (contactId: string, context?: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics') => void;
   closeContactDrawer: () => void;
   setContactDrawerContext: (ctx: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics' | null) => void;
-  markConversationRead: (_id: string) => void;
-  toggleNotifications: () => void;
-  closeNotifications: () => void;
   setSmartReply: (reply: { text: string; editing: boolean } | null) => void;
   // Onboarding platform connection
   connectPlatform: (id: string) => void;
@@ -70,6 +67,8 @@ interface AppContextType extends AppState {
   refreshConnectedAccounts: () => void;
   completeOAuthReturn: (id: string) => Promise<void>;
   failOAuthReturn: (id: string | undefined) => void;
+  openSubscriptionModal: (platform?: string) => void;
+  closeSubscriptionModal: () => void;
   setSelectedAudienceGoal: (goal: string) => void;
   // Connected accounts (authoritative, backend-backed)
   refreshAccounts: () => Promise<void>;
@@ -89,9 +88,6 @@ interface AppContextType extends AppState {
   updateContactTags: (contactId: string, tags: string[]) => void;
   mergeContacts: (keepId: string, removeId: string) => void;
   updateContactStage: (contactId: string, stage: string) => void;
-  // Privacy
-  updatePrivacySetting: (key: keyof PrivacySettings, value: boolean | number) => void;
-  deleteAudienceData: () => void;
   // Toast
   showToast: (message: string, type: Toast['type']) => void;
   removeToast: (id: string) => void;
@@ -129,6 +125,14 @@ const OAUTH_SYNC_MAX_ATTEMPTS = 8;
 const OAUTH_SYNC_RETRY_MS = 1000;
 export const OAUTH_SYNC_ERROR_MESSAGE =
   'Your account was authorized, but Populr could not finish syncing it. Try again.';
+// Deliberately generic: whatever the backend's own error text is (a Zernio
+// failure like "Zernio GET /connect/instagram failed with 500", a config
+// error, a network blip) is never shown verbatim — only logged to the
+// console for debugging. subscription_required never reaches this message;
+// it opens the subscription modal instead (see beginPlatformConnect).
+function connectionFailedMessage(platformLabel: string): string {
+  return `Couldn't connect ${platformLabel}. Populr could not complete the connection. Try again.`;
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -140,8 +144,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectedConversationId: '1',
     selectedContactId: null,
     showContactDrawer: false,
-    unreadCount: 3,
-    showNotifications: false,
     smartReply: null,
     contactDrawerContext: null,
     connectedPlatforms: defaultOnboardingPlatforms.map(p => ({ ...p })),
@@ -153,9 +155,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     broadcasts: initialBroadcasts.map(b => ({ ...b })),
     teamMembers: defaultTeamMembers.map(m => ({ ...m })),
     pendingInvitations: [],
-    privacySettings: { ...defaultPrivacySettings },
     toasts: [],
     isLoading: false,
+    subscriptionModal: null,
   });
 
   const completeOnboarding = useCallback(() => {
@@ -187,38 +189,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, contactDrawerContext: ctx }));
   }, []);
 
-  const markConversationRead = useCallback((_id: string) => {
-    setState(prev => ({ ...prev, unreadCount: Math.max(0, prev.unreadCount - 1) }));
-  }, []);
-
-  const toggleNotifications = useCallback(() => {
-    setState(prev => ({ ...prev, showNotifications: !prev.showNotifications }));
-  }, []);
-
-  const closeNotifications = useCallback(() => {
-    setState(prev => ({ ...prev, showNotifications: false }));
-  }, []);
-
   const setSmartReply = useCallback((reply: { text: string; editing: boolean } | null) => {
     setState(prev => ({ ...prev, smartReply: reply }));
   }, []);
 
-  // Onboarding platform connection
+  // No backend configured (VITE_API_URL unset) — there is no real connect
+  // flow to run, so this reflects that honestly instead of faking a
+  // successful connection with an invented handle. Matches how
+  // completeOAuthReturn treats the same "not configured" case.
   const connectPlatform = useCallback((id: string) => {
     setState(prev => ({
       ...prev,
       connectedPlatforms: prev.connectedPlatforms.map(p =>
-        p.id === id ? { ...p, status: 'connecting' as const } : p
+        p.id === id
+          ? { ...p, status: 'error' as const, errorMessage: 'Populr is not configured (VITE_API_URL is missing).' }
+          : p
       ),
     }));
-    setTimeout(() => {
-      setState(prev => ({
-        ...prev,
-        connectedPlatforms: prev.connectedPlatforms.map(p =>
-          p.id === id ? { ...p, status: 'connected' as const, handle: '@mayastyle', errorMessage: undefined } : p
-        ),
-      }));
-    }, 1200);
   }, []);
 
   const setSelectedAudienceGoal = useCallback((goal: string) => {
@@ -375,19 +362,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  // Privacy
-  const updatePrivacySetting = useCallback((key: keyof PrivacySettings, value: boolean | number) => {
-    setState(prev => ({
-      ...prev,
-      privacySettings: { ...prev.privacySettings, [key]: value },
-    }));
-  }, []);
-
-  const deleteAudienceData = useCallback(() => {
-    // In a real app this would clear imported data
-    setState(prev => ({ ...prev }));
-  }, []);
-
   // Toast
   const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
     const id = `toast-${Date.now()}`;
@@ -399,6 +373,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const removeToast = useCallback((id: string) => {
     setState(prev => ({ ...prev, toasts: prev.toasts.filter(t => t.id !== id) }));
+  }, []);
+
+  const openSubscriptionModal = useCallback((platform?: string) => {
+    setState(prev => ({ ...prev, subscriptionModal: { platform: platform ?? null } }));
+  }, []);
+
+  const closeSubscriptionModal = useCallback(() => {
+    setState(prev => ({ ...prev, subscriptionModal: null }));
   }, []);
 
   // Real Instagram/TikTok/YouTube/X connect, backed by the Zernio-powered
@@ -422,22 +404,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(err => {
         console.error(`[connect] failed to start ${id} connect:`, err);
-        // Persist as a visible "Connection failed" card state (with the
-        // backend's own reason) rather than silently reverting to idle —
-        // a toast alone disappears before the user can act on it.
-        const reason = err instanceof Error && err.message ? err.message : undefined;
+        if (err instanceof ApiError && (err.code === 'subscription_required' || err.status === 402)) {
+          // The subscription modal takes over instead — never both an
+          // error card and the modal for the same response. Card resets to
+          // idle rather than staying stuck mid-"Connecting".
+          setState(prev => ({
+            ...prev,
+            connectedPlatforms: prev.connectedPlatforms.map(p =>
+              p.id === id ? { ...p, status: 'idle' as const, errorMessage: undefined } : p
+            ),
+          }));
+          openSubscriptionModal(id);
+          return;
+        }
+        // Persist as a visible "Connection failed" card state rather than
+        // silently reverting to idle — a toast alone disappears before the
+        // user can act on it. The message is always the fixed, safe copy;
+        // whatever the backend actually said is only ever in the console.error
+        // above, never rendered.
+        const label = defaultOnboardingPlatforms.find(p => p.id === id)?.name ?? id;
+        const message = connectionFailedMessage(label);
         setState(prev => ({
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p =>
-            p.id === id ? { ...p, status: 'error' as const, errorMessage: reason } : p
+            p.id === id ? { ...p, status: 'error' as const, errorMessage: message } : p
           ),
         }));
-        showToast(
-          reason ? `Couldn't connect ${id}: ${reason}` : `Couldn't connect ${id} right now. Please try again.`,
-          'error'
-        );
+        showToast(message, 'error');
       });
-  }, [connectPlatform, showToast]);
+  }, [connectPlatform, showToast, openSubscriptionModal]);
 
   // Pulls real synced accounts from the backend and reflects them onto both
   // the onboarding platform list and the authoritative `accounts` list —
@@ -450,14 +445,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p => {
-            const match = accounts.find(a => a.platform === p.id && a.is_connected);
+            const match = accounts.find(a => a.platform === p.id);
             if (!match) return p;
-            return {
-              ...p,
-              status: 'connected' as const,
-              handle: match.username ? `@${match.username}` : match.display_name ?? p.handle,
-              errorMessage: undefined,
-            };
+            const handle = match.username ? `@${match.username}` : match.display_name ?? p.handle;
+            if (match.status === 'connected') {
+              return { ...p, status: 'connected' as const, handle, errorMessage: undefined };
+            }
+            if (match.status === 'reconnect_required') {
+              return { ...p, status: 'reconnect_required' as const, handle, errorMessage: undefined };
+            }
+            // 'disconnected' — a real past connection the user ended.
+            // Treated the same as never-connected here: reconnecting is the
+            // same "Connect" action either way.
+            return p;
           }),
           accounts,
         }));
@@ -594,15 +594,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openContactDrawer,
       closeContactDrawer,
       setContactDrawerContext,
-      markConversationRead,
-      toggleNotifications,
-      closeNotifications,
       setSmartReply,
       connectPlatform,
       beginPlatformConnect,
       refreshConnectedAccounts,
       completeOAuthReturn,
       failOAuthReturn,
+      openSubscriptionModal,
+      closeSubscriptionModal,
       setSelectedAudienceGoal,
       refreshAccounts,
       disconnectAccount,
@@ -618,8 +617,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateContactTags,
       mergeContacts,
       updateContactStage,
-      updatePrivacySetting,
-      deleteAudienceData,
       showToast,
       removeToast,
       setLoading,

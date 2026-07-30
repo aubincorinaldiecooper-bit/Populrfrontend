@@ -12,6 +12,17 @@ export function isBackendConfigured(): boolean {
   return API_BASE_URL !== '';
 }
 
+/**
+ * URL of the hosted subscription checkout page (Stripe Payment Link or
+ * equivalent), used by the $12/month subscription modal. Required env var —
+ * there is no fallback URL, since a hard-coded one would either point
+ * nowhere or silently charge through the wrong account.
+ */
+export function getSubscriptionCheckoutUrl(): string | undefined {
+  const url = import.meta.env.VITE_SUBSCRIPTION_CHECKOUT_URL as string | undefined;
+  return url && url.trim() !== '' ? url.trim() : undefined;
+}
+
 export type AccountStatus = 'connected' | 'disconnected' | 'reconnect_required';
 
 export interface ConnectedAccount {
@@ -23,6 +34,19 @@ export interface ConnectedAccount {
   is_connected: boolean;
   status: AccountStatus;
   connected_at: string | null;
+}
+
+/**
+ * Preserves the HTTP status and the backend's own structured error code
+ * (e.g. "subscription_required"), not just a flattened message — callers
+ * that only need `.message` (most existing code) are unaffected since this
+ * still extends Error.
+ */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code?: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
 }
 
 async function apiFetch<T>(
@@ -39,11 +63,15 @@ async function apiFetch<T>(
     // { error: "disallowed_return_url", message: "..." }), not just the
     // HTTP status — that's the difference between "connect is broken" and
     // "ALLOWED_FRONTEND_ORIGINS isn't set" being visible without devtools.
-    const reason = await res
+    const parsed = await res
       .json()
-      .then((body: { error?: string; message?: string }) => body.message || body.error)
+      .then((body: { error?: string; message?: string }) => body)
       .catch(() => undefined);
-    throw new Error(reason || `Populr API ${path} failed with ${res.status}`);
+    throw new ApiError(
+      parsed?.message || parsed?.error || `Populr API ${path} failed with ${res.status}`,
+      res.status,
+      parsed?.error,
+    );
   }
   return res.json() as Promise<T>;
 }

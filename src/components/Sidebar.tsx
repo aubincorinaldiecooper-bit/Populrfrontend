@@ -1,10 +1,11 @@
 import { useRef, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import {
-  Sparkles, Link2, Settings, Bell, Menu, X,
+  Sparkles, Link2, Settings, Menu, X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { notifications } from '../data';
+import { useAuth } from '../context/AuthContext';
+import { resolveIdentity } from '../lib/identity';
 import gsap from 'gsap';
 
 // Primary nav is intentionally limited to the two-step Populr journey:
@@ -18,10 +19,11 @@ const navItems = [
 
 export default function Sidebar() {
   const location = useLocation();
-  const { onboardingComplete, toggleNotifications } = useApp();
+  const { onboardingComplete, accounts } = useApp();
+  const { user } = useAuth();
   const sidebarRef = useRef<HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const notifUnread = notifications.filter(n => !n.read).length;
+  const identity = resolveIdentity(user, accounts);
 
   useEffect(() => {
     if (sidebarRef.current && onboardingComplete) {
@@ -56,18 +58,18 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-3 pb-3 space-y-0.5 shrink-0 border-t border-[#E8E4DF] pt-2">
-        <button onClick={toggleNotifications}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[#6B6B6B] font-medium hover:bg-[#FAFAF8] hover:text-[#111111]">
-          <Bell size={18} strokeWidth={2} />
-          <span className="text-[13px]">Notifications</span>
-          {notifUnread > 0 && <span className="ml-auto bg-coral text-white text-[10px] font-semibold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">{notifUnread}</span>}
-        </button>
         <Link to="/settings" onClick={() => setMobileOpen(false)}
-          className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-[#FAFAF8] transition-all border-t border-[#E8E4DF] mt-1">
-          <img src="/images/avatar-maya.jpg" alt="Maya Chen" className="w-8 h-8 rounded-full object-cover" />
+          className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-[#FAFAF8] transition-all">
+          {identity.avatarUrl ? (
+            <img src={identity.avatarUrl} alt={identity.name} className="w-8 h-8 rounded-full object-cover" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-[#FAFAF8] flex items-center justify-center text-[11px] font-semibold text-[#6B6B6B] flex-shrink-0">
+              {identity.initials}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-[13px] text-[#111111] truncate">Maya Chen</p>
-            <p className="text-[11px] text-[#9B9B8F] truncate">@mayastyle</p>
+            <p className="font-semibold text-[13px] text-[#111111] truncate">{identity.name}</p>
+            {identity.handle && <p className="text-[11px] text-[#9B9B8F] truncate">{identity.handle}</p>}
           </div>
           <Settings size={16} className="text-[#9B9B8F]" />
         </Link>

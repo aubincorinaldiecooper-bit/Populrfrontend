@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { resolveIdentity } from '../lib/identity';
 import {
   Instagram, Video, Linkedin, Link2, LogOut,
-  Check, Shield, Trash2, Download, AlertTriangle,
-  Loader2, Clock, ChevronDown, RefreshCw,
+  Trash2, AlertTriangle,
+  Loader2, ChevronDown, RefreshCw,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured } from '../lib/api';
@@ -21,27 +22,23 @@ const statusConfig: Record<AccountStatus, { label: string; color: string; bg: st
   reconnect_required: { label: 'Reconnect required', color: 'text-[#DC2626]', bg: 'bg-[#FEE2E2]' },
 };
 
-type Tab = 'profile' | 'accounts' | 'privacy' | 'data';
+type Tab = 'profile' | 'accounts';
 
 export default function SettingsPage() {
   const {
     accounts, accountsLoading, refreshAccounts, disconnectAccount, beginPlatformConnect,
-    privacySettings, updatePrivacySetting, deleteAudienceData, showToast,
+    showToast,
   } = useApp();
   const { user, signOut } = useAuth();
+  const identity = resolveIdentity(user, accounts);
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>('profile');
-  const [saved, setSaved] = useState(false);
   const [mobileTabsOpen, setMobileTabsOpen] = useState(false);
 
   const [disconnectModal, setDisconnectModal] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
-  const [confirmDeleteData, setConfirmDeleteData] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-
-  const [exporting, setExporting] = useState<string | null>(null);
-  const [exportReady, setExportReady] = useState<string | null>(null);
 
   /** Ends the Better Auth session (server-side) and clears the frontend's
    * local view. Deliberately does NOT touch:
@@ -73,12 +70,6 @@ export default function SettingsPage() {
     }
   }, [activeTab, refreshAccounts]);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    showToast('Settings saved', 'success');
-  };
-
   const handleDisconnect = async (id: string) => {
     setDisconnecting(id);
     try {
@@ -92,20 +83,9 @@ export default function SettingsPage() {
     }
   };
 
-  const handleExport = (type: string) => {
-    setExporting(type);
-    setTimeout(() => {
-      setExporting(null);
-      setExportReady(type);
-      showToast('Export ready for download', 'success');
-    }, 2000);
-  };
-
   const tabs: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Account' },
     { key: 'accounts', label: 'Connected Accounts' },
-    { key: 'privacy', label: 'Privacy & Consent' },
-    { key: 'data', label: 'Data Export' },
   ];
 
   const activeLabel = tabs.find(t => t.key === activeTab)?.label || 'Account';
@@ -144,17 +124,24 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* ─── PROFILE TAB ─── */}
+      {/* ─── ACCOUNT TAB ─── */}
       {activeTab === 'profile' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Creator identity</h2>
+            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Account</h2>
             <div className="flex items-center gap-4 mb-6">
-              <img src="/images/avatar-maya.jpg" alt="Maya Chen" className="w-16 h-16 rounded-full object-cover" />
+              {identity.avatarUrl ? (
+                <img src={identity.avatarUrl} alt={identity.name} className="w-16 h-16 rounded-full object-cover" />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-lg font-semibold text-[#6B6B6B]">
+                  {identity.initials}
+                </div>
+              )}
               <div>
-                <p className="font-geist font-bold text-base text-[#111111]">Maya Chen</p>
-                <p className="text-[13px] text-[#6B6B6B]">@mayastyle</p>
-                <p className="text-[11px] text-[#9B9B8F] mt-1">{connectedAccounts.length} platforms connected</p>
+                <p className="font-geist font-bold text-base text-[#111111]">{identity.name}</p>
+                {identity.email && <p className="text-[13px] text-[#6B6B6B]">{identity.email}</p>}
+                {identity.handle && <p className="text-[13px] text-[#6B6B6B]">{identity.handle}</p>}
+                <p className="text-[11px] text-[#9B9B8F] mt-1">{connectedAccounts.length} platform{connectedAccounts.length === 1 ? '' : 's'} connected</p>
               </div>
             </div>
           </div>
@@ -176,10 +163,6 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-
-          <button onClick={handleSave} className="bg-chartreuse text-[#111111] rounded-[10px] px-6 py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center gap-2">
-            {saved && <Check size={14} />}{saved ? 'Saved!' : 'Save changes'}
-          </button>
 
           {/* Session */}
           <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
@@ -297,147 +280,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ─── PRIVACY & CONSENT TAB ─── */}
-      {activeTab === 'privacy' && (
-        <div className="space-y-6">
-          {/* Data controls */}
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-[#FAFAF8] flex items-center justify-center">
-                <Shield size={16} className="text-[#6B6B6B]" />
-              </div>
-              <div>
-                <h2 className="font-geist font-semibold text-sm text-[#111111]">Data & privacy controls</h2>
-                <p className="text-[11px] text-[#6B6B6B]">Manage how Populr uses your audience data</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              {[
-                { key: 'storeConversations' as const, label: 'Store conversation history', desc: 'Keep DM history for relationship tracking and Smart Reply suggestions' },
-                { key: 'useAiAnalysis' as const, label: 'Use AI intent analysis', desc: 'Allow AI to classify contact intent from messages and engagement patterns' },
-                { key: 'shareAnonymized' as const, label: 'Share anonymized insights', desc: 'Contribute to platform improvement — no personal data is ever shared' },
-                { key: 'autoDeleteInactive' as const, label: 'Auto-delete inactive contacts', desc: `Remove contacts with no activity after ${privacySettings.dataRetentionDays} days` },
-              ].map(setting => (
-                <div key={setting.key} className="flex items-center justify-between py-4 border-b border-[#E8E4DF] last:border-0">
-                  <div className="pr-4">
-                    <p className="text-[13px] text-[#111111]">{setting.label}</p>
-                    <p className="text-[11px] text-[#6B6B6B] mt-0.5">{setting.desc}</p>
-                  </div>
-                  <button
-                    onClick={() => updatePrivacySetting(setting.key, !privacySettings[setting.key])}
-                    className={`w-10 h-6 rounded-full relative transition-all shrink-0 ${privacySettings[setting.key] ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`}
-                  >
-                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${privacySettings[setting.key] ? 'right-1' : 'left-1'}`} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Data retention */}
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Data retention</h2>
-            <div className="flex items-center gap-3">
-              <Clock size={16} className="text-[#6B6B6B]" />
-              <div className="flex-1">
-                <p className="text-[13px] text-[#111111]">Inactive contact retention period</p>
-                <p className="text-[11px] text-[#6B6B6B]">Contacts with no activity will be flagged after this period</p>
-              </div>
-              <select
-                value={privacySettings.dataRetentionDays}
-                onChange={e => updatePrivacySetting('dataRetentionDays', parseInt(e.target.value))}
-                className="border border-[#E8E4DF] rounded-lg px-3 py-2 text-[12px] text-[#111111] bg-white focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all"
-              >
-                <option value={30}>30 days</option>
-                <option value={60}>60 days</option>
-                <option value={90}>90 days</option>
-                <option value={180}>180 days</option>
-                <option value={365}>1 year</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Consent info */}
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Consent information</h2>
-            <div className="space-y-3 text-[12px] text-[#6B6B6B] leading-relaxed">
-              <p>Populr processes audience data to provide relationship insights, intent scoring, and campaign automation. All processing occurs securely and in compliance with GDPR and CCPA regulations.</p>
-              <p>Your contacts' data is never sold or shared with third parties. When you disconnect a platform, historical data is preserved for your records but new data collection stops immediately.</p>
-            </div>
-          </div>
-
-          {/* Delete imported data */}
-          <div className="bg-[#FEE2E2] rounded-2xl p-6 border border-[#FECACA]">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center">
-                <Trash2 size={16} className="text-[#DC2626]" />
-              </div>
-              <div>
-                <h2 className="font-geist font-semibold text-sm text-[#DC2626]">Delete imported audience data</h2>
-                <p className="text-[11px] text-[#DC2626]/70">This action cannot be undone</p>
-              </div>
-            </div>
-            <p className="text-[12px] text-[#6B6B6B] mb-4">This will remove all imported contacts, conversations, and analytics while preserving your campaigns and account settings.</p>
-            <button onClick={() => setConfirmDeleteData(true)}
-              className="bg-white text-[#DC2626] border border-[#FECACA] rounded-lg px-4 py-2.5 text-[12px] font-semibold hover:bg-[#FEE2E2] transition-all flex items-center gap-2">
-              <Trash2 size={14} />Delete audience data
-            </button>
-          </div>
-
-          <button onClick={handleSave} className="bg-chartreuse text-[#111111] rounded-[10px] px-6 py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center gap-2">
-            {saved && <Check size={14} />}{saved ? 'Saved!' : 'Save preferences'}
-          </button>
-        </div>
-      )}
-
-      {/* ─── DATA EXPORT TAB ─── */}
-      {activeTab === 'data' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-[#FAFAF8] flex items-center justify-center">
-                <Download size={16} className="text-[#6B6B6B]" />
-              </div>
-              <div>
-                <h2 className="font-geist font-semibold text-sm text-[#111111]">Export your data</h2>
-                <p className="text-[11px] text-[#6B6B6B]">Download your data in CSV or JSON format</p>
-              </div>
-            </div>
-            <div className="space-y-2.5">
-              {[
-                { key: 'contacts', label: 'All contacts', desc: 'Contacts with intent scores, tags, and relationship data', size: '12 KB' },
-                { key: 'campaigns', label: 'Campaign data', desc: 'Campaign performance, conversion metrics, and results', size: '8 KB' },
-                { key: 'conversations', label: 'Conversation history', desc: 'All DMs, automated messages, and reply threads', size: '45 KB' },
-                { key: 'analytics', label: 'Analytics report', desc: 'Audience analytics and intent distribution', size: '156 KB' },
-              ].map(item => (
-                <div key={item.key} className="flex items-center gap-4 p-3.5 rounded-xl border border-[#E8E4DF]">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-[#111111]">{item.label}</p>
-                    <p className="text-[11px] text-[#6B6B6B]">{item.desc}</p>
-                  </div>
-                  <span className="text-[11px] text-[#9B9B8F] flex-shrink-0">{item.size}</span>
-                  {exporting === item.key ? (
-                    <div className="flex items-center gap-2 text-[11px] text-[#D97706] flex-shrink-0 w-24 justify-end">
-                      <Loader2 size={12} className="animate-spin" />Preparing...
-                    </div>
-                  ) : exportReady === item.key ? (
-                    <button onClick={() => { setExportReady(null); showToast('Download started', 'success'); }}
-                      className="flex items-center gap-1.5 text-[11px] font-semibold text-[#059669] bg-[#E0F5E9] px-3 py-1.5 rounded-lg hover:bg-[#D1FAE5] transition-all flex-shrink-0">
-                      <Check size={12} />Download
-                    </button>
-                  ) : (
-                    <button onClick={() => handleExport(item.key)}
-                      className="flex items-center gap-1.5 border border-[#E8E4DF] text-[#111111] px-3 py-1.5 rounded-lg text-[11px] font-medium hover:bg-[#FAFAF8] transition-all flex-shrink-0">
-                      <Download size={12} />Export
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ─── MODALS ─── */}
 
       {/* Disconnect Confirmation Modal */}
@@ -473,35 +315,6 @@ export default function SettingsPage() {
           </div>
         );
       })()}
-
-      {/* Confirm Delete Audience Data Modal */}
-      {confirmDeleteData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-[#FEE2E2] flex items-center justify-center">
-                <AlertTriangle size={20} className="text-[#DC2626]" />
-              </div>
-              <h3 className="font-geist font-bold text-base text-[#DC2626]">Delete all audience data?</h3>
-            </div>
-            <div className="bg-[#FAFAF8] rounded-xl p-4 mb-5 space-y-2">
-              <p className="text-[12px] text-[#6B6B6B]">All imported contacts, conversations, and analytics will be <span className="font-semibold text-[#DC2626]">permanently deleted</span>.</p>
-              <p className="text-[12px] text-[#6B6B6B]">Your campaigns and account settings will be preserved.</p>
-              <p className="text-[12px] text-[#6B6B6B]">Connected platforms will remain linked but data collection will pause.</p>
-            </div>
-            <div className="flex gap-2.5">
-              <button onClick={() => setConfirmDeleteData(false)}
-                className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2.5 text-[13px] font-medium hover:bg-[#FAFAF8] transition-all">
-                Cancel
-              </button>
-              <button onClick={() => { deleteAudienceData(); setConfirmDeleteData(false); showToast('Audience data deleted', 'success'); }}
-                className="flex-1 bg-[#DC2626] text-white rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-[#B91C1C] transition-all">
-                Delete all data
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

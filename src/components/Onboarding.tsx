@@ -85,7 +85,7 @@ function GradientOverlay({ status }: { status: string }) {
 }
 
 export default function Onboarding() {
-  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn, setSelectedAudienceGoal } = useApp();
+  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn, openSubscriptionModal, setSelectedAudienceGoal } = useApp();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -147,10 +147,10 @@ export default function Onboarding() {
   // or timeout) has actually finished, so a page reload mid-poll re-reads the
   // same marker instead of silently losing it.
   useEffect(() => {
-    const connectErrorPlatform =
-      searchParams.get("connect_error") === "account_sync_failed" ? searchParams.get("platform") : null;
+    const connectError = searchParams.get("connect_error");
+    const errorPlatform = connectError ? searchParams.get("platform") : null;
     const connectedPlatformId = searchParams.get("connected");
-    if (!connectErrorPlatform && !connectedPlatformId) return;
+    if (!connectError && !connectedPlatformId) return;
 
     const cleanUrl = () => {
       const url = new URL(window.location.href);
@@ -161,8 +161,11 @@ export default function Onboarding() {
       window.history.replaceState(null, "", url.toString());
     };
 
-    if (connectErrorPlatform) {
-      failOAuthReturn(connectErrorPlatform);
+    if (connectError === "subscription_required") {
+      openSubscriptionModal(errorPlatform ?? undefined);
+      cleanUrl();
+    } else if (connectError === "account_sync_failed") {
+      failOAuthReturn(errorPlatform ?? undefined);
       cleanUrl();
     } else if (connectedPlatformId) {
       completeOAuthReturn(connectedPlatformId).finally(cleanUrl);

@@ -656,50 +656,6 @@ export const segments: Segment[] = [
   { id: 'duplicates', name: 'Possible duplicates', count: 4, description: 'Profiles that may be the same person', filter: () => false },
 ];
 
-// ─── Integrations ──────────────────────────────────────────
-export interface Integration {
-  id: string;
-  name: string;
-  category: string;
-  icon: string;
-  status: 'connected' | 'available' | 'coming-soon' | 'needs-attention';
-  description: string;
-  connectedAccount?: string;
-  lastSync?: string;
-  syncHealth?: 'healthy' | 'warning' | 'error';
-}
-
-export const integrations: Integration[] = [
-  { id: 'ig', name: 'Instagram', category: 'Social', icon: 'instagram', status: 'connected', description: 'Direct messages, comments, story replies', connectedAccount: '@mayastyle', lastSync: '2 min ago', syncHealth: 'healthy' },
-  { id: 'tt', name: 'TikTok', category: 'Social', icon: 'tiktok', status: 'connected', description: 'Comments, DMs, video interactions', connectedAccount: '@mayastyle', lastSync: '5 min ago', syncHealth: 'healthy' },
-  { id: 'yt', name: 'YouTube', category: 'Social', icon: 'youtube', status: 'connected', description: 'Comments, community posts', connectedAccount: 'Maya Chen', lastSync: '1h ago', syncHealth: 'healthy' },
-  { id: 'tw', name: 'X / Twitter', category: 'Social', icon: 'twitter', status: 'available', description: 'Mentions, DMs, replies' },
-  { id: 'fb', name: 'Facebook', category: 'Social', icon: 'facebook', status: 'available', description: 'Page messages, comments' },
-  { id: 'th', name: 'Threads', category: 'Social', icon: 'threads', status: 'coming-soon', description: 'Replies, mentions' },
-  { id: 'li', name: 'LinkedIn', category: 'Social', icon: 'linkedin', status: 'coming-soon', description: 'Messages, post interactions' },
-  { id: 'shop', name: 'Shopify', category: 'Ecommerce', icon: 'shopify', status: 'coming-soon', description: 'Product links, purchase events' },
-  { id: 'event', name: 'Luma', category: 'Events', icon: 'luma', status: 'coming-soon', description: 'Event RSVP tracking' },
-];
-
-// ─── Notifications ─────────────────────────────────────────
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'opportunity' | 'alert' | 'insight' | 'system';
-  read: boolean;
-  time: string;
-  link?: string;
-}
-
-export const notifications: Notification[] = [
-  { id: '1', title: '18 warm fans waiting', message: 'They showed interest but need a follow-up', type: 'opportunity', read: false, time: '10m ago', link: '/inbox' },
-  { id: '2', title: 'High intent detected', message: '@design.marc asked about pricing twice', type: 'opportunity', read: false, time: '1h ago', link: '/inbox' },
-  { id: '3', title: 'Campaign milestone', message: 'Style Guide Launch hit 50% conversion rate', type: 'insight', read: false, time: '3h ago', link: '/campaigns' },
-  { id: '4', title: 'Duplicate profiles found', message: '4 possible duplicates need review', type: 'alert', read: true, time: '1d ago', link: '/contacts' },
-  { id: '5', title: 'Weekly summary ready', message: 'Your audience grew by 12 contacts this week', type: 'insight', read: true, time: '2d ago', link: '/' },
-];
-
 // ─── Duplicate Profiles ────────────────────────────────────
 export interface DuplicateGroup {
   id: string;
@@ -933,7 +889,10 @@ export const campaignTemplates: CampaignTemplate[] = [
 // verifying a real stored connected account exists before trusting it —
 // this is the "Finishing connection…" state, and can take a few seconds
 // since Zernio's own account list can be eventually consistent.
-export type AccountStatus = 'idle' | 'connecting' | 'syncing' | 'connected' | 'error';
+// 'reconnect_required': the account is connected but Zernio's authorization
+// has expired (detected elsewhere, e.g. a failed reply attempt) — reflects
+// the backend's own connected_accounts.status, not a client guess.
+export type AccountStatus = 'idle' | 'connecting' | 'syncing' | 'connected' | 'reconnect_required' | 'error';
 
 export interface OnboardingPlatform {
   id: string;
@@ -1004,20 +963,3 @@ export const roleDescriptions: Record<TeamRole, { label: string; description: st
 export const defaultTeamMembers: TeamMember[] = [
   { id: '1', name: 'Maya Chen', email: 'maya@populr.co', avatar: '/images/avatar-maya.jpg', role: 'owner', assignedConversations: 0, assignedCampaigns: 2, joinedAt: 'Jan 2024' },
 ];
-
-// ─── Privacy & Consent settings ────────────────────────────
-export interface PrivacySettings {
-  storeConversations: boolean;
-  useAiAnalysis: boolean;
-  shareAnonymized: boolean;
-  autoDeleteInactive: boolean;
-  dataRetentionDays: number;
-}
-
-export const defaultPrivacySettings: PrivacySettings = {
-  storeConversations: true,
-  useAiAnalysis: true,
-  shareAnonymized: false,
-  autoDeleteInactive: false,
-  dataRetentionDays: 90,
-};
