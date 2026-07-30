@@ -117,6 +117,13 @@ export default function Onboarding() {
   }, [shouldReduceMotion]);
 
   useEffect(() => {
+    // `platform` is reused by the OAuth-result redirect below as a
+    // diagnostic field (?connect_error=account_sync_failed&platform=
+    // instagram), not a "please connect" request — without this guard, a
+    // failed callback's platform= would be read here first, on the same
+    // mount, and immediately relaunch OAuth for the platform that just
+    // failed, turning a real error into a silent retry loop.
+    if (searchParams.has("connected") || searchParams.has("connect_error")) return;
     const platformId = searchParams.get("platform");
     if (!platformId) return;
     const platform = connectedPlatforms.find(p => p.id === platformId);
