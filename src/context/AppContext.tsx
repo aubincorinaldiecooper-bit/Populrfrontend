@@ -12,7 +12,7 @@ import {
 import type { Contact } from '../data';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
-  disconnectAccount as disconnectAccountApi,
+  syncConnectedAccounts, disconnectAccount as disconnectAccountApi,
 } from '../lib/api';
 import type { ConnectedAccount } from '../lib/api';
 
@@ -68,6 +68,8 @@ interface AppContextType extends AppState {
   connectPlatform: (id: string) => void;
   beginPlatformConnect: (id: string) => void;
   refreshConnectedAccounts: () => void;
+  completeOAuthReturn: (id: string) => Promise<void>;
+  failOAuthReturn: (id: string | undefined) => void;
   setSelectedAudienceGoal: (goal: string) => void;
   // Connected accounts (authoritative, backend-backed)
   refreshAccounts: () => Promise<void>;
@@ -114,6 +116,22 @@ function readOnboardingComplete(): boolean {
     // to the pre-onboarding experience rather than breaking the app.
     return false;
   }
+}
+
+// Verifying a return from Zernio's hosted OAuth (see completeOAuthReturn
+// below) is async and keyed by platform id, not by component instance — a
+// module-level guard (rather than a ref) is what actually survives React
+// StrictMode's mount/unmount/remount of AppProvider without either running
+// the same verification twice or losing the guard on remount.
+const oauthReturnInFlight = new Set<string>();
+
+const OAUTH_SYNC_MAX_ATTEMPTS = 8;
+const OAUTH_SYNC_RETRY_MS = 1000;
+export const OAUTH_SYNC_ERROR_MESSAGE =
+  'Your account was authorized, but Populr could not finish syncing it. Try again.';
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -449,6 +467,112 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
+  // The return trip from Zernio's hosted OAuth only proves the *authorization*
+  // step happened — it says nothing about whether the account actually made
+  // it into our database, since Zernio's own account list can be eventually
+  // consistent and the backend callback's own sync attempt is best-effort
+  // from here. This re-verifies for real: it explicitly asks the backend to
+  // sync, then polls the authoritative account list (immediate check, then up
+  // to 7 more ~1s apart) until a matching, genuinely connected account shows
+  // up, or gives up and surfaces a retryable error. The `connected=<platform>`
+  // URL marker is never trusted on its own.
+  const completeOAuthReturn = useCallback(async (id: string) => {
+    if (oauthReturnInFlight.has(id)) return;
+    oauthReturnInFlight.add(id);
+    try {
+      if (!isBackendConfigured()) {
+        setState(prev => ({
+          ...prev,
+          connectedPlatforms: prev.connectedPlatforms.map(p =>
+            p.id === id
+              ? { ...p, status: 'error' as const, errorMessage: 'Populr is not configured (VITE_API_URL is missing).' }
+              : p
+          ),
+        }));
+        showToast('Populr is not configured — connections are unavailable right now.', 'error');
+        return;
+      }
+
+      setState(prev => ({
+        ...prev,
+        connectedPlatforms: prev.connectedPlatforms.map(p =>
+          p.id === id ? { ...p, status: 'syncing' as const, errorMessage: undefined } : p
+        ),
+      }));
+
+      try {
+        await syncConnectedAccounts();
+      } catch (err) {
+        // Best-effort: the OAuth callback already attempted a server-side
+        // sync, and the poll below is the real verification, so a failed
+        // explicit sync call here doesn't by itself mean the account isn't
+        // connected — it might just mean this particular call raced Zernio.
+        console.warn(`[connect] explicit sync call failed while verifying ${id}, continuing to poll:`, err);
+      }
+
+      for (let attempt = 0; attempt < OAUTH_SYNC_MAX_ATTEMPTS; attempt++) {
+        if (attempt > 0) await delay(OAUTH_SYNC_RETRY_MS);
+
+        let accounts: ConnectedAccount[];
+        try {
+          accounts = await fetchConnectedAccounts();
+        } catch (err) {
+          console.error(`[connect] failed to fetch accounts while verifying ${id} (attempt ${attempt + 1}):`, err);
+          continue;
+        }
+
+        const match = accounts.find(a => a.platform === id && a.is_connected === true && a.status === 'connected');
+        if (match) {
+          setState(prev => ({
+            ...prev,
+            accounts,
+            connectedPlatforms: prev.connectedPlatforms.map(p =>
+              p.id === id
+                ? {
+                    ...p,
+                    status: 'connected' as const,
+                    handle: match.username ? `@${match.username}` : match.display_name ?? p.handle,
+                    errorMessage: undefined,
+                  }
+                : p
+            ),
+          }));
+          const label = defaultOnboardingPlatforms.find(p => p.id === id)?.name ?? id;
+          showToast(`${label} connected.`, 'success');
+          return;
+        }
+      }
+
+      setState(prev => ({
+        ...prev,
+        connectedPlatforms: prev.connectedPlatforms.map(p =>
+          p.id === id ? { ...p, status: 'error' as const, errorMessage: OAUTH_SYNC_ERROR_MESSAGE } : p
+        ),
+      }));
+      showToast(OAUTH_SYNC_ERROR_MESSAGE, 'error');
+    } finally {
+      oauthReturnInFlight.delete(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showToast]);
+
+  // The backend's callback already confirmed sync failure (connect_error=
+  // account_sync_failed) before redirecting here — no polling needed, this
+  // just reflects that known outcome into the platform card.
+  const failOAuthReturn = useCallback((id: string | undefined) => {
+    if (!id) {
+      showToast(OAUTH_SYNC_ERROR_MESSAGE, 'error');
+      return;
+    }
+    setState(prev => ({
+      ...prev,
+      connectedPlatforms: prev.connectedPlatforms.map(p =>
+        p.id === id ? { ...p, status: 'error' as const, errorMessage: OAUTH_SYNC_ERROR_MESSAGE } : p
+      ),
+    }));
+    showToast(OAUTH_SYNC_ERROR_MESSAGE, 'error');
+  }, [showToast]);
+
   // On application load, fetch the authoritative connected-account list —
   // it's server-persisted, not client state, so a fresh tab/browser/session
   // must never show stale or empty data before this resolves.
@@ -477,6 +601,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       connectPlatform,
       beginPlatformConnect,
       refreshConnectedAccounts,
+      completeOAuthReturn,
+      failOAuthReturn,
       setSelectedAudienceGoal,
       refreshAccounts,
       disconnectAccount,

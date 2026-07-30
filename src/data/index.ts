@@ -926,7 +926,14 @@ export const campaignTemplates: CampaignTemplate[] = [
 ];
 
 // ─── Connected Account State (mutable, for onboarding) ─────
-export type AccountStatus = 'idle' | 'connecting' | 'connected' | 'error';
+// 'connecting': the connect URL is being requested and the browser is
+// about to navigate to Zernio's hosted OAuth — brief, since the page
+// leaves immediately after.
+// 'syncing': the browser has returned from Zernio and the frontend is
+// verifying a real stored connected account exists before trusting it —
+// this is the "Finishing connection…" state, and can take a few seconds
+// since Zernio's own account list can be eventually consistent.
+export type AccountStatus = 'idle' | 'connecting' | 'syncing' | 'connected' | 'error';
 
 export interface OnboardingPlatform {
   id: string;

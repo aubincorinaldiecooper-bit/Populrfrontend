@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Instagram, Music, Linkedin, Loader2, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -14,7 +14,7 @@ const PLATFORMS = [
 ];
 
 export default function ConnectionsPage() {
-  const { connectedPlatforms, beginPlatformConnect, refreshConnectedAccounts } = useApp();
+  const { connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const backendConfigured = isBackendConfigured();
@@ -32,23 +32,37 @@ export default function ConnectionsPage() {
       });
   }, [backendConfigured]);
 
-  // Connection state lives in memory, so after any full page load (including
-  // the return trip from the OAuth redirect) it has to be re-read from the
-  // backend — otherwise a genuinely connected account renders as "Not
-  // connected". Also clears the ?connected= marker the callback leaves behind.
-  const syncFromBackend = useCallback(() => {
+  // Returning from Zernio's hosted OAuth (see Onboarding.tsx for the full
+  // rationale): connect_error means the backend's callback already confirmed
+  // sync failed; connected only means the callback believes it worked, so it
+  // still has to be re-verified against the real account list before this
+  // page shows "Connected". Runs once per mount; params are read before being
+  // stripped so an in-flight verification isn't cut off mid-poll.
+  useEffect(() => {
     if (!backendConfigured) return;
-    refreshConnectedAccounts();
-    if (searchParams.get('connected')) {
+    const connectErrorPlatform =
+      searchParams.get('connect_error') === 'account_sync_failed' ? searchParams.get('platform') : null;
+    const connectedPlatformId = searchParams.get('connected');
+    if (!connectErrorPlatform && !connectedPlatformId) return;
+
+    const cleanUrl = () => {
       const url = new URL(window.location.href);
       url.searchParams.delete('connected');
+      url.searchParams.delete('sync');
+      url.searchParams.delete('connect_error');
+      url.searchParams.delete('platform');
       window.history.replaceState(null, '', url.toString());
-    }
-  }, [backendConfigured, searchParams, refreshConnectedAccounts]);
+    };
 
-  useEffect(() => {
-    syncFromBackend();
-  }, [syncFromBackend]);
+    if (connectErrorPlatform) {
+      failOAuthReturn(connectErrorPlatform);
+      cleanUrl();
+    } else if (connectedPlatformId) {
+      completeOAuthReturn(connectedPlatformId).finally(cleanUrl);
+    }
+    // Only run once on mount, driven by the OAuth provider's return redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const connectedCount = connectedPlatforms.filter(p => p.status === 'connected').length;
 
@@ -98,6 +112,11 @@ export default function ConnectionsPage() {
                         <Loader2 size={10} className="animate-spin" /> Connecting
                       </span>
                     )}
+                    {status === 'syncing' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
+                        <Loader2 size={10} className="animate-spin" /> Finishing connection…
+                      </span>
+                    )}
                     {status === 'error' && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
                         Connection failed
@@ -133,6 +152,11 @@ export default function ConnectionsPage() {
                   {status === 'connecting' && (
                     <button disabled className="pop-btn-secondary text-[12px] py-2 px-3 opacity-60 cursor-not-allowed">
                       <Loader2 size={13} className="animate-spin" /> Connecting
+                    </button>
+                  )}
+                  {status === 'syncing' && (
+                    <button disabled className="pop-btn-secondary text-[12px] py-2 px-3 opacity-60 cursor-not-allowed">
+                      <Loader2 size={13} className="animate-spin" /> Finishing…
                     </button>
                   )}
                   {status === 'error' && (

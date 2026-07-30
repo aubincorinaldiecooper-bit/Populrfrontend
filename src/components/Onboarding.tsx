@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ChevronLeft, Instagram, Music, Linkedin, AlertCircle } from "lucide-react";
 import { useSearchParams } from "react-router";
@@ -85,7 +85,7 @@ function GradientOverlay({ status }: { status: string }) {
 }
 
 export default function Onboarding() {
-  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, refreshConnectedAccounts, setSelectedAudienceGoal } = useApp();
+  const { completeOnboarding, connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn, setSelectedAudienceGoal } = useApp();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -94,8 +94,21 @@ export default function Onboarding() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [activeDashIndex, setActiveDashIndex] = useState(0);
   const shouldReduceMotion = useReducedMotion();
+  const continueButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const connectedCount = connectedPlatforms.filter(p => p.status === "connected").length;
+
+  // Once the first platform connects (including the OAuth-return case below),
+  // the product lets a user optionally connect more before continuing rather
+  // than auto-advancing — so instead of skipping to step 2, just make sure
+  // Continue is impossible to miss.
+  const prevConnectedCountRef = useRef(connectedCount);
+  useEffect(() => {
+    if (step === 1 && prevConnectedCountRef.current === 0 && connectedCount >= 1) {
+      continueButtonRef.current?.focus();
+    }
+    prevConnectedCountRef.current = connectedCount;
+  }, [connectedCount, step]);
 
   useEffect(() => {
     if (shouldReduceMotion) return;
@@ -112,15 +125,41 @@ export default function Onboarding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Returning from the Zernio OAuth redirect (?connected=<platform>): pull the
-  // real synced account from the backend instead of trusting the URL alone.
+  // Returning from Zernio's hosted OAuth. Neither `connected=<platform>` nor
+  // `connect_error=account_sync_failed` is trusted at face value:
+  // - connect_error means the backend's own callback already confirmed sync
+  //   failed, so failOAuthReturn just reflects that known outcome.
+  // - connected means the callback *believes* it worked, but Zernio can be
+  //   eventually consistent, so completeOAuthReturn re-verifies against the
+  //   real account list (with bounded polling) before ever showing
+  //   "Connected".
+  // Query params are read and acted on before being stripped — stripping
+  // first (the previous bug) meant a real async outcome had nowhere left to
+  // go once its own marker was already gone from the URL. For the polling
+  // path specifically, the URL isn't cleaned until that verification (success
+  // or timeout) has actually finished, so a page reload mid-poll re-reads the
+  // same marker instead of silently losing it.
   useEffect(() => {
+    const connectErrorPlatform =
+      searchParams.get("connect_error") === "account_sync_failed" ? searchParams.get("platform") : null;
     const connectedPlatformId = searchParams.get("connected");
-    if (!connectedPlatformId) return;
-    refreshConnectedAccounts();
-    const url = new URL(window.location.href);
-    url.searchParams.delete("connected");
-    window.history.replaceState(null, "", url.toString());
+    if (!connectErrorPlatform && !connectedPlatformId) return;
+
+    const cleanUrl = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connected");
+      url.searchParams.delete("sync");
+      url.searchParams.delete("connect_error");
+      url.searchParams.delete("platform");
+      window.history.replaceState(null, "", url.toString());
+    };
+
+    if (connectErrorPlatform) {
+      failOAuthReturn(connectErrorPlatform);
+      cleanUrl();
+    } else if (connectedPlatformId) {
+      completeOAuthReturn(connectedPlatformId).finally(cleanUrl);
+    }
     // Only run once on mount, driven by the OAuth provider's return redirect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -160,10 +199,12 @@ export default function Onboarding() {
     return {
       id: p.id, title: p.name,
       status: st === "connected" ? "completed" as const
-        : st === "connecting" ? "syncing" as const
+        : st === "syncing" ? "syncing" as const
+        : st === "connecting" ? "connecting" as const
         : st === "error" ? "failed" as const
         : "idle" as const,
       icon: p.icon, iconColor: p.color,
+      errorMessage: cp?.errorMessage,
       onConnect: () => { if (st === "idle" || st === "error") beginPlatformConnect(p.id); },
     };
   });
@@ -186,12 +227,16 @@ export default function Onboarding() {
     return 0;
   });
 
-  const statusText = (s: string) => { switch (s) { case "updates-found": return "PENDING"; case "syncing": return "SYNCING"; case "failed": return "FAILED"; default: return null; } };
+  // "connecting" is the brief moment before the browser leaves for Zernio;
+  // "syncing" is the return trip — verifying a real connected account exists
+  // before the card is allowed to say "Connected" — which is why it gets its
+  // own, longer-running "Finishing connection…" label.
+  const statusText = (s: string) => { switch (s) { case "updates-found": return "PENDING"; case "connecting": return "CONNECTING"; case "syncing": return "FINISHING CONNECTION…"; case "failed": return "FAILED"; default: return null; } };
 
   const iconFor = (card: any) => {
     if (card.status === "failed") return <AlertCircle size={16} className="text-red-500" />;
     if (card.status === "completed") return <CompletedIcon />;
-    if (card.status === "syncing") return <SyncingIcon activeDashIndex={activeDashIndex} />;
+    if (card.status === "syncing" || card.status === "connecting") return <SyncingIcon activeDashIndex={activeDashIndex} />;
     if (step === 3) return <UpdatesFoundIcon />;
     if (step === 1 && card.icon) return <card.icon size={18} style={{ color: card.iconColor }} />;
     return <EmptyCircle />;
@@ -327,6 +372,9 @@ export default function Onboarding() {
                         </AnimatePresence>
                       </div>
                     </div>
+                    {step === 1 && card.status === "failed" && card.errorMessage && (
+                      <p className="relative text-xs text-red-500 mt-2 leading-relaxed">{card.errorMessage}</p>
+                    )}
                   </motion.div>
                 </motion.div>
                 );
@@ -346,7 +394,7 @@ export default function Onboarding() {
 
           {/* Continue */}
           {step < 3 && (
-            <motion.button onClick={handleContinue}
+            <motion.button ref={continueButtonRef} onClick={handleContinue}
               disabled={step === 1 ? connectedCount < 1 : selectedGoal === "" || (selectedGoal === "other" && customGoal.trim() === "")}
               className={`w-full mt-6 rounded-[14px] py-3.5 font-semibold text-sm transition-all ${
                 (step === 1 && connectedCount >= 1) || (step === 2 && selectedGoal !== "" && (selectedGoal !== "other" || customGoal.trim() !== ""))
