@@ -1,5 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { resolveIdentity, initialsFrom } from '../lib/identity';
 import {
   X, Megaphone, ChevronDown, ChevronUp, Tag, Plus, Check, XCircle,
   MessageSquare, GitMerge, FileText, Clock, Sparkles, User,
@@ -17,8 +19,10 @@ export default function ContactProfileDrawer() {
   const {
     selectedContactId, closeContactDrawer, contactDrawerContext, contacts,
     addContactNote, addContactToCampaign, updateContactTags, mergeContacts,
-    showToast, campaigns,
+    showToast, campaigns, accounts,
   } = useApp();
+  const { user } = useAuth();
+  const identity = resolveIdentity(user, accounts);
 
   const contact = contacts.find(c => c.id === selectedContactId);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -60,8 +64,8 @@ export default function ContactProfileDrawer() {
     if (!noteText.trim()) return;
     addContactNote(contact.id, {
       text: noteText.trim(),
-      author: 'Maya Chen',
-      authorAvatar: '/images/avatar-maya.jpg',
+      author: identity.name,
+      authorAvatar: identity.avatarUrl ?? '',
       createdAt: 'Just now',
     });
     setNoteText('');
@@ -291,7 +295,13 @@ export default function ContactProfileDrawer() {
                       <p className="text-[11px] text-[#6B6B6B] mt-0.5">{event.description}</p>
                       {event.author && (
                         <div className="flex items-center gap-1.5 mt-1">
-                          <img src={event.authorAvatar} alt="" className="w-4 h-4 rounded-full" />
+                          {event.authorAvatar ? (
+                            <img src={event.authorAvatar} alt="" className="w-4 h-4 rounded-full" />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-[#E8E4DF] flex items-center justify-center text-[7px] font-semibold text-[#6B6B6B]">
+                              {initialsFrom(event.author)}
+                            </div>
+                          )}
                           <span className="text-[10px] text-[#9B9B8F]">{event.author}</span>
                         </div>
                       )}
@@ -344,7 +354,13 @@ export default function ContactProfileDrawer() {
               {contact.notes.map(note => (
                 <div key={note.id} className="bg-[#FAFAF8] rounded-xl p-3.5">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <img src={note.authorAvatar} alt="" className="w-5 h-5 rounded-full" />
+                    {note.authorAvatar ? (
+                      <img src={note.authorAvatar} alt="" className="w-5 h-5 rounded-full" />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-[#E8E4DF] flex items-center justify-center text-[8px] font-semibold text-[#6B6B6B]">
+                        {initialsFrom(note.author)}
+                      </div>
+                    )}
                     <span className="text-[11px] font-medium text-[#111111]">{note.author}</span>
                     <span className="text-[10px] text-[#9B9B8F]">{note.createdAt}</span>
                   </div>

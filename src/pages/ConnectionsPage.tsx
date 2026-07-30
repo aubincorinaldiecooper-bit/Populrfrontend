@@ -14,7 +14,10 @@ const PLATFORMS = [
 ];
 
 export default function ConnectionsPage() {
-  const { connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn } = useApp();
+  const {
+    connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn,
+    openSubscriptionModal, refreshConnectedAccounts, showToast,
+  } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const backendConfigured = isBackendConfigured();
@@ -32,6 +35,34 @@ export default function ConnectionsPage() {
       });
   }, [backendConfigured]);
 
+  // The authoritative account list (connected/reconnect_required/disconnected)
+  // is only reflected onto connectedPlatforms by specific actions (OAuth
+  // return, an explicit sync) — without this, a returning user who didn't
+  // just complete an OAuth round trip would see stale/idle cards even
+  // though their accounts really are connected or need reauth.
+  useEffect(() => {
+    refreshConnectedAccounts();
+  }, [refreshConnectedAccounts]);
+
+  // Returning from the $12/month checkout. Never marks anything subscribed
+  // locally — that's not this frontend's to claim — just clears the way for
+  // the user to manually retry the platform they were trying to connect.
+  useEffect(() => {
+    if (searchParams.get('subscription') !== 'success') return;
+    const retryId = searchParams.get('retry');
+    const label = retryId ? PLATFORMS.find(p => p.id === retryId)?.name ?? retryId : null;
+    showToast(
+      label ? `Subscription confirmed. Try connecting ${label} again.` : 'Subscription confirmed.',
+      'success'
+    );
+    const url = new URL(window.location.href);
+    url.searchParams.delete('subscription');
+    url.searchParams.delete('retry');
+    window.history.replaceState(null, '', url.toString());
+    // Only run once on mount, driven by the checkout provider's return redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Returning from Zernio's hosted OAuth (see Onboarding.tsx for the full
   // rationale): connect_error means the backend's callback already confirmed
   // sync failed; connected only means the callback believes it worked, so it
@@ -40,10 +71,10 @@ export default function ConnectionsPage() {
   // stripped so an in-flight verification isn't cut off mid-poll.
   useEffect(() => {
     if (!backendConfigured) return;
-    const connectErrorPlatform =
-      searchParams.get('connect_error') === 'account_sync_failed' ? searchParams.get('platform') : null;
+    const connectError = searchParams.get('connect_error');
+    const errorPlatform = connectError ? searchParams.get('platform') : null;
     const connectedPlatformId = searchParams.get('connected');
-    if (!connectErrorPlatform && !connectedPlatformId) return;
+    if (!connectError && !connectedPlatformId) return;
 
     const cleanUrl = () => {
       const url = new URL(window.location.href);
@@ -54,8 +85,11 @@ export default function ConnectionsPage() {
       window.history.replaceState(null, '', url.toString());
     };
 
-    if (connectErrorPlatform) {
-      failOAuthReturn(connectErrorPlatform);
+    if (connectError === 'subscription_required') {
+      openSubscriptionModal(errorPlatform ?? undefined);
+      cleanUrl();
+    } else if (connectError === 'account_sync_failed') {
+      failOAuthReturn(errorPlatform ?? undefined);
       cleanUrl();
     } else if (connectedPlatformId) {
       completeOAuthReturn(connectedPlatformId).finally(cleanUrl);
@@ -122,6 +156,11 @@ export default function ConnectionsPage() {
                         Connection failed
                       </span>
                     )}
+                    {status === 'reconnect_required' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
+                        Reconnect required
+                      </span>
+                    )}
                     {status === 'idle' && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FAFAF8] text-[#9B9B8F]">
                         Not connected
@@ -133,11 +172,14 @@ export default function ConnectionsPage() {
                       </span>
                     )}
                   </div>
-                  {status === 'connected' && cp?.handle && (
+                  {(status === 'connected' || status === 'reconnect_required') && cp?.handle && (
                     <p className="text-[12px] text-[#6B6B6B] mt-0.5">{cp.handle}</p>
                   )}
                   {status === 'error' && cp?.errorMessage && (
                     <p className="text-[12px] text-[#DC2626] mt-0.5">{cp.errorMessage}</p>
+                  )}
+                  {status === 'reconnect_required' && (
+                    <p className="text-[12px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>
                   )}
                   {limited && caps?.caveat && (
                     <p className="text-[11px] text-[#9B9B8F] mt-1 leading-relaxed">{caps.caveat}</p>
@@ -167,6 +209,11 @@ export default function ConnectionsPage() {
                   {status === 'connected' && (
                     <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-ghost text-[12px] py-2 px-3">
                       Reconnect
+                    </button>
+                  )}
+                  {status === 'reconnect_required' && (
+                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-secondary text-[12px] py-2 px-3">
+                      <RefreshCw size={13} /> Reconnect
                     </button>
                   )}
                 </div>

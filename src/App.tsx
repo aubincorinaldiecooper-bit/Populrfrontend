@@ -10,6 +10,7 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import AuthCompletePage from './pages/AuthCompletePage';
 import ToastContainer from './components/ToastContainer';
+import SubscriptionModal from './components/SubscriptionModal';
 
 // MVP pages
 import OpportunitiesPage from './pages/OpportunitiesPage';
@@ -119,13 +120,21 @@ function AppContent() {
   );
 }
 
+function SubscriptionModalHost() {
+  const { subscriptionModal, closeSubscriptionModal } = useApp();
+  if (!subscriptionModal) return null;
+  return <SubscriptionModal platform={subscriptionModal.platform} onClose={closeSubscriptionModal} />;
+}
+
 export default function App() {
   return (
     <>
       <AppContent />
-      {/* Rendered unconditionally: connect errors happen before onboardingComplete
-          is true, and Layout (which normally owns this) isn't mounted yet. */}
+      {/* Rendered unconditionally: connect errors (including a subscription
+          requirement) can happen before onboardingComplete is true, and
+          Layout (which normally owns drawers) isn't mounted yet. */}
       <ToastContainer />
+      <SubscriptionModalHost />
     </>
   );
 }

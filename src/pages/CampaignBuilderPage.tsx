@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { resolveIdentity } from '../lib/identity';
 import { campaignTemplates, contentItems, intentGroups } from '../data';
 import { Iphone15Pro } from '../components/Iphone15Pro';
 import type { CampaignTemplate, Campaign } from '../data';
@@ -100,7 +102,9 @@ const RICH_MEDIA_TYPES = [
 export default function CampaignBuilderPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { saveCampaignAsDraft, addCampaign, showToast } = useApp();
+  const { saveCampaignAsDraft, addCampaign, showToast, accounts } = useApp();
+  const { user } = useAuth();
+  const identity = resolveIdentity(user, accounts);
   const templateFromNav = (location.state as { template?: CampaignTemplate } | null)?.template;
   const fromContent = (location.state as { fromContent?: boolean; contentId?: string; contentTitle?: string; contentThumbnail?: string; contentPlatform?: string; contentCaption?: string } | null);
   const editCampaign = (location.state as { editCampaign?: Campaign } | null)?.editCampaign;
@@ -874,9 +878,15 @@ export default function CampaignBuilderPage() {
             <Iphone15Pro width={240} height={489}>
               {/* Chat Header — creator identity */}
               <div className="bg-[#FAFAF8] px-4 py-3 border-b border-[#E8E4DF] flex items-center gap-2 flex-shrink-0 mt-10">
-                <img src="/images/avatar-maya.jpg" alt="" className="w-7 h-7 rounded-full object-cover" />
+                {identity.avatarUrl ? (
+                  <img src={identity.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-[#E8E4DF] flex items-center justify-center text-[9px] font-semibold text-[#6B6B6B]">
+                    {identity.initials}
+                  </div>
+                )}
                 <div>
-                  <p className="text-[11px] font-semibold text-[#111111]">Maya</p>
+                  <p className="text-[11px] font-semibold text-[#111111]">{identity.name}</p>
                   <p className="text-[8px] text-[#9B9B8F]">Automated by Populr</p>
                 </div>
               </div>

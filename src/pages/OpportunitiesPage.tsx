@@ -6,9 +6,16 @@ import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
 import OpportunityDetailDrawer from '../components/OpportunityDetailDrawer';
 import {
-  isBackendConfigured, fetchOpportunities, updateOpportunityStatus,
+  isBackendConfigured, fetchOpportunities, updateOpportunityStatus, fetchCapabilities,
 } from '../lib/api';
-import type { Opportunity, OpportunitySummary, OpportunityStatus } from '../lib/api';
+import type { Opportunity, OpportunitySummary, OpportunityStatus, PlatformCapabilities } from '../lib/api';
+
+// No explicit backend "initial sync status" exists for opportunities, so
+// recency-of-connection is the most honest available proxy for "Populr
+// hasn't plausibly had time to review this account's engagement yet" —
+// avoids claiming "no opportunities yet" moments after a user's first
+// connect, before anything could realistically have synced.
+const INITIAL_SYNC_WINDOW_MS = 10 * 60 * 1000;
 
 const PLATFORM_OPTIONS: { value: string; label: string }[] = [
   { value: 'instagram', label: 'Instagram' },
@@ -164,7 +171,7 @@ const PAGE_SIZE = 25;
 const MAX_LIMIT = 100;
 
 export default function OpportunitiesPage() {
-  const { showToast } = useApp();
+  const { showToast, accounts, accountsLoading } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const [platformFilter, setPlatformFilter] = useState<string | undefined>(undefined);
@@ -180,6 +187,38 @@ export default function OpportunitiesPage() {
   // Held as an object rather than looked up in `opportunities`, so the drawer
   // survives a refresh that drops the row from the current filter.
   const [selected, setSelected] = useState<Opportunity | null>(null);
+
+  const [capabilities, setCapabilities] = useState<Record<string, PlatformCapabilities>>({});
+  useEffect(() => {
+    if (!backendConfigured) return;
+    fetchCapabilities()
+      .then(list => setCapabilities(Object.fromEntries(list.map(c => [c.platform, c]))))
+      .catch(err => console.error('[opportunities] failed to load platform capabilities:', err));
+  }, [backendConfigured]);
+
+  // `Date.now()` can't be called directly in the render body (React purity
+  // rule) — captured once at mount and refreshed periodically instead, which
+  // is more than enough precision for a 10-minute window.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const connectedAccounts = accounts.filter(a => a.status === 'connected');
+  const hasConnectedAccounts = connectedAccounts.length > 0;
+  const recentlyConnected = connectedAccounts.some(a => {
+    if (!a.connected_at) return false;
+    const connectedAt = new Date(a.connected_at).getTime();
+    return Number.isFinite(connectedAt) && now - connectedAt < INITIAL_SYNC_WINDOW_MS;
+  });
+  // A connected account whose platform can't supply what opportunities need
+  // (comment replies + DMs) is still connected — never treated as "not
+  // connected" — just flagged with an explanatory note.
+  const limitedAccount = connectedAccounts.find(a => {
+    const caps = capabilities[a.platform];
+    return caps && (!caps.supportsCommentReplies || !caps.supportsDMs);
+  });
 
   // Monotonic request id: only the newest in-flight fetch may write state, so
   // a slow earlier request can't overwrite results for filters the user has
@@ -324,6 +363,16 @@ export default function OpportunitiesPage() {
             </div>
           )}
 
+          {limitedAccount && (
+            <div className="pop-card p-4 mb-5 flex items-start gap-3">
+              <AlertCircle size={16} className="text-[#3B82F6] flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-[#6B6B6B]">
+                <span className="capitalize font-medium text-[#111111]">{limitedAccount.platform}</span> is connected with limited access.
+                Opportunity coverage depends on the permissions available for this account.
+              </p>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-4 mb-5">
             <div className="flex flex-wrap gap-1.5">
@@ -393,14 +442,41 @@ export default function OpportunitiesPage() {
           )}
 
           {/* Empty states */}
-          {!loading && !error && total === 0 && !platformFilter && !intentFilter && statusFilter === 'active' && (
+          {!loading && !error && !accountsLoading && total === 0 && !hasConnectedAccounts && !platformFilter && !intentFilter && statusFilter === 'active' && (
+            <div className="pop-card p-8 text-center">
+              <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
+              <p className="text-[14px] font-semibold text-[#111111]">Connect your first account</p>
+              <p className="text-[12px] text-[#6B6B6B] mt-1.5 max-w-sm mx-auto">
+                Connect a social account so Populr can begin reviewing engagement for meaningful opportunities.
+              </p>
+              <Link to="/connections" className="pop-btn-primary text-[12px] py-2 px-4 mt-4 inline-flex">Connect an account</Link>
+            </div>
+          )}
+
+          {!loading && !error && !accountsLoading && total === 0 && hasConnectedAccounts && recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
+            <div className="pop-card p-8 text-center">
+              <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
+              <p className="text-[14px] font-semibold text-[#111111]">Reviewing your engagement</p>
+              <p className="text-[12px] text-[#6B6B6B] mt-1.5 max-w-sm mx-auto">
+                Populr is reviewing recent activity from your connected accounts. Opportunities will appear here when meaningful intent is found.
+              </p>
+              <button onClick={load} className="pop-btn-secondary text-[12px] py-2 px-4 mt-4 inline-flex items-center gap-1.5">
+                <RefreshCw size={13} /> Refresh
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && !accountsLoading && total === 0 && hasConnectedAccounts && !recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
             <div className="pop-card p-8 text-center">
               <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">No opportunities yet</p>
               <p className="text-[12px] text-[#6B6B6B] mt-1.5 max-w-sm mx-auto">
-                Once you connect an account, Populr reviews your engagement and surfaces people showing real intent here. This can mean no engagement has synced yet, or nothing meaningful has been found so far.
+                Your accounts are connected. New high-intent engagement will appear here when Populr finds something worth your attention.
               </p>
-              <Link to="/connections" className="pop-btn-primary text-[12px] py-2 px-4 mt-4 inline-flex">Connect an account</Link>
+              <button onClick={load} className="pop-btn-secondary text-[12px] py-2 px-4 mt-4 inline-flex items-center gap-1.5">
+                <RefreshCw size={13} /> Refresh
+              </button>
+              <Link to="/connections" className="block text-[11px] text-[#6B6B6B] hover:text-[#111111] mt-3 underline">View connected accounts</Link>
             </div>
           )}
 
