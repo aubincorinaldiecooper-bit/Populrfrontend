@@ -36,6 +36,11 @@ interface AppState {
   // Connected accounts). Empty until refreshAccounts() resolves.
   accounts: ConnectedAccount[];
   accountsLoading: boolean;
+  // Set when the last refreshAccounts() call failed — distinct from a
+  // successful load that simply found zero accounts, so callers (e.g.
+  // OpportunitiesPage's empty state) can tell "nothing connected yet" apart
+  // from "couldn't check what's connected" instead of conflating them.
+  accountsError: string | null;
   // Contacts
   contacts: Contact[];
   // Campaign / broadcast
@@ -150,6 +155,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectedAudienceGoal: '',
     accounts: [],
     accountsLoading: false,
+    accountsError: null,
     contacts: initialContacts.map(c => ({ ...c })),
     campaigns: initialCampaigns.map(c => ({ ...c })),
     broadcasts: initialBroadcasts.map(b => ({ ...b })),
@@ -217,13 +223,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // that governs the rest of this app's real-data surfaces.
   const refreshAccounts = useCallback(async () => {
     if (!isBackendConfigured()) return;
-    setState(prev => ({ ...prev, accountsLoading: true }));
+    setState(prev => ({ ...prev, accountsLoading: true, accountsError: null }));
     try {
       const accounts = await fetchConnectedAccounts();
       setState(prev => ({ ...prev, accounts, accountsLoading: false }));
     } catch (err) {
       console.error('[accounts] failed to load connected accounts:', err);
-      setState(prev => ({ ...prev, accountsLoading: false }));
+      const message = err instanceof Error && err.message ? err.message : 'Could not load connected accounts.';
+      setState(prev => ({ ...prev, accountsLoading: false, accountsError: message }));
     }
   }, []);
 

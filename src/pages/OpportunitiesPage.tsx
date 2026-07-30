@@ -171,7 +171,7 @@ const PAGE_SIZE = 25;
 const MAX_LIMIT = 100;
 
 export default function OpportunitiesPage() {
-  const { showToast, accounts, accountsLoading } = useApp();
+  const { showToast, accounts, accountsLoading, accountsError, refreshAccounts } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const [platformFilter, setPlatformFilter] = useState<string | undefined>(undefined);
@@ -442,7 +442,26 @@ export default function OpportunitiesPage() {
           )}
 
           {/* Empty states */}
-          {!loading && !error && !accountsLoading && total === 0 && !hasConnectedAccounts && !platformFilter && !intentFilter && statusFilter === 'active' && (
+          {/* An account-list load failure is distinct from a genuine zero
+              accounts — conflating them told an already-connected user
+              whose GET /api/accounts happened to fail to "connect your
+              first account", which is both wrong and not actionable. This
+              takes priority over the three states below, all of which
+              assume the account list itself loaded successfully. */}
+          {!loading && !error && !accountsLoading && total === 0 && accountsError && !platformFilter && !intentFilter && statusFilter === 'active' && (
+            <div className="pop-card p-8 text-center">
+              <AlertCircle size={24} className="text-[#D97706] mx-auto mb-3" />
+              <p className="text-[14px] font-semibold text-[#111111]">Couldn&apos;t check your connected accounts</p>
+              <p className="text-[12px] text-[#6B6B6B] mt-1.5 max-w-sm mx-auto">
+                Populr couldn&apos;t confirm which accounts are connected, so it can&apos;t tell whether there&apos;s anything to show here yet.
+              </p>
+              <button onClick={refreshAccounts} className="pop-btn-secondary text-[12px] py-2 px-4 mt-4 inline-flex items-center gap-1.5">
+                <RefreshCw size={13} /> Try again
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && !accountsLoading && !accountsError && total === 0 && !hasConnectedAccounts && !platformFilter && !intentFilter && statusFilter === 'active' && (
             <div className="pop-card p-8 text-center">
               <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">Connect your first account</p>
@@ -453,7 +472,7 @@ export default function OpportunitiesPage() {
             </div>
           )}
 
-          {!loading && !error && !accountsLoading && total === 0 && hasConnectedAccounts && recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
+          {!loading && !error && !accountsLoading && !accountsError && total === 0 && hasConnectedAccounts && recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
             <div className="pop-card p-8 text-center">
               <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">Reviewing your engagement</p>
@@ -466,7 +485,7 @@ export default function OpportunitiesPage() {
             </div>
           )}
 
-          {!loading && !error && !accountsLoading && total === 0 && hasConnectedAccounts && !recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
+          {!loading && !error && !accountsLoading && !accountsError && total === 0 && hasConnectedAccounts && !recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
             <div className="pop-card p-8 text-center">
               <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">No opportunities yet</p>
