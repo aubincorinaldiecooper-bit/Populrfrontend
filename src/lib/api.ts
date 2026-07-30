@@ -67,6 +67,21 @@ export async function fetchConnectedAccounts(): Promise<ConnectedAccount[]> {
 }
 
 /**
+ * POST /api/accounts/sync — the backend's authoritative account sync: pulls
+ * the current account list from Zernio and upserts it. The OAuth callback
+ * already attempts this server-side, but Zernio can be eventually
+ * consistent, so the frontend calls this explicitly on return from the
+ * connect flow rather than trusting a single server-side attempt.
+ */
+export async function syncConnectedAccounts(): Promise<{
+  synced: number;
+  skipped: number;
+  accounts: ConnectedAccount[];
+}> {
+  return apiFetch('/api/accounts/sync', { method: 'POST' });
+}
+
+/**
  * POST /api/accounts/:id/disconnect — revokes the account through Zernio and
  * marks it disconnected once that's confirmed. Never simulated locally: on
  * failure the caller sees the backend's real error and the account stays
