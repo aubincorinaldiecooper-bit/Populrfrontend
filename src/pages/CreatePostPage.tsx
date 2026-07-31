@@ -121,22 +121,30 @@ export default function CreatePostPage() {
 
   // ---- Draft autosave: create once platforms+media+caption are meaningful, then keep in sync ----
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncDraft = useCallback(async () => {
-    if (!mediaType || selectedAccountIds.length === 0) return;
-    if (!caption.trim() && mediaItems.length === 0) return;
+  // Returns the draft id this call actually saved to (or null if it saved
+  // nothing) — callers that need to act on the result (e.g. validating
+  // right after a forced save) must use this return value, not the
+  // `draftId` state variable, which won't reflect a draft created by this
+  // same call until the next render.
+  const syncDraft = useCallback(async (): Promise<string | null> => {
+    if (!mediaType || selectedAccountIds.length === 0) return draftId;
+    if (!caption.trim() && mediaItems.length === 0) return draftId;
     setSavingDraft(true);
     try {
       const input = { mediaType, caption, mediaItems, accountIds: selectedAccountIds };
       if (draftId) {
         const updated = await updateDraftPost(draftId, input);
         setPost(updated);
+        return updated.post.id;
       } else {
         const created = await createDraftPost(input);
         setDraftId(created.post.id);
         setPost(created);
+        return created.post.id;
       }
     } catch (err) {
       console.error('[create-post] draft autosave failed:', err);
+      return draftId;
     } finally {
       setSavingDraft(false);
     }
@@ -208,10 +216,15 @@ export default function CreatePostPage() {
 
   const goNext = async () => {
     if (step === 2) {
-      await syncDraft();
-      if (draftId) {
+      // Cancel the pending debounced autosave first — otherwise it fires
+      // later with its own stale closure (still seeing draftId as null)
+      // and creates a second, orphaned draft alongside the one this
+      // forced save is about to create.
+      if (autosaveTimer.current) { clearTimeout(autosaveTimer.current); autosaveTimer.current = null; }
+      const id = await syncDraft();
+      if (id) {
         try {
-          const result = await validateDraftPost(draftId);
+          const result = await validateDraftPost(id);
           setIssues(result.issues);
           setPost(result);
         } catch (err) {

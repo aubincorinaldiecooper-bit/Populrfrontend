@@ -70,6 +70,13 @@ export default function PostDetailPage() {
 
   const handleCancel = async () => {
     if (!post) return;
+    // cancelScheduledPost only updates Populr's own record — there's no
+    // Zernio API to actually stop a scheduled publish, so if the
+    // scheduled time is close, the post may still go out. Say so before
+    // the user relies on "Cancelled" meaning it won't happen.
+    if (!window.confirm(
+      "Cancel this scheduled post? Populr will stop tracking it as scheduled, but if the publish time is very close, the platform may still publish it — cancellation isn't guaranteed to stop that."
+    )) return;
     setBusy(true);
     try {
       setPost(await cancelScheduledPost(post.post.id));
