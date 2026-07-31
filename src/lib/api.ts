@@ -51,7 +51,7 @@ export class ApiError extends Error {
 
 async function apiFetch<T>(
   path: string,
-  init?: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown },
+  init?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
 ): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: init?.method ?? 'GET',
@@ -63,6 +63,24 @@ async function apiFetch<T>(
     // { error: "disallowed_return_url", message: "..." }), not just the
     // HTTP status — that's the difference between "connect is broken" and
     // "ALLOWED_FRONTEND_ORIGINS isn't set" being visible without devtools.
+    const parsed = await res
+      .json()
+      .then((body: { error?: string; message?: string }) => body)
+      .catch(() => undefined);
+    throw new ApiError(
+      parsed?.message || parsed?.error || `Populr API ${path} failed with ${res.status}`,
+      res.status,
+      parsed?.error,
+    );
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+/** Same error/status handling as apiFetch, but for a multipart file upload (no JSON body). */
+async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', body: form });
+  if (!res.ok) {
     const parsed = await res
       .json()
       .then((body: { error?: string; message?: string }) => body)
@@ -234,6 +252,8 @@ export async function sendOpportunityReply(
 // honest "limited access" messaging per platform instead of assuming parity.
 // ============================================================
 
+export type PostMediaType = 'image' | 'video' | 'carousel' | 'text';
+
 export interface PlatformCapabilities {
   platform: string;
   supportsComments: boolean;
@@ -241,10 +261,159 @@ export interface PlatformCapabilities {
   supportsDMs: boolean;
   readiness: string;
   caveat: string;
+  // Create Post fields, merged into this same endpoint's response rather
+  // than a separate /platform-capabilities call.
+  supportedMediaTypes: PostMediaType[];
+  maxCaptionLength: number;
+  mediaRequired: boolean;
+  maxCarouselItems: number | null;
+  maxImageSizeMb: number;
+  maxVideoSizeMb: number;
+  maxVideoDurationSeconds: number;
 }
 
-/** GET /api/capabilities — what each connected platform actually supports. */
+/** GET /api/capabilities — what each connected platform actually supports, including Create Post media limits. */
 export async function fetchCapabilities(): Promise<PlatformCapabilities[]> {
   const data = await apiFetch<{ platforms: PlatformCapabilities[] }>('/api/capabilities');
   return data.platforms;
+}
+
+// ============================================================
+// Create Post — draft-aware publishing (POST /api/publish/drafts, ...)
+// ============================================================
+
+/**
+ * POST /api/media/upload — real file upload (multipart), distinct from the
+ * backend's Zernio-URL-registration endpoint. Returns a URL Populr can both
+ * preview and later hand to Zernio at publish time.
+ */
+export async function uploadMedia(
+  file: File,
+  durationSeconds?: number,
+): Promise<{ url: string; mediaType: 'image' | 'video'; width?: number; height?: number; fileSizeBytes: number; durationSeconds?: number }> {
+  const form = new FormData();
+  form.append('file', file);
+  if (durationSeconds !== undefined) form.append('durationSeconds', String(durationSeconds));
+  return apiUpload('/api/media/upload', form);
+}
+
+export interface PostMediaItem {
+  url: string;
+  mediaType: 'image' | 'video';
+  width?: number | null;
+  height?: number | null;
+  durationSeconds?: number | null;
+  fileSizeBytes?: number | null;
+}
+
+export type PostStatus =
+  | 'draft' | 'validating' | 'ready' | 'scheduled' | 'publishing'
+  | 'partially_published' | 'published' | 'failed' | 'cancelled' | string;
+
+export type DestinationStatus =
+  | 'pending' | 'uploading' | 'publishing' | 'scheduled' | 'published' | 'failed' | 'cancelled' | string;
+
+export interface PostRecord {
+  id: string;
+  profile_id: string | null;
+  content: string;
+  media_type: PostMediaType | null;
+  status: PostStatus;
+  publish_now: boolean;
+  scheduled_at: string | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PostMediaRecord {
+  id: string;
+  storage_url: string;
+  media_type: 'image' | 'video';
+  sort_order: number;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  file_size_bytes: number | null;
+}
+
+export interface PostDestination {
+  id: string;
+  platform: string;
+  account_id: string;
+  status: DestinationStatus;
+  external_post_id: string | null;
+  url: string | null;
+  error: string | null;
+  published_at: string | null;
+}
+
+export interface PostWithDetails {
+  post: PostRecord;
+  media: PostMediaRecord[];
+  targets: PostDestination[];
+}
+
+export interface DraftInput {
+  mediaType: PostMediaType;
+  caption: string;
+  mediaItems: PostMediaItem[];
+  accountIds: string[];
+}
+
+/** POST /api/publish/drafts — create a draft, reserving its destinations. */
+export async function createDraftPost(input: DraftInput): Promise<PostWithDetails> {
+  return apiFetch('/api/publish/drafts', { method: 'POST', body: input });
+}
+
+/** PATCH /api/publish/drafts/:id — replace a draft's caption/media/destinations. */
+export async function updateDraftPost(id: string, input: DraftInput): Promise<PostWithDetails> {
+  return apiFetch(`/api/publish/drafts/${id}`, { method: 'PATCH', body: input });
+}
+
+/** DELETE /api/publish/drafts/:id — delete a draft. */
+export async function deleteDraftPost(id: string): Promise<void> {
+  await apiFetch(`/api/publish/drafts/${id}`, { method: 'DELETE' });
+}
+
+/** POST /api/publish/drafts/:id/validate — pre-flight checks; flips draft -> ready when clean. */
+export async function validateDraftPost(id: string): Promise<PostWithDetails & { issues: { platform: string; message: string }[] }> {
+  return apiFetch(`/api/publish/drafts/${id}/validate`, { method: 'POST' });
+}
+
+/** POST /api/publish/drafts/:id/publish — publish now or schedule. */
+export async function publishDraftPost(
+  id: string,
+  input: { publishNow?: boolean; scheduledAt?: string },
+): Promise<PostWithDetails> {
+  return apiFetch(`/api/publish/drafts/${id}/publish`, { method: 'POST', body: input });
+}
+
+/** POST /api/publish/:id/retry — re-attempt only the destinations currently marked failed. */
+export async function retryPostDestinations(id: string): Promise<PostWithDetails> {
+  return apiFetch(`/api/publish/${id}/retry`, { method: 'POST' });
+}
+
+/**
+ * POST /api/publish/:id/cancel — cancel a scheduled post in Populr's own
+ * records. The backend cannot guarantee this stops Zernio's own scheduled
+ * execution (no cancel endpoint exists on the Zernio integration).
+ */
+export async function cancelScheduledPost(id: string): Promise<PostWithDetails> {
+  return apiFetch(`/api/publish/${id}/cancel`, { method: 'POST' });
+}
+
+export type ContentTab = 'all' | 'draft' | 'scheduled' | 'published' | 'failed';
+
+/** GET /api/publish?tab=... — posts for the Content page / Home's recent posts. */
+export async function fetchPosts(tab: ContentTab = 'all', limit?: number): Promise<PostWithDetails[]> {
+  const qs = new URLSearchParams({ tab });
+  if (limit !== undefined) qs.set('limit', String(limit));
+  const data = await apiFetch<{ count: number; posts: PostWithDetails[] }>(`/api/publish?${qs.toString()}`);
+  return data.posts;
+}
+
+/** GET /api/publish/:id — a single post with its media items and per-platform destinations. */
+export async function fetchPost(id: string): Promise<PostWithDetails> {
+  return apiFetch(`/api/publish/${id}`);
 }
