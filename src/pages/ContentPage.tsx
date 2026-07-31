@@ -249,7 +249,10 @@ function PostCard({ post, busy, onOpen, onEdit, onDelete, onCancel, onRetry }: {
           {status === 'scheduled' && (
             <>
               <button onClick={onOpen} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Eye size={12} /> View</button>
-              <button onClick={onEdit} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Pencil size={12} /> Edit schedule</button>
+              {/* No "Edit schedule" here: CreatePostPage has no schedule
+                  control right now and always submits publishNow: true,
+                  so reusing it would silently attempt an immediate
+                  publish instead of editing the scheduled time. */}
               <button onClick={onCancel} disabled={busy} className="pop-btn-ghost text-[12px] py-1.5 px-3 text-[#DC2626] disabled:opacity-40"><XCircle size={12} /> Cancel</button>
             </>
           )}

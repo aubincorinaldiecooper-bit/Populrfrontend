@@ -221,12 +221,13 @@ export default function PostDetailPage() {
               </>
             )}
             {status === 'scheduled' && (
-              <>
-                <button onClick={() => navigate('/create', { state: { editPostId: p.id } })} className="pop-btn-primary"><Pencil size={14} /> Edit schedule</button>
-                <button onClick={handleCancel} disabled={busy} className="pop-btn-ghost text-[#DC2626] disabled:opacity-40">
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Cancel
-                </button>
-              </>
+              // No "Edit schedule" here: CreatePostPage has no schedule
+              // control right now and always submits publishNow: true, so
+              // reusing it would silently attempt an immediate publish
+              // instead of editing the scheduled time.
+              <button onClick={handleCancel} disabled={busy} className="pop-btn-ghost text-[#DC2626] disabled:opacity-40">
+                {busy ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Cancel
+              </button>
             )}
             {status === 'failed' && (
               <>
