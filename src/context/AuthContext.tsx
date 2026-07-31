@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { authClient } from "../lib/authClient";
+import { authClient, clearApiAuthToken } from "../lib/authClient";
 
 /**
  * Minimal projection of the Better Auth session/user shape we actually
@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // authoritative getSession() will confirm on the next request.
       console.warn("[auth] sign-out call failed:", err);
     }
+    clearApiAuthToken();
     setSession(null);
     setUser(null);
   }, []);
