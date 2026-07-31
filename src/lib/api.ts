@@ -5,6 +5,8 @@
 // accounts. Base URL is baked in at build time via VITE_API_URL.
 // ============================================================
 
+import { getApiAuthToken } from './authClient';
+
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
 /** True once VITE_API_URL is set — gates real API calls vs. local demo behavior. */
@@ -53,9 +55,20 @@ async function apiFetch<T>(
   path: string,
   init?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
 ): Promise<T> {
+  // populrbackend verifies the caller via this JWT (see
+  // populrbackend/src/middleware/requireAuth.ts) rather than a shared
+  // cookie — the auth service and this API are different origins. Attached
+  // on every call; routes that don't require auth simply ignore it, and
+  // routes that do get a real per-user identity instead of the old shared
+  // default workspace.
+  const token = await getApiAuthToken();
+  const headers: Record<string, string> = {};
+  if (init?.body) headers['Content-Type'] = 'application/json';
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: init?.method ?? 'GET',
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: init?.body ? JSON.stringify(init.body) : undefined,
   });
   if (!res.ok) {
@@ -79,7 +92,13 @@ async function apiFetch<T>(
 
 /** Same error/status handling as apiFetch, but for a multipart file upload (no JSON body). */
 async function apiUpload<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', body: form });
+  const token = await getApiAuthToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    // No Content-Type here — the browser sets the multipart boundary itself.
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
   if (!res.ok) {
     const parsed = await res
       .json()
