@@ -21,6 +21,8 @@ const PLATFORM_OPTIONS: { value: string; label: string }[] = [
   { value: 'instagram', label: 'Instagram' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'twitter', label: 'Twitter' },
+  { value: 'reddit', label: 'Reddit' },
 ];
 
 const INTENT_OPTIONS: { value: string; label: string }[] = [
