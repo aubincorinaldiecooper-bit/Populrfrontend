@@ -230,7 +230,7 @@ export default function ConnectionsPage() {
             : 'Connect at least one account to see opportunities.'}
         </p>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/opportunities')}
           disabled={connectedCount === 0}
           className="pop-btn-primary text-[13px] py-2.5 px-4 disabled:opacity-40 disabled:cursor-not-allowed"
         >
