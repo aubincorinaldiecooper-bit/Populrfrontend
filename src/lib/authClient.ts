@@ -59,6 +59,12 @@ export type AuthClient = typeof authClient;
 
 let cachedToken: { token: string; expiresAtMs: number } | null = null;
 let inFlight: Promise<string | null> | null = null;
+// Bumped by clearApiAuthToken(). A token exchange started before a clear can
+// still be in flight when sign-out completes; without this guard it would
+// repopulate cachedToken with the just-signed-out user's JWT once it
+// resolves, and a fast re-sign-in in the same tab could receive that same
+// stale in-flight promise instead of starting its own fetch.
+let generation = 0;
 
 /** Reads a JWT's `exp` claim (seconds since epoch) without verifying it — this
  * is only ever used to decide when to proactively refetch; the backend is
@@ -89,37 +95,57 @@ export async function getApiAuthToken(): Promise<string | null> {
   }
   if (inFlight) return inFlight;
 
+  // Captured once up front: clearApiAuthToken() bumps `generation`, and
+  // every guard below compares against it rather than the module-level
+  // `inFlight` reference directly — comparing identity against `inFlight`
+  // would mean referencing the `inFlight = (...)()` assignment's own result
+  // from inside its initializer, which TypeScript's build mode (tsc -b)
+  // correctly refuses to allow ("used before being assigned").
+  const myGeneration = generation;
   inFlight = (async () => {
     try {
       const res = await fetch(`${AUTH_BASE_URL}/api/auth/token`, {
         credentials: "include",
       });
       if (!res.ok) {
-        cachedToken = null;
+        if (myGeneration === generation) cachedToken = null;
         return null;
       }
       const data = (await res.json()) as { token?: string };
       if (!data.token) {
-        cachedToken = null;
+        if (myGeneration === generation) cachedToken = null;
         return null;
       }
-      const expiresAtMs = decodeExpMs(data.token) ?? Date.now() + 60_000;
-      cachedToken = { token: data.token, expiresAtMs };
+      // A clearApiAuthToken() (sign-out) that happened while this fetch was
+      // in flight must not be undone by writing this now-stale result into
+      // the cache — that's the race the generation guard exists for.
+      if (myGeneration === generation) {
+        const expiresAtMs = decodeExpMs(data.token) ?? Date.now() + 60_000;
+        cachedToken = { token: data.token, expiresAtMs };
+      }
       return data.token;
     } catch (err) {
       console.warn("[auth] failed to fetch backend API token:", err);
-      cachedToken = null;
+      if (myGeneration === generation) cachedToken = null;
       return null;
     } finally {
-      inFlight = null;
+      // Only clear inFlight if no clearApiAuthToken() happened since this
+      // fetch started — otherwise inFlight is already null (or already
+      // holds a newer request's promise) and this stale finally must not
+      // touch it.
+      if (myGeneration === generation) inFlight = null;
     }
   })();
 
   return inFlight;
 }
 
-/** Drops the cached backend token. Called on sign-out so a subsequent
- * sign-in (by a different user, in the same tab) never reuses it. */
+/** Drops the cached backend token and invalidates any token exchange still
+ * in flight, so it can no longer repopulate the cache once it resolves.
+ * Called on sign-out so a subsequent sign-in (by a different user, in the
+ * same tab) never reuses the previous user's token. */
 export function clearApiAuthToken(): void {
+  generation += 1;
   cachedToken = null;
+  inFlight = null;
 }
