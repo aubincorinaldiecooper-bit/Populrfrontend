@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Instagram, Music, Linkedin, Loader2, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { Instagram, Music, Linkedin, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { Button } from '@astryxdesign/core/Button';
+import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
@@ -143,12 +145,12 @@ export default function ConnectionsPage() {
                     )}
                     {status === 'connecting' && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
-                        <Loader2 size={10} className="animate-spin" /> Connecting
+                        <Spinner size="sm" shade="inherit" /> Connecting
                       </span>
                     )}
                     {status === 'syncing' && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
-                        <Loader2 size={10} className="animate-spin" /> Finishing connection…
+                        <Spinner size="sm" shade="inherit" /> Finishing connection…
                       </span>
                     )}
                     {status === 'error' && (
@@ -187,34 +189,22 @@ export default function ConnectionsPage() {
                 </div>
                 <div className="flex-shrink-0">
                   {status === 'idle' && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-primary text-[12px] py-2 px-3">
-                      Connect
-                    </button>
+                    <Button label="Connect" variant="primary" size="sm" onClick={() => beginPlatformConnect(p.id)} />
                   )}
                   {status === 'connecting' && (
-                    <button disabled className="pop-btn-secondary text-[12px] py-2 px-3 opacity-60 cursor-not-allowed">
-                      <Loader2 size={13} className="animate-spin" /> Connecting
-                    </button>
+                    <Button label="Connecting" variant="secondary" size="sm" isLoading isDisabled />
                   )}
                   {status === 'syncing' && (
-                    <button disabled className="pop-btn-secondary text-[12px] py-2 px-3 opacity-60 cursor-not-allowed">
-                      <Loader2 size={13} className="animate-spin" /> Finishing…
-                    </button>
+                    <Button label="Finishing…" variant="secondary" size="sm" isLoading isDisabled />
                   )}
                   {status === 'error' && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-secondary text-[12px] py-2 px-3">
-                      <RefreshCw size={13} /> Try again
-                    </button>
+                    <Button label="Try again" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={() => beginPlatformConnect(p.id)} />
                   )}
                   {status === 'connected' && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-ghost text-[12px] py-2 px-3">
-                      Reconnect
-                    </button>
+                    <Button label="Reconnect" variant="ghost" size="sm" onClick={() => beginPlatformConnect(p.id)} />
                   )}
                   {status === 'reconnect_required' && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-secondary text-[12px] py-2 px-3">
-                      <RefreshCw size={13} /> Reconnect
-                    </button>
+                    <Button label="Reconnect" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={() => beginPlatformConnect(p.id)} />
                   )}
                 </div>
               </div>
@@ -229,13 +219,13 @@ export default function ConnectionsPage() {
             ? `${connectedCount} of ${PLATFORMS.length} connected`
             : 'Connect at least one account to see opportunities.'}
         </p>
-        <button
+        <Button
+          label="Go to Opportunities"
+          variant="primary"
+          endContent={<ArrowRight size={14} />}
+          isDisabled={connectedCount === 0}
           onClick={() => navigate('/opportunities')}
-          disabled={connectedCount === 0}
-          className="pop-btn-primary text-[13px] py-2.5 px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Go to Opportunities <ArrowRight size={14} />
-        </button>
+        />
       </div>
     </div>
   );
