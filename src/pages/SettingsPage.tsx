@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
 import {
-  Instagram, Video, Linkedin, Link2, LogOut,
+  Instagram, Video, Linkedin, Twitter, MessageCircle, Link2, LogOut,
   Trash2, AlertTriangle,
   Loader2, ChevronDown, RefreshCw,
 } from 'lucide-react';
@@ -13,7 +13,7 @@ import { isBackendConfigured } from '../lib/api';
 import type { ConnectedAccount, AccountStatus } from '../lib/api';
 
 const iconMap: Record<string, React.ElementType> = {
-  instagram: Instagram, tiktok: Video, linkedin: Linkedin,
+  instagram: Instagram, tiktok: Video, linkedin: Linkedin, twitter: Twitter, reddit: MessageCircle,
 };
 
 const statusConfig: Record<AccountStatus, { label: string; color: string; bg: string }> = {
@@ -223,7 +223,7 @@ export default function SettingsPage() {
             <div className="bg-white rounded-2xl p-8 border border-[#E8E4DF] text-center">
               <Link2 size={22} className="text-[#9B9B8F] mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-[#111111]">No accounts connected yet</p>
-              <p className="text-[12px] text-[#6B6B6B] mt-1.5">Connect Instagram, TikTok, or LinkedIn from the Connections page.</p>
+              <p className="text-[12px] text-[#6B6B6B] mt-1.5">Connect Instagram, TikTok, LinkedIn, Twitter, or Reddit from the Connections page.</p>
             </div>
           )}
 

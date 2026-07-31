@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Instagram, Music, Linkedin, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
@@ -8,11 +8,16 @@ import PageHeader from '../components/PageHeader';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
 import type { PlatformCapabilities } from '../lib/api';
 
-// Populr's supported connection surface: exactly Instagram, TikTok, LinkedIn.
+// Populr's supported connection surface: Instagram, TikTok, LinkedIn,
+// Twitter/X, and Reddit. lucide-react has no dedicated TikTok or Reddit
+// logo, so those two use a generic stand-in icon paired with the
+// platform's real brand color (same convention already used for TikTok).
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', icon: Instagram, color: '#E4405F' },
   { id: 'tiktok', name: 'TikTok', icon: Music, color: '#000000' },
   { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: '#0A66C2' },
+  { id: 'twitter', name: 'Twitter', icon: Twitter, color: '#1DA1F2' },
+  { id: 'reddit', name: 'Reddit', icon: MessageCircle, color: '#FF4500' },
 ];
 
 export default function ConnectionsPage() {

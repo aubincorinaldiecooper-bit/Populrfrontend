@@ -2,15 +2,20 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { ChevronLeft, Instagram, Music, Linkedin, AlertCircle } from "lucide-react";
+import { ChevronLeft, Instagram, Music, Linkedin, Twitter, MessageCircle, AlertCircle } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useApp } from "../context/AppContext";
 
-// Populr's supported connection surface: exactly Instagram, TikTok, LinkedIn.
+// Populr's supported connection surface: Instagram, TikTok, LinkedIn,
+// Twitter/X, and Reddit. lucide-react has no dedicated TikTok or Reddit
+// logo, so those two use a generic stand-in icon paired with the
+// platform's real brand color (same convention already used for TikTok).
 const PLATFORMS = [
   { id: "instagram", name: "Instagram", icon: Instagram, color: "#E4405F" },
   { id: "tiktok", name: "TikTok", icon: Music, color: "#000000" },
   { id: "linkedin", name: "LinkedIn", icon: Linkedin, color: "#0A66C2" },
+  { id: "twitter", name: "Twitter", icon: Twitter, color: "#1DA1F2" },
+  { id: "reddit", name: "Reddit", icon: MessageCircle, color: "#FF4500" },
 ];
 
 const GOALS = [

@@ -27,7 +27,7 @@ export const creator: CreatorProfile = {
 };
 
 // ─── Contacts ──────────────────────────────────────────────
-export type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'linkedin';
+export type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'linkedin' | 'reddit';
 export type Relationship = 'new' | 'engaged' | 'warm' | 'ready' | 'subscriber' | 'high-value' | 'at-risk';
 // ─── Contact Notes ─────────────────────────────────────────
 export interface ContactNote {
@@ -685,6 +685,7 @@ export const platformColors: Record<Platform, string> = {
   youtube: 'bg-red-600',
   twitter: 'bg-black',
   linkedin: 'bg-[#0A66C2]',
+  reddit: 'bg-[#FF4500]',
 };
 
 // Semantic color system
@@ -904,11 +905,14 @@ export interface OnboardingPlatform {
   errorMessage?: string;
 }
 
-// Populr's supported connection surface: Instagram, TikTok, and LinkedIn only.
+// Populr's supported connection surface: Instagram, TikTok, LinkedIn,
+// Twitter/X, and Reddit.
 export const defaultOnboardingPlatforms: OnboardingPlatform[] = [
   { id: 'instagram', name: 'Instagram', icon: 'instagram', status: 'idle' },
   { id: 'tiktok', name: 'TikTok', icon: 'tiktok', status: 'idle' },
   { id: 'linkedin', name: 'LinkedIn', icon: 'linkedin', status: 'idle' },
+  { id: 'twitter', name: 'Twitter', icon: 'twitter', status: 'idle' },
+  { id: 'reddit', name: 'Reddit', icon: 'reddit', status: 'idle' },
 ];
 
 // Audience goals for onboarding
