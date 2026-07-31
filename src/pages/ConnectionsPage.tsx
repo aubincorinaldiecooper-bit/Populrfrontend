@@ -224,7 +224,7 @@ export default function ConnectionsPage() {
           variant="primary"
           endContent={<ArrowRight size={14} />}
           isDisabled={connectedCount === 0}
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/opportunities')}
         />
       </div>
     </div>

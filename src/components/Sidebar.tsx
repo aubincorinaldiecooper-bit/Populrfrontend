@@ -1,19 +1,20 @@
 import { useRef, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import {
-  Sparkles, Link2, Settings, Menu, X,
+  Home, SquarePen, FileText, Sparkles, Link2, Settings, Menu, X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
 import gsap from 'gsap';
 
-// Primary nav is intentionally limited to the two-step Populr journey:
-// find opportunities, and manage the connections that feed them. Campaigns,
-// Inbox, and other broader surfaces still exist and are reachable directly
-// by URL — they're hidden from primary nav, not deleted.
+// Campaigns, Inbox, and other broader surfaces still exist and are
+// reachable directly by URL — they're hidden from primary nav, not deleted.
 const navItems = [
-  { path: '/', label: 'Opportunities', icon: Sparkles },
+  { path: '/', label: 'Home', icon: Home },
+  { path: '/create', label: 'Create Post', icon: SquarePen, primary: true },
+  { path: '/content', label: 'Content', icon: FileText },
+  { path: '/opportunities', label: 'Opportunities', icon: Sparkles },
   { path: '/connections', label: 'Connections', icon: Link2 },
 ];
 
@@ -47,6 +48,15 @@ export default function Sidebar() {
         {navItems.map(item => {
           const active = isActive(item.path);
           const Icon = item.icon;
+          if (item.primary) {
+            return (
+              <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 my-1 rounded-lg bg-chartreuse text-[#111111] font-semibold transition-all hover:brightness-95">
+                <Icon size={18} strokeWidth={2.5} />
+                <span className="text-[13px]">{item.label}</span>
+              </Link>
+            );
+          }
           return (
             <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${active ? 'bg-[rgba(200,255,61,0.08)] text-[#111111] font-semibold border-l-[3px] border-chartreuse' : 'bg-transparent text-[#6B6B6B] font-medium border-l-[3px] border-transparent hover:bg-[#FAFAF8] hover:text-[#111111]'}`}>

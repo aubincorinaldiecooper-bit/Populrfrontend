@@ -124,7 +124,7 @@ export default function CampaignsPage() {
           icon="campaigns"
           title="No active campaigns"
           description="Reach your first audience. Start from an opportunity Populr has identified."
-          action={<Link to="/" className="pop-btn-primary">View opportunities</Link>}
+          action={<Link to="/opportunities" className="pop-btn-primary">View opportunities</Link>}
         />
       )}
       {filtered.length === 0 && tab === 'drafts' && !search && (

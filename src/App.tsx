@@ -26,6 +26,9 @@ import AutomationBuilderPage from './pages/AutomationBuilderPage';
 
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const ContentPage = lazy(() => import('./pages/ContentPage'));
+const PostDetailPage = lazy(() => import('./pages/PostDetailPage'));
+const CreatePostPage = lazy(() => import('./pages/CreatePostPage'));
+const HomePage = lazy(() => import('./pages/HomePage'));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
@@ -53,9 +56,8 @@ function AppContent() {
   if (isLoading) return <LoadingState />;
 
   // Public marketing landing page: always accessible to unauthenticated
-  // visitors. Authenticated users get routed into the product below —
-  // the special-case for `/` there just renders OpportunitiesPage
-  // directly rather than redirecting.
+  // visitors. Authenticated users get routed into the product below,
+  // where `/` renders Home rather than the marketing page.
   if (location.pathname === '/' && !session && !authLoading) {
     return <LandingPage />;
   }
@@ -91,16 +93,17 @@ function AppContent() {
     return <Navigate to="/connect" replace />;
   }
 
-  // Onboarded, authenticated: the full product surface. `/` renders
-  // Opportunities directly (matches prior product behavior). `/connect`
-  // is aliased to `/connections` for onboarded users, preserving the
+  // Onboarded, authenticated: the full product surface. `/` renders Home;
+  // Opportunities moved to its own `/opportunities` route. `/connect` is
+  // aliased to `/connections` for onboarded users, preserving the
   // `?connected=<platform>` query the OAuth callback attaches — that
   // marker is what ConnectionsPage reads to know a fresh account just
   // synced.
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<OpportunitiesPage />} />
+        <Route path="/" element={<Suspense fallback={<LoadingState />}><HomePage /></Suspense>} />
+        <Route path="/opportunities" element={<OpportunitiesPage />} />
         <Route path="/connect" element={<Navigate to={`/connections${location.search}`} replace />} />
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
@@ -111,7 +114,9 @@ function AppContent() {
         <Route path="/automations" element={<Suspense fallback={<LoadingState />}><AutomationsPage /></Suspense>} />
         <Route path="/automations/new" element={<AutomationBuilderPage />} />
         <Route path="/contacts" element={<Suspense fallback={<LoadingState />}><ContactsPage /></Suspense>} />
+        <Route path="/create" element={<Suspense fallback={<LoadingState />}><CreatePostPage /></Suspense>} />
         <Route path="/content" element={<Suspense fallback={<LoadingState />}><ContentPage /></Suspense>} />
+        <Route path="/content/:postId" element={<Suspense fallback={<LoadingState />}><PostDetailPage /></Suspense>} />
         <Route path="/analytics" element={<Suspense fallback={<LoadingState />}><AnalyticsPage /></Suspense>} />
       </Route>
       <Route path="/dashboard" element={<Navigate to="/" replace />} />
