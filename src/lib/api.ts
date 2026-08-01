@@ -42,10 +42,17 @@ export interface ConnectedAccount {
  * Preserves the HTTP status and the backend's own structured error code
  * (e.g. "subscription_required"), not just a flattened message — callers
  * that only need `.message` (most existing code) are unaffected since this
- * still extends Error.
+ * still extends Error. `details` carries a route's own safe, user-facing
+ * explanation list when it sends one (e.g. automations' capability-matrix
+ * rejection reasons) — never raw provider errors.
  */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number, public readonly code?: string) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string,
+    public readonly details?: string[],
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -78,12 +85,13 @@ async function apiFetch<T>(
     // "ALLOWED_FRONTEND_ORIGINS isn't set" being visible without devtools.
     const parsed = await res
       .json()
-      .then((body: { error?: string; message?: string }) => body)
+      .then((body: { error?: string; message?: string; details?: string[] }) => body)
       .catch(() => undefined);
     throw new ApiError(
       parsed?.message || parsed?.error || `Populr API ${path} failed with ${res.status}`,
       res.status,
       parsed?.error,
+      Array.isArray(parsed?.details) ? parsed.details : undefined,
     );
   }
   if (res.status === 204) return undefined as T;
@@ -222,6 +230,8 @@ export async function fetchOpportunities(params: {
   platform?: string;
   intent?: string;
   status?: string;
+  /** Restricts to one contact's opportunities — the Contacts page's "related opportunities". */
+  contactId?: string;
   limit?: number;
   offset?: number;
 } = {}): Promise<{ opportunities: Opportunity[]; total: number; summary: OpportunitySummary }> {
@@ -229,6 +239,7 @@ export async function fetchOpportunities(params: {
   if (params.platform) qs.set('platform', params.platform);
   if (params.intent) qs.set('intent', params.intent);
   if (params.status) qs.set('status', params.status);
+  if (params.contactId) qs.set('contactId', params.contactId);
   if (params.limit !== undefined) qs.set('limit', String(params.limit));
   if (params.offset !== undefined) qs.set('offset', String(params.offset));
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
@@ -435,4 +446,310 @@ export async function fetchPosts(tab: ContentTab = 'all', limit?: number): Promi
 /** GET /api/publish/:id — a single post with its media items and per-platform destinations. */
 export async function fetchPost(id: string): Promise<PostWithDetails> {
   return apiFetch(`/api/publish/${id}`);
+}
+
+// ============================================================
+// Automations — keyword-triggered engagement automation (the beta's core
+// product surface). Talks to populrbackend's /api/automations, which is
+// authenticated and scoped to the caller's own workspace: every one of
+// these calls resolves the caller's own connected accounts and
+// automations server-side, never a client-supplied profile/workspace id.
+// ============================================================
+
+export type AutomationMatchMode = 'exact' | 'contains' | 'starts_with';
+export type AutomationReplyChannel = 'comment' | 'dm' | 'both';
+export type AutomationAiMode = 'auto' | 'suggest';
+
+/** The stored shape returned by the backend (snake_case — this is the raw
+ *  connected_accounts row shape, not something this frontend controls). */
+export interface AutomationRecord {
+  id: string;
+  name: string;
+  funnel_id: string | null;
+  account_id: string;
+  platform: string;
+  source_post_id: string | null;
+  all_posts: boolean;
+  trigger_type: string;
+  keywords: string[];
+  match_mode: AutomationMatchMode;
+  reply_channel: AutomationReplyChannel;
+  response_type: string;
+  message_body: string | null;
+  comment_reply_body: string | null;
+  media_url: string | null;
+  link_url: string | null;
+  link_kind: string | null;
+  tags: string[];
+  score_delta: number;
+  stage_update: string | null;
+  active: boolean;
+  ai_enabled: boolean;
+  ai_mode: AutomationAiMode;
+  ai_confidence_threshold: string | number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationInput {
+  name: string;
+  accountId: string;
+  platform: string;
+  sourcePostId?: number | null;
+  allPosts?: boolean;
+  keywords: string[];
+  matchMode?: AutomationMatchMode;
+  replyChannel?: AutomationReplyChannel;
+  commentReplyBody?: string | null;
+  messageBody?: string | null;
+  linkUrl?: string | null;
+  linkKind?: string | null;
+  tags?: string[];
+  scoreDelta?: number;
+  stageUpdate?: string | null;
+  active?: boolean;
+  /** "Automatic" (false) sends the configured reply the instant a keyword
+   *  matches. "Review-first" (true + aiMode: 'suggest') always drafts and
+   *  queues the reply for a human to send instead — the one real backend
+   *  concept for this, reusing Smart Replies' existing suggest mode rather
+   *  than inventing a separate review gate the engine doesn't have. */
+  aiEnabled?: boolean;
+  aiMode?: AutomationAiMode;
+}
+
+/** GET /api/automations — the caller's own automations. Filters: accountId, platform, active. */
+export async function fetchAutomations(filter: {
+  accountId?: string;
+  platform?: string;
+  active?: boolean;
+} = {}): Promise<AutomationRecord[]> {
+  const qs = new URLSearchParams();
+  if (filter.accountId) qs.set('accountId', filter.accountId);
+  if (filter.platform) qs.set('platform', filter.platform);
+  if (filter.active !== undefined) qs.set('active', String(filter.active));
+  const query = qs.toString();
+  const data = await apiFetch<{ count: number; automations: AutomationRecord[] }>(
+    `/api/automations${query ? `?${query}` : ''}`
+  );
+  return data.automations;
+}
+
+/** GET /api/automations/:id */
+export async function fetchAutomation(id: string): Promise<AutomationRecord> {
+  const data = await apiFetch<{ automation: AutomationRecord }>(`/api/automations/${id}`);
+  return data.automation;
+}
+
+/** POST /api/automations — validated server-side against the real platform capability matrix. */
+export async function createAutomation(input: AutomationInput): Promise<AutomationRecord> {
+  const data = await apiFetch<{ automation: AutomationRecord }>('/api/automations', {
+    method: 'POST',
+    body: input,
+  });
+  return data.automation;
+}
+
+/** PATCH /api/automations/:id — partial update (e.g. { active: false } to pause). */
+export async function updateAutomation(id: string, patch: Partial<AutomationInput>): Promise<AutomationRecord> {
+  const data = await apiFetch<{ automation: AutomationRecord }>(`/api/automations/${id}`, {
+    method: 'PATCH',
+    body: patch,
+  });
+  return data.automation;
+}
+
+/** DELETE /api/automations/:id */
+export async function deleteAutomation(id: string): Promise<void> {
+  await apiFetch(`/api/automations/${id}`, { method: 'DELETE' });
+}
+
+export interface AutomationEvent {
+  id: string;
+  automation_id: string | null;
+  contact_id: string | null;
+  event_type: string;
+  status: 'ok' | 'failed' | 'skipped';
+  detail: string;
+  error: string | null;
+  contact_handle: string | null;
+  contact_name: string | null;
+  automation_name: string | null;
+  created_at: string;
+}
+
+/** GET /api/automations/:id/events — the user-facing "what did this automation do" log. */
+export async function fetchAutomationEvents(id: string, limit?: number): Promise<AutomationEvent[]> {
+  const qs = limit !== undefined ? `?limit=${limit}` : '';
+  const data = await apiFetch<{ count: number; events: AutomationEvent[] }>(`/api/automations/${id}/events${qs}`);
+  return data.events;
+}
+
+export interface AutomationsSummary {
+  totalCount: number;
+  activeCount: number;
+  interactionsHandled: number;
+  repliesSent: number;
+  failedAutomationsCount: number;
+  bestPerforming: { id: string; name: string; repliesSent: number } | null;
+}
+
+/** GET /api/automations/summary — Home page metrics, real rollups over the caller's own automations. */
+export async function fetchAutomationsSummary(): Promise<AutomationsSummary> {
+  return apiFetch('/api/automations/summary');
+}
+
+// ============================================================
+// Contacts — everyone who has engaged with a connected account
+// (who they are, how they found the creator, their tags/score/stage, and
+// their full conversation history). Talks to populrbackend's /api/contacts,
+// scoped server-side to the caller's own workspace exactly like automations.
+// ============================================================
+
+/** The real, backend-enforced lead stages (see config/leadscoring.ts) —
+ *  distinct from the old prototype's invented discovered/engaged/interested
+ *  pipeline, which the backend has never recognized. */
+export const CONTACT_STAGES = ['cold', 'interested', 'warm', 'hot', 'needs_reply', 'converted'] as const;
+export type ContactStage = (typeof CONTACT_STAGES)[number];
+
+/** The stored shape returned by the backend (snake_case — the raw contacts row). */
+export interface ContactRecord {
+  id: string;
+  platform: string;
+  account_id: string | null;
+  external_user_id: string;
+  handle: string | null;
+  name: string | null;
+  avatar_url: string | null;
+  lead_score: number;
+  stage: string;
+  needs_reply: boolean;
+  notes: string | null;
+  custom_fields: Record<string, unknown>;
+  source_platform: string | null;
+  source_account_id: string | null;
+  source_post_id: string | null;
+  source_post_url: string | null;
+  source_automation_id: string | null;
+  source_funnel_id: string | null;
+  source_type: string | null;
+  first_seen: string;
+  last_seen: string;
+  last_message_at: string | null;
+  last_automation_at: string | null;
+  tags: string[];
+}
+
+export interface ContactMessage {
+  id: string;
+  contact_id: string | null;
+  account_id: string | null;
+  platform: string;
+  channel: string;
+  direction: string;
+  text: string | null;
+  media_url: string | null;
+  external_id: string | null;
+  status: string;
+  in_reply_to: string | null;
+  source_post_id: string | null;
+  source_automation_id: string | null;
+  created_at: string;
+}
+
+export interface ContactScoreEvent {
+  id: string;
+  contact_id: string;
+  delta: number;
+  score_after: number;
+  reason: string;
+  source_type: string | null;
+  source_automation_id: string | null;
+  source_link_id: string | null;
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ContactLinkClick {
+  id: string;
+  link_id: string;
+  contact_id: string | null;
+  visitor_key: string | null;
+  is_unique: boolean;
+  user_agent: string | null;
+  created_at: string;
+  destination: string;
+  link_kind: string | null;
+  click_tag: string | null;
+}
+
+export interface ContactDetail {
+  contact: ContactRecord;
+  sourcePost: { id: string; caption: string | null; url: string | null; platform: string } | null;
+  sourceAutomation: { id: string; name: string } | null;
+  messages: ContactMessage[];
+  scoreEvents: ContactScoreEvent[];
+  clicks: ContactLinkClick[];
+  events: AutomationEvent[];
+}
+
+/** GET /api/contacts — the caller's own contacts. Filters: stage, platform, tag, needsReply, search. */
+export async function fetchContacts(filter: {
+  stage?: string;
+  platform?: string;
+  tag?: string;
+  needsReply?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ contacts: ContactRecord[]; total: number; stages: string[] }> {
+  const qs = new URLSearchParams();
+  if (filter.stage) qs.set('stage', filter.stage);
+  if (filter.platform) qs.set('platform', filter.platform);
+  if (filter.tag) qs.set('tag', filter.tag);
+  if (filter.needsReply !== undefined) qs.set('needsReply', String(filter.needsReply));
+  if (filter.search) qs.set('search', filter.search);
+  if (filter.limit !== undefined) qs.set('limit', String(filter.limit));
+  if (filter.offset !== undefined) qs.set('offset', String(filter.offset));
+  const query = qs.toString();
+  return apiFetch(`/api/contacts${query ? `?${query}` : ''}`);
+}
+
+/** GET /api/contacts/:id — full timeline: messages, score history, link clicks, automation events. */
+export async function fetchContact(id: string): Promise<ContactDetail> {
+  return apiFetch(`/api/contacts/${id}`);
+}
+
+/** PATCH /api/contacts/:id — notes, stage, custom fields, needsReply. */
+export async function updateContact(
+  id: string,
+  patch: { stage?: string; notes?: string; needsReply?: boolean; customFields?: Record<string, unknown> },
+): Promise<ContactRecord> {
+  const data = await apiFetch<{ contact: ContactRecord }>(`/api/contacts/${id}`, {
+    method: 'PATCH',
+    body: patch,
+  });
+  return data.contact;
+}
+
+/** POST /api/contacts/:id/tags — add (default) or remove a tag. Returns the contact's full tag list. */
+export async function setContactTag(id: string, tag: string, remove = false): Promise<string[]> {
+  const data = await apiFetch<{ contactId: string; tags: string[] }>(`/api/contacts/${id}/tags`, {
+    method: 'POST',
+    body: { tag, remove },
+  });
+  return data.tags;
+}
+
+/** POST /api/contacts/:id/score — manual lead-score adjustment (-100..100). Returns the new score. */
+export async function adjustContactScore(id: string, delta: number, note?: string): Promise<number> {
+  const data = await apiFetch<{ contactId: string; leadScore: number }>(`/api/contacts/${id}/score`, {
+    method: 'POST',
+    body: { delta, note },
+  });
+  return data.leadScore;
+}
+
+/** POST /api/contacts/:id/converted — marks the contact won (stage -> converted). */
+export async function markContactConverted(id: string): Promise<void> {
+  await apiFetch(`/api/contacts/${id}/converted`, { method: 'POST' });
 }

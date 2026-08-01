@@ -1,0 +1,127 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import ConnectionsPage from '../pages/ConnectionsPage';
+import type { ConnectedAccount } from '../lib/api';
+import type { OnboardingPlatform } from '../data';
+
+/* Regression coverage for the Connections page action-button logic: a
+ * `connected` account must show "Disconnect", never "Reconnect" (which is
+ * reserved for `reconnect_required`) — see ConnectionsPage.tsx's status ->
+ * action mapping. useApp() is mocked directly (AppContext itself isn't
+ * exported, only the hook) so this exercises the real page component
+ * against a controlled, known account list rather than the full app's
+ * real network/auth wiring. */
+
+const realAccount: ConnectedAccount = {
+  id: 'acc_real_instagram_123',
+  platform: 'instagram',
+  username: 'creator_handle',
+  display_name: 'Creator Handle',
+  avatar_url: null,
+  is_connected: true,
+  status: 'connected',
+  connected_at: new Date().toISOString(),
+};
+
+const connectedPlatform: OnboardingPlatform = {
+  id: 'instagram',
+  name: 'Instagram',
+  icon: 'instagram',
+  status: 'connected',
+  handle: '@creator_handle',
+};
+
+const mockUseApp = vi.fn();
+
+vi.mock('../context/AppContext', () => ({
+  useApp: () => mockUseApp(),
+}));
+
+vi.mock('../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
+  return {
+    ...actual,
+    isBackendConfigured: () => true,
+    fetchCapabilities: vi.fn().mockResolvedValue([]),
+  };
+});
+
+function renderConnectionsPage() {
+  return render(
+    <MemoryRouter>
+      <ConnectionsPage />
+    </MemoryRouter>
+  );
+}
+
+describe('ConnectionsPage — status-to-action mapping', () => {
+  it('shows "Disconnect" for a connected account, never "Reconnect"', async () => {
+    mockUseApp.mockReturnValue({
+      connectedPlatforms: [connectedPlatform],
+      accounts: [realAccount],
+      beginPlatformConnect: vi.fn(),
+      completeOAuthReturn: vi.fn().mockResolvedValue(undefined),
+      failOAuthReturn: vi.fn(),
+      openSubscriptionModal: vi.fn(),
+      refreshConnectedAccounts: vi.fn(),
+      disconnectAccount: vi.fn().mockResolvedValue(undefined),
+      showToast: vi.fn(),
+    });
+
+    renderConnectionsPage();
+
+    expect(await screen.findByText('Disconnect')).toBeInTheDocument();
+    expect(screen.queryByText('Reconnect')).not.toBeInTheDocument();
+  });
+
+  it('shows "Reconnect" (not "Disconnect") for a reconnect_required account', async () => {
+    mockUseApp.mockReturnValue({
+      connectedPlatforms: [{ ...connectedPlatform, status: 'reconnect_required' as const }],
+      accounts: [{ ...realAccount, status: 'reconnect_required' as const }],
+      beginPlatformConnect: vi.fn(),
+      completeOAuthReturn: vi.fn().mockResolvedValue(undefined),
+      failOAuthReturn: vi.fn(),
+      openSubscriptionModal: vi.fn(),
+      refreshConnectedAccounts: vi.fn(),
+      disconnectAccount: vi.fn().mockResolvedValue(undefined),
+      showToast: vi.fn(),
+    });
+
+    renderConnectionsPage();
+
+    expect(await screen.findByText('Reconnect')).toBeInTheDocument();
+    expect(screen.queryByText('Disconnect')).not.toBeInTheDocument();
+  });
+
+  it('shows "Connect" for idle platforms and "Try again" for an errored one', async () => {
+    // Every one of the page's 5 hardcoded platforms needs an explicit entry
+    // here, or an omitted one silently defaults to 'idle' too and produces
+    // more "Connect" buttons than expected — not a product bug, just this
+    // test being precise about what's actually on screen.
+    mockUseApp.mockReturnValue({
+      connectedPlatforms: [
+        { id: 'instagram', name: 'Instagram', icon: 'instagram', status: 'idle' as const },
+        { id: 'tiktok', name: 'TikTok', icon: 'tiktok', status: 'idle' as const },
+        { id: 'linkedin', name: 'LinkedIn', icon: 'linkedin', status: 'error' as const, errorMessage: 'Connection failed' },
+        { id: 'twitter', name: 'Twitter', icon: 'twitter', status: 'idle' as const },
+        { id: 'reddit', name: 'Reddit', icon: 'reddit', status: 'idle' as const },
+      ],
+      accounts: [],
+      beginPlatformConnect: vi.fn(),
+      completeOAuthReturn: vi.fn().mockResolvedValue(undefined),
+      failOAuthReturn: vi.fn(),
+      openSubscriptionModal: vi.fn(),
+      refreshConnectedAccounts: vi.fn(),
+      disconnectAccount: vi.fn().mockResolvedValue(undefined),
+      showToast: vi.fn(),
+    });
+
+    renderConnectionsPage();
+
+    expect((await screen.findAllByText('Connect')).length).toBe(4);
+    expect(screen.getByText('Try again')).toBeInTheDocument();
+    expect(screen.queryByText('Disconnect')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reconnect')).not.toBeInTheDocument();
+  });
+});

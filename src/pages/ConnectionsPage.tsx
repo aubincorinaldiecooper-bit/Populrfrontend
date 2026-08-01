@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, AlertCircle, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
@@ -22,14 +22,19 @@ const PLATFORMS = [
 
 export default function ConnectionsPage() {
   const {
-    connectedPlatforms, beginPlatformConnect, completeOAuthReturn, failOAuthReturn,
-    openSubscriptionModal, refreshConnectedAccounts, showToast,
+    connectedPlatforms, accounts, beginPlatformConnect, completeOAuthReturn, failOAuthReturn,
+    openSubscriptionModal, refreshConnectedAccounts, disconnectAccount, showToast,
   } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const backendConfigured = isBackendConfigured();
 
   const [capabilities, setCapabilities] = useState<Record<string, PlatformCapabilities>>({});
+  // Platform id (e.g. "instagram") pending confirmation, not the account id —
+  // the account id is looked up fresh at click time from the authoritative
+  // `accounts` list so it's never stale by the time the user confirms.
+  const [disconnectModalPlatform, setDisconnectModalPlatform] = useState<string | null>(null);
+  const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!backendConfigured) return;
@@ -107,6 +112,28 @@ export default function ConnectionsPage() {
 
   const connectedCount = connectedPlatforms.filter(p => p.status === 'connected').length;
 
+  // Disconnect goes through the real, authenticated backend endpoint (see
+  // AppContext.disconnectAccount -> lib/api.ts's disconnectAccount, POST
+  // /api/accounts/:id/disconnect) and is never simulated locally. On success
+  // the card only flips to "Not connected" once the authoritative account
+  // list has been re-fetched; on failure the account stays exactly as it
+  // was and the user sees a safe, generic error (whatever the backend
+  // actually said is only ever logged, never shown raw).
+  const handleDisconnect = async (accountId: string) => {
+    setDisconnectingAccountId(accountId);
+    try {
+      await disconnectAccount(accountId);
+      await refreshConnectedAccounts();
+      showToast('Account disconnected.', 'success');
+      setDisconnectModalPlatform(null);
+    } catch (err) {
+      console.error('[connections] failed to disconnect account:', err);
+      showToast('Could not disconnect this account. Try again.', 'error');
+    } finally {
+      setDisconnectingAccountId(null);
+    }
+  };
+
   return (
     <div className="pop-page max-w-[720px]">
       <PageHeader
@@ -133,6 +160,11 @@ export default function ConnectionsPage() {
           const caps = capabilities[p.id];
           const limited = caps && (!caps.supportsCommentReplies || !caps.supportsDMs);
           const Icon = p.icon;
+          // The account's real backend id (never the platform name) — the
+          // only thing disconnect is ever called with. In-flight/disabled
+          // state while disconnecting is shown in the confirm modal below,
+          // which covers the whole page while open.
+          const realAccount = accounts.find(a => a.platform === p.id);
 
           return (
             <div key={p.id} className="pop-card p-4">
@@ -206,7 +238,13 @@ export default function ConnectionsPage() {
                     <Button label="Try again" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={() => beginPlatformConnect(p.id)} />
                   )}
                   {status === 'connected' && (
-                    <Button label="Reconnect" variant="ghost" size="sm" onClick={() => beginPlatformConnect(p.id)} />
+                    <Button
+                      label="Disconnect"
+                      variant="ghost"
+                      size="sm"
+                      isDisabled={!realAccount}
+                      onClick={() => setDisconnectModalPlatform(p.id)}
+                    />
                   )}
                   {status === 'reconnect_required' && (
                     <Button label="Reconnect" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={() => beginPlatformConnect(p.id)} />
@@ -232,6 +270,41 @@ export default function ConnectionsPage() {
           onClick={() => navigate('/opportunities')}
         />
       </div>
+
+      {disconnectModalPlatform && (() => {
+        const modalPlatform = PLATFORMS.find(pl => pl.id === disconnectModalPlatform);
+        const modalAccount = accounts.find(a => a.platform === disconnectModalPlatform);
+        const isDisconnectingModal = !!modalAccount && disconnectingAccountId === modalAccount.id;
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+              <h3 className="font-geist font-bold text-base text-[#111111]">
+                Disconnect {modalPlatform?.name ?? disconnectModalPlatform}?
+              </h3>
+              <p className="text-[13px] text-[#6B6B6B] mt-2">
+                Populr will stop reviewing engagement on this account. You can reconnect it any time.
+              </p>
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => setDisconnectModalPlatform(null)}
+                  disabled={isDisconnectingModal}
+                  className="pop-btn-secondary flex-1 text-[13px] py-2.5 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => modalAccount && handleDisconnect(modalAccount.id)}
+                  disabled={!modalAccount || isDisconnectingModal}
+                  className="flex-1 bg-[#DC2626] text-white rounded-[10px] text-[13px] py-2.5 font-semibold hover:bg-[#B91C1C] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDisconnectingModal && <Loader2 size={14} className="animate-spin" />}
+                  {isDisconnectingModal ? 'Disconnecting…' : 'Disconnect account'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

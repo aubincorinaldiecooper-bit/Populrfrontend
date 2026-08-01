@@ -1,21 +1,27 @@
 import { useRef, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import {
-  Home, SquarePen, FileText, Sparkles, Link2, Settings, Menu, X,
+  Home, Zap, Sparkles, Users, Link2, Settings, Menu, X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
 import gsap from 'gsap';
 
-// Campaigns, Inbox, and other broader surfaces still exist and are
-// reachable directly by URL — they're hidden from primary nav, not deleted.
+// Populr's beta direction is automation-first (see product spec): the
+// primary CTA leads straight to the automation builder, same slot and
+// styling "Create Post" used to occupy. Create Post/Content/Campaigns/
+// Inbox still exist and are reachable directly by URL — hidden from
+// primary nav, not deleted (publishing isn't part of this beta's surface,
+// but its code stays intact for a future flag-flip rather than a rebuild).
 const navItems = [
   { path: '/', label: 'Home', icon: Home },
-  { path: '/create', label: 'Create Post', icon: SquarePen, primary: true },
-  { path: '/content', label: 'Content', icon: FileText },
+  { path: '/automations/new', label: 'Create automation', icon: Zap, primary: true },
+  { path: '/automations', label: 'Automations', icon: Zap },
   { path: '/opportunities', label: 'Opportunities', icon: Sparkles },
+  { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/connections', label: 'Connections', icon: Link2 },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {
