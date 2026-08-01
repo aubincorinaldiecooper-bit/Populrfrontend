@@ -1,418 +1,516 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { initialsFrom } from '../lib/identity';
 import {
-  Search, SlidersHorizontal, Columns3, ArrowUpDown,
-  AlertTriangle, X, GitMerge, GripVertical,
+  isBackendConfigured, fetchContacts, fetchContact, updateContact, setContactTag,
+  adjustContactScore, markContactConverted, fetchOpportunities, CONTACT_STAGES,
+} from '../lib/api';
+import type { ContactRecord, ContactDetail as ContactDetailData, Opportunity } from '../lib/api';
+import {
+  Search, Loader2, AlertCircle, ArrowLeft, Plus, X, ExternalLink,
 } from 'lucide-react';
-
-import PlatformDot from '../components/PlatformDot';
-import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
+import StatusPill from '../components/StatusPill';
+import PlatformDot from '../components/PlatformDot';
 import EmptyState from '../components/EmptyState';
 
-type ViewMode = 'table' | 'pipeline';
+const STAGE_LABEL: Record<string, string> = {
+  cold: 'Cold', interested: 'Interested', warm: 'Warm', hot: 'Hot',
+  needs_reply: 'Needs reply', converted: 'Converted',
+};
 
-interface ColumnDef {
-  key: string;
-  label: string;
-  width: number;
-  minWidth: number;
-  sortable?: boolean;
-  priority: 'primary' | 'secondary' | 'tertiary';
+// Mirrors OpportunitiesPage's STATUS_DOT palette so an opportunity reads the
+// same way wherever it appears, rather than each page inventing its own.
+const OPP_STATUS_COLOR: Record<string, string> = {
+  new: 'bg-chartreuse', reviewed: 'bg-[#3B82F6]', responded: 'bg-[#059669]', dismissed: 'bg-[#9B9B8F]',
+};
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-const COLUMNS: ColumnDef[] = [
-  { key: 'contact', label: 'Contact', width: 280, minWidth: 200, sortable: true, priority: 'primary' },
-  { key: 'intent', label: 'Intent', width: 150, minWidth: 120, sortable: true, priority: 'primary' },
-  { key: 'stage', label: 'Stage', width: 120, minWidth: 100, sortable: true, priority: 'primary' },
-  { key: 'relationship', label: 'Relationship', width: 130, minWidth: 110, sortable: true, priority: 'secondary' },
-  { key: 'campaign', label: 'Active campaign', width: 160, minWidth: 130, sortable: false, priority: 'secondary' },
-  { key: 'lastActive', label: 'Last activity', width: 110, minWidth: 90, sortable: true, priority: 'secondary' },
-];
+function Avatar({ url, name }: { url: string | null; name: string }) {
+  return url ? (
+    <img src={url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+  ) : (
+    <div className="w-9 h-9 rounded-full bg-[#FAFAF8] border border-[#E8E4DF] flex items-center justify-center text-[11px] font-semibold text-[#6B6B6B] flex-shrink-0">
+      {initialsFrom(name)}
+    </div>
+  );
+}
 
-const QUICK_VIEWS = [
-  { key: 'all', label: 'All' },
-  { key: 'needs-attention', label: 'Needs attention' },
-  { key: 'high-intent', label: 'High intent' },
-  { key: 'at-risk', label: 'At risk' },
-  { key: 'recently-active', label: 'Recently active' },
-];
+function ContactDetailView({
+  contact, accountLabel, onBack, onSaved,
+}: {
+  contact: ContactRecord;
+  accountLabel: string | null;
+  onBack: () => void;
+  onSaved: (c: ContactRecord) => void;
+}) {
+  const { showToast } = useApp();
+  const [detail, setDetail] = useState<ContactDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState(contact.notes ?? '');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const [busyTag, setBusyTag] = useState(false);
+  const [busyStage, setBusyStage] = useState(false);
+  const [scoreDelta, setScoreDelta] = useState('');
+  const [busyScore, setBusyScore] = useState(false);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [oppsLoading, setOppsLoading] = useState(true);
 
-export default function ContactsPage() {
-  const { contacts, openContactDrawer, mergeContacts, showToast } = useApp();
-  const [search, setSearch] = useState('');
-  const [quickView, setQuickView] = useState('all');
-  const [view, setView] = useState<ViewMode>('table');
-  const [sortField, setSortField] = useState<string>('contact');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [columns, setColumns] = useState<ColumnDef[]>(COLUMNS);
-  const [showFilterDrawer, setShowFilterDrawer] = useState(false);
-  const [showDuplicates, setShowDuplicates] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchContact(contact.id)
+      .then(d => { setDetail(d); setNotes(d.contact.notes ?? ''); })
+      .catch(err => showToast(err instanceof Error ? err.message : 'Could not load this contact.', 'error'))
+      .finally(() => setLoading(false));
+  }, [contact.id, showToast]);
 
-  // Column resizing
-  const resizingCol = useRef<number | null>(null);
-  const startX = useRef(0);
-  const startWidth = useRef(0);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load]);
 
-  const handleResizeStart = useCallback((index: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    resizingCol.current = index;
-    startX.current = e.clientX;
-    startWidth.current = columns[index].width;
-    const handleMove = (moveEvent: MouseEvent) => {
-      if (resizingCol.current === null) return;
-      const delta = moveEvent.clientX - startX.current;
-      const newWidth = Math.max(columns[resizingCol.current].minWidth, startWidth.current + delta);
-      setColumns(prev => prev.map((col, i) => i === resizingCol.current ? { ...col, width: newWidth } : col));
-    };
-    const handleUp = () => { resizingCol.current = null; window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }, [columns]);
+  useEffect(() => {
+    // Data fetch from the backend, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOppsLoading(true);
+    fetchOpportunities({ contactId: contact.id, limit: 50 })
+      .then(r => setOpportunities(r.opportunities))
+      .catch(err => console.error('[contacts] failed to load related opportunities:', err))
+      .finally(() => setOppsLoading(false));
+  }, [contact.id]);
 
-  // Filter state
-  const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
-  const [filterRelationship, setFilterRelationship] = useState<string[]>([]);
-  const [filterIntent, setFilterIntent] = useState<string[]>([]);
-  const [filterStage, setFilterStage] = useState<string[]>([]);
+  const current = detail?.contact ?? contact;
 
-  const filtered = useMemo(() => {
-    let result = [...contacts];
-
-    // Search
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(c => c.handle.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
+  const handleStageChange = async (stage: string) => {
+    setBusyStage(true);
+    try {
+      const updated = await updateContact(contact.id, { stage });
+      setDetail(d => (d ? { ...d, contact: { ...updated, tags: d.contact.tags } } : d));
+      onSaved({ ...updated, tags: current.tags });
+      showToast('Stage updated', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update stage.', 'error');
+    } finally {
+      setBusyStage(false);
     }
-
-    // Quick views
-    if (quickView === 'needs-attention') result = result.filter(c => c.intent === 'conversion' || c.intent === 'pricing' || c.intent === 'human-review');
-    if (quickView === 'high-intent') result = result.filter(c => c.intent === 'conversion');
-    if (quickView === 'at-risk') result = result.filter(c => c.relationship === 'at-risk');
-    if (quickView === 'recently-active') result = result.filter(c => !c.recentActions[0]?.time.includes('w') && !c.recentActions[0]?.time.includes('mo'));
-
-    // Detailed filters
-    if (filterPlatform.length > 0) result = result.filter(c => filterPlatform.includes(c.platform));
-    if (filterRelationship.length > 0) result = result.filter(c => filterRelationship.includes(c.relationship));
-    if (filterIntent.length > 0) result = result.filter(c => filterIntent.includes(c.intent));
-    if (filterStage.length > 0) result = result.filter(c => filterStage.includes(c.stage));
-
-    // Sort
-    result.sort((a, b) => {
-      const dir = sortDir === 'asc' ? 1 : -1;
-      if (sortField === 'contact') return a.handle.localeCompare(b.handle) * dir;
-      if (sortField === 'stage') return a.stage.localeCompare(b.stage) * dir;
-      return 0;
-    });
-
-    return result;
-  }, [contacts, search, quickView, filterPlatform, filterRelationship, filterIntent, filterStage, sortField, sortDir]);
-
-  const toggleSort = (field: string) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDir('asc'); }
   };
 
-  // Potential duplicates
-  const potentialDuplicates = useMemo(() => {
-    const dups: { id: string; handle1: string; handle2: string }[] = [];
-    const seen = new Set<string>();
-    for (let i = 0; i < contacts.length; i++) {
-      for (let j = i + 1; j < contacts.length; j++) {
-        const a = contacts[i], b = contacts[j];
-        if (a.platform === b.platform && a.name === b.name && !seen.has(`${a.id}-${b.id}`)) {
-          seen.add(`${a.id}-${b.id}`);
-          dups.push({ id: `dup-${a.id}-${b.id}`, handle1: a.handle, handle2: b.handle });
-        }
-      }
+  const handleConverted = async () => {
+    setBusyStage(true);
+    try {
+      await markContactConverted(contact.id);
+      await load();
+      onSaved({ ...current, stage: 'converted' });
+      showToast('Marked as converted', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not mark this contact converted.', 'error');
+    } finally {
+      setBusyStage(false);
     }
-    return dups.slice(0, 3);
-  }, [contacts]);
+  };
 
-  const hasActiveFilters = filterPlatform.length + filterRelationship.length + filterIntent.length + filterStage.length > 0;
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      const updated = await updateContact(contact.id, { notes });
+      setDetail(d => (d ? { ...d, contact: { ...updated, tags: d.contact.tags } } : d));
+      onSaved({ ...updated, tags: current.tags });
+      showToast('Notes saved', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save notes.', 'error');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
 
-  // Pipeline columns
-  const stageColumns = [
-    { key: 'discovered', label: 'Discovered', color: 'border-t-[#E8E4DF]' },
-    { key: 'engaged', label: 'Engaged', color: 'border-t-[#10B981]' },
-    { key: 'interested', label: 'Interested', color: 'border-t-coral' },
-    { key: 'converted', label: 'Converted', color: 'border-t-[#059669]' },
-  ];
+  const handleAddTag = async () => {
+    const tag = newTag.trim();
+    if (!tag) return;
+    setBusyTag(true);
+    try {
+      const tags = await setContactTag(contact.id, tag);
+      setDetail(d => (d ? { ...d, contact: { ...d.contact, tags } } : d));
+      onSaved({ ...current, tags });
+      setNewTag('');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not add tag.', 'error');
+    } finally {
+      setBusyTag(false);
+    }
+  };
+
+  const handleRemoveTag = async (tag: string) => {
+    setBusyTag(true);
+    try {
+      const tags = await setContactTag(contact.id, tag, true);
+      setDetail(d => (d ? { ...d, contact: { ...d.contact, tags } } : d));
+      onSaved({ ...current, tags });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not remove tag.', 'error');
+    } finally {
+      setBusyTag(false);
+    }
+  };
+
+  const handleAdjustScore = async () => {
+    const delta = Number(scoreDelta);
+    if (!Number.isFinite(delta) || delta === 0) return;
+    setBusyScore(true);
+    try {
+      const leadScore = await adjustContactScore(contact.id, delta);
+      setDetail(d => (d ? { ...d, contact: { ...d.contact, lead_score: leadScore } } : d));
+      onSaved({ ...current, lead_score: leadScore });
+      setScoreDelta('');
+      showToast('Lead score updated', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not adjust lead score.', 'error');
+    } finally {
+      setBusyScore(false);
+    }
+  };
+
+  return (
+    <div className="pop-page max-w-[820px]">
+      <button onClick={onBack} className="pop-btn-ghost mb-5">
+        <ArrowLeft size={16} />Back to contacts
+      </button>
+
+      <div className="flex items-start gap-4 mb-6">
+        <Avatar url={current.avatar_url} name={current.name ?? current.handle ?? 'Contact'} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="pop-section-heading">{current.handle ? `@${current.handle}` : current.name ?? 'Unknown contact'}</h1>
+            <StatusPill status={current.stage} />
+            {current.needs_reply && <StatusPill status="human-review" />}
+          </div>
+          {current.name && current.handle && <p className="pop-body">{current.name}</p>}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <PlatformDot platform={current.platform} size={7} />
+            <span className="text-[12px] text-[#6B6B6B] capitalize">{current.platform}</span>
+            {accountLabel && <span className="text-[12px] text-[#6B6B6B]">· {accountLabel}</span>}
+            <span className="text-[12px] text-[#9B9B8F]">· First seen {relativeTime(current.first_seen)}</span>
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="font-geist-mono font-bold text-xl text-[#111111]">{current.lead_score}</p>
+          <p className="text-[10px] text-[#9B9B8F] tracking-wide">LEAD SCORE</p>
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-5 mb-5">
+        <div className="pop-card p-4">
+          <p className="pop-meta mb-2">Stage</p>
+          <div className="flex flex-wrap gap-1.5">
+            {CONTACT_STAGES.map(s => (
+              <button key={s} onClick={() => handleStageChange(s)} disabled={busyStage || current.stage === s}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all disabled:cursor-default ${current.stage === s ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}>
+                {STAGE_LABEL[s] ?? s}
+              </button>
+            ))}
+          </div>
+          {current.stage !== 'converted' && (
+            <button onClick={handleConverted} disabled={busyStage} className="pop-btn-secondary text-[11px] py-1.5 px-3 mt-3 disabled:opacity-60">
+              Mark converted
+            </button>
+          )}
+        </div>
+
+        <div className="pop-card p-4">
+          <p className="pop-meta mb-2">Adjust lead score</p>
+          <div className="flex gap-2">
+            <input type="number" value={scoreDelta} onChange={e => setScoreDelta(e.target.value)} placeholder="e.g. 10 or -10"
+              className="pop-input flex-1 text-[12px] py-1.5" />
+            <button onClick={handleAdjustScore} disabled={busyScore || !scoreDelta} className="pop-btn-secondary text-[11px] px-3 disabled:opacity-60">
+              {busyScore ? <Loader2 size={12} className="animate-spin" /> : 'Apply'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="pop-card p-4 mb-5">
+        <p className="pop-meta mb-2">Tags</p>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {current.tags.length === 0 && <span className="text-[12px] text-[#9B9B8F]">No tags yet.</span>}
+          {current.tags.map(t => (
+            <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#FAFAF8] text-[#111111]">
+              {t}
+              <button onClick={() => handleRemoveTag(t)} disabled={busyTag} className="hover:text-[#DC2626] disabled:opacity-60">
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input type="text" value={newTag} onChange={e => setNewTag(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+            placeholder="Add a tag" className="pop-input flex-1 text-[12px] py-1.5" />
+          <button onClick={handleAddTag} disabled={busyTag || !newTag.trim()} className="pop-btn-secondary text-[11px] px-3 disabled:opacity-60">
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+
+      <div className="pop-card p-4 mb-5">
+        <p className="pop-meta mb-2">Notes</p>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+          className="pop-input w-full resize-none text-[13px]" placeholder="Private notes about this contact…" />
+        <button onClick={handleSaveNotes} disabled={savingNotes || notes === (current.notes ?? '')}
+          className="pop-btn-secondary text-[11px] py-1.5 px-3 mt-2 disabled:opacity-60">
+          {savingNotes ? 'Saving…' : 'Save notes'}
+        </button>
+      </div>
+
+      {(detail?.sourceAutomation || detail?.sourcePost || current.source_type) && (
+        <div className="pop-card p-4 mb-5">
+          <p className="pop-meta mb-2">How they found you</p>
+          <p className="text-[13px] text-[#111111]">
+            {detail?.sourceAutomation ? `Via automation "${detail.sourceAutomation.name}"` : `Source: ${current.source_type}`}
+          </p>
+          {detail?.sourcePost?.url && (
+            <a href={detail.sourcePost.url} target="_blank" rel="noreferrer"
+              className="text-[12px] text-[#3B82F6] hover:underline inline-flex items-center gap-1 mt-1">
+              View source post <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+      )}
+
+      <div className="pop-card p-5 mb-5">
+        <h2 className="pop-card-title mb-3">Conversation history</h2>
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-[#6B6B6B]">
+            <Loader2 size={18} className="animate-spin mr-2" /> Loading...
+          </div>
+        ) : !detail || detail.messages.length === 0 ? (
+          <p className="text-[12px] text-[#6B6B6B]">No messages yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {detail.messages.slice().reverse().map(m => (
+              <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[75%] rounded-xl px-3 py-2 ${m.direction === 'outbound' ? 'bg-chartreuse/20 text-[#111111]' : 'bg-[#FAFAF8] text-[#111111]'}`}>
+                  <p className="text-[12px]">{m.text || <span className="italic text-[#9B9B8F]">(no text)</span>}</p>
+                  <p className="text-[10px] text-[#9B9B8F] mt-1">{m.channel} · {relativeTime(m.created_at)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="pop-card p-5">
+        <h2 className="pop-card-title mb-3">Related opportunities</h2>
+        {oppsLoading ? (
+          <div className="flex items-center justify-center py-8 text-[#6B6B6B]">
+            <Loader2 size={18} className="animate-spin mr-2" /> Loading...
+          </div>
+        ) : opportunities.length === 0 ? (
+          <p className="text-[12px] text-[#6B6B6B]">No opportunities from this contact yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {opportunities.map(o => (
+              <div key={o.id} className="flex items-center justify-between gap-3 py-2 border-b border-[#F0EEEA] last:border-0">
+                <div className="min-w-0">
+                  <p className="text-[12px] text-[#111111] truncate">&ldquo;{o.interaction.text}&rdquo;</p>
+                  <p className="text-[11px] text-[#9B9B8F] mt-0.5">{o.intent.label}</p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${OPP_STATUS_COLOR[o.status] ?? 'bg-[#9B9B8F]'}`} />
+                  <span className="text-[10px] text-[#9B9B8F] capitalize">{o.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const PAGE_SIZE = 50;
+
+export default function ContactsPage() {
+  const { accounts } = useApp();
+  const backendConfigured = isBackendConfigured();
+
+  const [contactList, setContactList] = useState<ContactRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState<string | undefined>(undefined);
+  const [needsReplyOnly, setNeedsReplyOnly] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const requestSeq = useRef(0);
+  const load = useCallback(() => {
+    if (!backendConfigured) { setLoading(false); return; }
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    setError(null);
+    fetchContacts({
+      search: debouncedSearch || undefined,
+      stage: stageFilter,
+      needsReply: needsReplyOnly ? true : undefined,
+      limit: PAGE_SIZE,
+    })
+      .then(r => {
+        if (seq !== requestSeq.current) return;
+        setContactList(r.contacts);
+        setTotal(r.total);
+      })
+      .catch(err => {
+        if (seq !== requestSeq.current) return;
+        setError(err instanceof Error ? err.message : 'Could not load contacts right now.');
+      })
+      .finally(() => { if (seq === requestSeq.current) setLoading(false); });
+  }, [backendConfigured, debouncedSearch, stageFilter, needsReplyOnly]);
+
+  useEffect(() => {
+    // Data fetch from the backend, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load]);
+
+  const accountById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts]);
+
+  const handleSavedFromDetail = (updated: ContactRecord) => {
+    setContactList(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+  };
+
+  const detail = detailId ? contactList.find(c => c.id === detailId) ?? null : null;
+  if (detail) {
+    const account = detail.account_id ? accountById[detail.account_id] : undefined;
+    const accountLabel = account ? (account.username ? `@${account.username}` : account.display_name ?? null) : null;
+    return (
+      <ContactDetailView
+        contact={detail}
+        accountLabel={accountLabel}
+        onBack={() => setDetailId(null)}
+        onSaved={handleSavedFromDetail}
+      />
+    );
+  }
 
   return (
     <div className="pop-page">
       <PageHeader
         title="Contacts"
-        subtitle={`${contacts.length} people in your audience`}
+        subtitle={backendConfigured ? `${total} ${total === 1 ? 'person has' : 'people have'} engaged with you` : undefined}
         action={
-          <div className="flex items-center gap-2">
-            {view === 'table' && (
-              <div className="relative hidden sm:block">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts..."
-                  className="pop-search w-56" />
-              </div>
-            )}
-            <button onClick={() => setShowFilterDrawer(true)}
-              className={`p-2.5 rounded-xl border transition-all ${hasActiveFilters ? 'border-chartreuse bg-chartreuse/10 text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B] hover:bg-[#FAFAF8]'}`}
-              title="Filters">
-              <SlidersHorizontal size={16} />
-            </button>
-            <div className="flex bg-white border border-[#E8E4DF] rounded-xl overflow-hidden">
-              {([['table', Columns3], ['pipeline', SlidersHorizontal]] as [ViewMode, React.ElementType][]).map(([v, Icon]) => (
-                <button key={v} onClick={() => setView(v)}
-                  className={`p-2.5 transition-all ${view === v ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-[#FAFAF8]'}`}>
-                  <Icon size={16} />
-                </button>
-              ))}
-            </div>
+          <div className="relative w-full sm:w-auto">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts..."
+              className="pop-search w-full sm:w-56" />
           </div>
         }
       />
 
-      {/* Compact duplicate alert */}
-      {potentialDuplicates.length > 0 && !showDuplicates && (
-        <div className="mb-4 bg-[#FFF3E0]/60 border border-[#FDE68A]/60 rounded-xl px-4 py-2.5 flex items-center gap-2">
-          <AlertTriangle size={14} className="text-[#D97706] flex-shrink-0" />
-          <p className="text-[12px] text-[#6B6B6B] flex-1">
-            <span className="font-medium text-[#111111]">{potentialDuplicates.length} possible duplicate profiles</span>
-          </p>
-          <button onClick={() => setShowDuplicates(true)} className="text-[11px] font-medium text-[#D97706] hover:text-[#111111] transition-colors">
-            Review
-          </button>
+      {!backendConfigured && (
+        <div className="pop-card p-6 mb-6 flex items-start gap-3">
+          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">
+              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see real contacts here. This page never shows placeholder data in its place.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Duplicate review panel */}
-      {showDuplicates && (
-        <div className="mb-6 pop-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <GitMerge size={16} className="text-[#D97706]" />
-              <h3 className="pop-card-title">Review duplicates</h3>
-            </div>
-            <button onClick={() => setShowDuplicates(false)} className="p-1.5 hover:bg-[#FAFAF8] rounded-lg transition-all">
-              <X size={16} className="text-[#6B6B6B]" />
+      {backendConfigured && (
+        <>
+          <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
+            <button onClick={() => { setStageFilter(undefined); setNeedsReplyOnly(false); }}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${!stageFilter && !needsReplyOnly ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
+              All
             </button>
-          </div>
-          <div className="space-y-2">
-            {potentialDuplicates.map(dup => (
-              <div key={dup.id} className="flex items-center gap-4 border border-[#E8E4DF] rounded-xl p-4">
-                <div className="flex-1">
-                  <p className="text-[13px] font-medium text-[#111111]">{dup.handle1} ↔ {dup.handle2}</p>
-                </div>
-                <button onClick={() => {
-                  const c1 = contacts.find(c => c.handle === dup.handle1);
-                  const c2 = contacts.find(c => c.handle === dup.handle2);
-                  if (c1 && c2) { mergeContacts(c1.id, c2.id); showToast('Contacts merged', 'success'); }
-                }} className="pop-btn-primary text-[11px] py-1.5 px-3">
-                  <GitMerge size={12} />Merge
-                </button>
-              </div>
+            <button onClick={() => { setNeedsReplyOnly(true); setStageFilter(undefined); }}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${needsReplyOnly ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
+              Needs reply
+            </button>
+            {CONTACT_STAGES.map(s => (
+              <button key={s} onClick={() => { setStageFilter(s); setNeedsReplyOnly(false); }}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${stageFilter === s ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
+                {STAGE_LABEL[s] ?? s}
+              </button>
             ))}
           </div>
-        </div>
-      )}
 
-      {/* Quick views */}
-      <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
-        {QUICK_VIEWS.map(v => (
-          <button key={v.key} onClick={() => setQuickView(v.key)}
-            className={`px-3 py-1.5 rounded-xl text-[12px] font-medium whitespace-nowrap transition-all ${quickView === v.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-            {v.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Table View */}
-      {view === 'table' && (
-        <div className="pop-card overflow-hidden">
-          {filtered.length === 0 ? (
-            <EmptyState icon="contacts" title="No contacts found" description="Try adjusting your search or filters." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full" style={{ tableLayout: 'fixed' }}>
-                <thead>
-                  <tr className="border-b border-[#E8E4DF]">
-                    {columns.map((col, i) => (
-                      <th key={col.key} style={{ width: col.width }} className="relative px-4 py-3 text-left select-none">
-                        <button onClick={() => col.sortable && toggleSort(col.key)}
-                          className="flex items-center gap-1 text-[11px] font-medium text-[#9B9B8F] tracking-wide hover:text-[#111111] transition-colors whitespace-nowrap">
-                          {col.label}
-                          {col.sortable && sortField === col.key && <ArrowUpDown size={10} className="text-[#111111]" />}
-                        </button>
-                        {i < columns.length - 1 && (
-                          <div onMouseDown={(e) => handleResizeStart(i, e)}
-                            className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-6 cursor-col-resize flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity z-10">
-                            <GripVertical size={10} className="text-[#D4CFC8]" />
-                          </div>
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(contact => (
-                    <tr key={contact.id} onClick={() => openContactDrawer(contact.id, 'contacts')}
-                      className="border-b border-[#F0EEEA] last:border-0 hover:bg-[#FAFAF8] transition-colors cursor-pointer group">
-
-                      {/* Contact: avatar + handle + name + platform dot */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <img src={contact.avatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-[13px] font-semibold text-[#111111] truncate">{contact.handle}</p>
-                              <PlatformDot platform={contact.platform} size={6} />
-                            </div>
-                            <p className="text-[11px] text-[#9B9B8F] truncate">{contact.name}</p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Intent: strongest badge */}
-                      <td className="px-4 py-3.5">
-                        <StatusPill status={contact.intent === 'conversion' ? 'strong offer intent' : contact.intent} />
-                      </td>
-
-                      {/* Stage */}
-                      <td className="px-4 py-3.5">
-                        <StatusPill status={contact.stage} />
-                      </td>
-
-                      {/* Relationship: soft */}
-                      <td className="px-4 py-3.5">
-                        <StatusPill status={contact.relationship === 'warm' ? 'warm fan' : contact.relationship === 'ready' ? 'ready to convert' : contact.relationship} />
-                      </td>
-
-                      {/* Active campaign */}
-                      <td className="px-4 py-3.5">
-                        {contact.campaigns.length > 0 ? (
-                          <span className="text-[12px] text-[#111111]">{contact.campaigns[0].name}</span>
-                        ) : (
-                          <span className="text-[12px] text-[#9B9B8F]">—</span>
-                        )}
-                      </td>
-
-                      {/* Last activity */}
-                      <td className="px-4 py-3.5 text-[12px] text-[#9B9B8F]">
-                        {contact.recentActions[0]?.time || '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {loading && (
+            <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
+              <Loader2 size={20} className="animate-spin mr-2" /> Loading contacts...
             </div>
           )}
-        </div>
-      )}
 
-      {/* Pipeline View */}
-      {view === 'pipeline' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stageColumns.map(col => {
-            const stageContacts = filtered.filter(c => c.stage === col.key);
-            return (
-              <div key={col.key} className={`pop-card ${col.color} border-t-[3px]`}>
-                <div className="px-4 py-3 border-b border-[#E8E4DF] flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-[#111111]">{col.label}</span>
-                  <span className="text-[11px] text-[#9B9B8F] font-geist-mono">{stageContacts.length}</span>
-                </div>
-                <div className="p-3 space-y-2 min-h-[100px]">
-                  {stageContacts.map(contact => (
-                    <button key={contact.id} onClick={() => openContactDrawer(contact.id, 'pipeline')}
-                      className="w-full bg-[#FAFAF8] rounded-xl p-3 border border-[#E8E4DF] hover:border-[#D4CFC8] transition-all text-left">
-                      <div className="flex items-center gap-2">
-                        <img src={contact.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
-                        <div className="flex-1 min-w-0"><p className="text-[12px] font-semibold text-[#111111] truncate">{contact.handle}</p></div>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <PlatformDot platform={contact.platform} size={6} />
-                        <StatusPill status={contact.intent === 'conversion' ? 'strong offer intent' : contact.intent} className="text-[9px]" />
-                      </div>
-                    </button>
-                  ))}
-                  {stageContacts.length === 0 && <p className="text-[11px] text-[#9B9B8F] text-center py-4">No contacts</p>}
-                </div>
+          {!loading && error && (
+            <div className="pop-card p-6 flex items-start gap-3">
+              <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load contacts</p>
+                <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
+                <button onClick={load} className="pop-btn-secondary text-[12px] py-1.5 px-3 mt-3">Try again</button>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Filter Drawer */}
-      {showFilterDrawer && (
-        <div className="fixed inset-0 z-[60] flex justify-end">
-          <div className="absolute inset-0 bg-[rgba(17,17,17,0.2)]" onClick={() => setShowFilterDrawer(false)} />
-          <div className="relative w-[360px] max-w-full bg-white h-full shadow-drawer z-10 flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E4DF]">
-              <h3 className="pop-card-title">Filters</h3>
-              <button onClick={() => setShowFilterDrawer(false)} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all">
-                <X size={18} className="text-[#6B6B6B]" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Platform */}
-              <div>
-                <p className="text-[12px] font-semibold text-[#111111] mb-2">Platform</p>
-                <div className="flex flex-wrap gap-2">
-                  {['instagram', 'tiktok', 'youtube', 'twitter'].map(p => (
-                    <button key={p} onClick={() => setFilterPlatform(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium capitalize transition-all ${filterPlatform.includes(p) ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#E8E4DF]'}`}>
-                      {p}
+          {!loading && !error && contactList.length === 0 && (
+            <EmptyState icon="contacts" title="No contacts yet"
+              description="People who comment or message your connected accounts will show up here as Populr captures them." />
+          )}
+
+          {!loading && !error && contactList.length > 0 && (
+            <div className="pop-card overflow-hidden">
+              <div className="divide-y divide-[#F0EEEA]">
+                {contactList.map(c => {
+                  const account = c.account_id ? accountById[c.account_id] : undefined;
+                  return (
+                    <button key={c.id} onClick={() => setDetailId(c.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-[#FAFAF8] transition-colors">
+                      <Avatar url={c.avatar_url} name={c.name ?? c.handle ?? 'Contact'} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-[13px] font-semibold text-[#111111] truncate">{c.handle ? `@${c.handle}` : c.name ?? 'Unknown'}</p>
+                          <PlatformDot platform={c.platform} size={6} />
+                          {c.needs_reply && <StatusPill status="human-review" className="text-[9px]" />}
+                        </div>
+                        <p className="text-[11px] text-[#9B9B8F] truncate mt-0.5">
+                          {account ? (account.username ? `@${account.username}` : account.display_name) : c.platform}
+                          {c.tags.length > 0 && ` · ${c.tags.slice(0, 3).join(', ')}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <StatusPill status={c.stage} className="text-[10px]" />
+                        <p className="font-geist-mono font-bold text-[12px] text-[#111111] w-8 text-right">{c.lead_score}</p>
+                        <span className="text-[10px] text-[#9B9B8F] w-14 text-right">{relativeTime(c.last_seen)}</span>
+                      </div>
                     </button>
-                  ))}
-                </div>
-              </div>
-              {/* Intent */}
-              <div>
-                <p className="text-[12px] font-semibold text-[#111111] mb-2">Intent</p>
-                <div className="flex flex-wrap gap-2">
-                  {['conversion', 'pricing', 'collaboration', 'support', 'engagement', 'casual'].map(i => (
-                    <button key={i} onClick={() => setFilterIntent(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i])}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium capitalize transition-all ${filterIntent.includes(i) ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#E8E4DF]'}`}>
-                      {i}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Relationship */}
-              <div>
-                <p className="text-[12px] font-semibold text-[#111111] mb-2">Relationship</p>
-                <div className="flex flex-wrap gap-2">
-                  {['warm', 'ready', 'engaged', 'new', 'subscriber', 'at-risk'].map(r => (
-                    <button key={r} onClick={() => setFilterRelationship(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium capitalize transition-all ${filterRelationship.includes(r) ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#E8E4DF]'}`}>
-                      {r === 'warm' ? 'warm fan' : r === 'ready' ? 'ready to convert' : r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Stage */}
-              <div>
-                <p className="text-[12px] font-semibold text-[#111111] mb-2">Campaign stage</p>
-                <div className="flex flex-wrap gap-2">
-                  {['discovered', 'engaged', 'interested', 'converted'].map(s => (
-                    <button key={s} onClick={() => setFilterStage(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium capitalize transition-all ${filterStage.includes(s) ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#E8E4DF]'}`}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-[#E8E4DF] flex gap-2">
-              <button onClick={() => { setFilterPlatform([]); setFilterRelationship([]); setFilterIntent([]); setFilterStage([]); }}
-                className="pop-btn-tertiary flex-1">
-                Clear all
-              </button>
-              <button onClick={() => setShowFilterDrawer(false)} className="pop-btn-primary flex-1">
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );
