@@ -344,12 +344,13 @@ function ContactDetailView({
 const PAGE_SIZE = 50;
 
 export default function ContactsPage() {
-  const { accounts } = useApp();
+  const { accounts, showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const [contactList, setContactList] = useState<ContactRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -363,28 +364,46 @@ export default function ContactsPage() {
   }, [search]);
 
   const requestSeq = useRef(0);
-  const load = useCallback(() => {
-    if (!backendConfigured) { setLoading(false); return; }
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    setError(null);
-    fetchContacts({
-      search: debouncedSearch || undefined,
-      stage: stageFilter,
-      needsReply: needsReplyOnly ? true : undefined,
-      limit: PAGE_SIZE,
-    })
-      .then(r => {
-        if (seq !== requestSeq.current) return;
-        setContactList(r.contacts);
-        setTotal(r.total);
+  const runFetch = useCallback(
+    ({ offset, limit, append }: { offset: number; limit: number; append: boolean }) => {
+      if (!backendConfigured) { setLoading(false); return; }
+      const seq = ++requestSeq.current;
+      if (append) setLoadingMore(true);
+      else { setLoading(true); setError(null); }
+      fetchContacts({
+        search: debouncedSearch || undefined,
+        stage: stageFilter,
+        needsReply: needsReplyOnly ? true : undefined,
+        limit,
+        offset,
       })
-      .catch(err => {
-        if (seq !== requestSeq.current) return;
-        setError(err instanceof Error ? err.message : 'Could not load contacts right now.');
-      })
-      .finally(() => { if (seq === requestSeq.current) setLoading(false); });
-  }, [backendConfigured, debouncedSearch, stageFilter, needsReplyOnly]);
+        .then(r => {
+          if (seq !== requestSeq.current) return;
+          setContactList(prev => (append ? [...prev, ...r.contacts] : r.contacts));
+          setTotal(r.total);
+        })
+        .catch(err => {
+          if (seq !== requestSeq.current) return;
+          const message = err instanceof Error ? err.message : 'Could not load contacts right now.';
+          if (append) showToast(message, 'error');
+          else setError(message);
+        })
+        .finally(() => {
+          if (seq === requestSeq.current) { setLoading(false); setLoadingMore(false); }
+        });
+    },
+    [backendConfigured, debouncedSearch, stageFilter, needsReplyOnly, showToast]
+  );
+
+  const load = useCallback(
+    () => runFetch({ offset: 0, limit: PAGE_SIZE, append: false }),
+    [runFetch]
+  );
+
+  const loadMore = useCallback(
+    () => runFetch({ offset: contactList.length, limit: PAGE_SIZE, append: true }),
+    [runFetch, contactList.length]
+  );
 
   useEffect(() => {
     // Data fetch from the backend, not derived state.
@@ -508,6 +527,16 @@ export default function ContactsPage() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {!loading && !error && contactList.length > 0 && contactList.length < total && (
+            <div className="flex flex-col items-center gap-2 mt-5">
+              <button onClick={loadMore} disabled={loadingMore} className="pop-btn-secondary text-[12px] py-2 px-4 disabled:opacity-60">
+                {loadingMore ? <Loader2 size={13} className="animate-spin" /> : null}
+                {loadingMore ? 'Loading...' : 'Load more'}
+              </button>
+              <p className="text-[11px] text-[#9B9B8F]">Showing {contactList.length} of {total}</p>
             </div>
           )}
         </>

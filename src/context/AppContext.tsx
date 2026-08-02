@@ -69,7 +69,7 @@ interface AppContextType extends AppState {
   // Onboarding platform connection
   connectPlatform: (id: string) => void;
   beginPlatformConnect: (id: string) => void;
-  refreshConnectedAccounts: () => void;
+  refreshConnectedAccounts: () => Promise<void>;
   completeOAuthReturn: (id: string) => Promise<void>;
   failOAuthReturn: (id: string | undefined) => void;
   openSubscriptionModal: (platform?: string) => void;
@@ -446,8 +446,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // used after returning from the OAuth redirect, so both stay derived from
   // the same backend response instead of drifting out of sync.
   const refreshConnectedAccounts = useCallback(() => {
-    if (!isBackendConfigured()) return;
-    fetchConnectedAccounts()
+    if (!isBackendConfigured()) return Promise.resolve();
+    return fetchConnectedAccounts()
       .then(accounts => {
         setState(prev => ({
           ...prev,
@@ -461,10 +461,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (match.status === 'reconnect_required') {
               return { ...p, status: 'reconnect_required' as const, handle, errorMessage: undefined };
             }
-            // 'disconnected' — a real past connection the user ended.
-            // Treated the same as never-connected here: reconnecting is the
-            // same "Connect" action either way.
-            return p;
+            // 'disconnected' — a real past connection the user ended (or one
+            // just disconnected through this app). Explicitly transitioned
+            // to idle rather than left as whatever it was before, since
+            // "reconnecting" is the same "Connect" action either way.
+            return { ...p, status: 'idle' as const, errorMessage: undefined };
           }),
           accounts,
         }));
