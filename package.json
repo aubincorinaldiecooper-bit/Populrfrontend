@@ -19,6 +19,8 @@
     "@astryxdesign/cli": "^0.2.0",
     "@astryxdesign/core": "^0.2.0",
     "@astryxdesign/theme-neutral": "^0.2.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/roboto-flex": "^5.3.0",
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
