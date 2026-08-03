@@ -5,7 +5,6 @@ import { lazy, Suspense } from 'react';
 
 import Onboarding from './components/Onboarding';
 import Layout from './components/Layout';
-import ErrorBoundary from './components/ErrorBoundary';
 import LoadingState from './components/LoadingState';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -135,17 +134,12 @@ function SubscriptionModalHost() {
 export default function App() {
   return (
     <>
-      {/* Last-resort catch for anything thrown outside Layout's own
-          boundary (the auth gate, public routes, provider-level errors) —
-          without it, any such throw unmounts the whole tree to a blank
-          page. Layout has its own, route-keyed boundary for the common
-          in-content case. */}
-      <ErrorBoundary>
-        <AppContent />
-      </ErrorBoundary>
+      <AppContent />
       {/* Rendered unconditionally: connect errors (including a subscription
           requirement) can happen before onboardingComplete is true, and
-          Layout (which normally owns drawers) isn't mounted yet. */}
+          Layout (which normally owns drawers) isn't mounted yet.
+          The last-resort ErrorBoundary lives in main.tsx above every
+          provider — see there for why placing it here isn't enough. */}
       <ToastContainer />
       <SubscriptionModalHost />
     </>

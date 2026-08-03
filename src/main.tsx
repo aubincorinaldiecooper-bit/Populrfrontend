@@ -4,6 +4,7 @@ import { Theme } from '@astryxdesign/core/theme'
 import { LayerProvider } from '@astryxdesign/core/Layer'
 import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import { populrTheme } from './design-system/theme'
 import './index.css'
 import App from './App.tsx'
@@ -16,16 +17,27 @@ import App from './App.tsx'
 // AuthProvider wraps AppProvider so any AppContext consumer that needs to
 // react to auth (e.g. a sign-out that clears user-scoped state) can read
 // the session from a single, higher-in-tree source of truth.
+//
+// ErrorBoundary sits at the absolute top of the tree — above every
+// provider — so a failure inside Theme, LayerProvider, BrowserRouter,
+// AuthProvider, AppProvider, App, or App's own siblings (ToastContainer,
+// SubscriptionModalHost) still surfaces a real message instead of a
+// blank root. It deliberately consumes nothing from those providers (no
+// theme tokens, no router hooks) so it stays renderable even when one
+// of them is the thing that crashed. Layout has its own, route-scoped
+// boundary for the common in-content case.
 createRoot(document.getElementById('root')!).render(
-  <Theme theme={populrTheme} mode="light">
-    <LayerProvider>
-      <BrowserRouter>
-        <AuthProvider>
-          <AppProvider>
-            <App />
-          </AppProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </LayerProvider>
-  </Theme>
+  <ErrorBoundary>
+    <Theme theme={populrTheme} mode="light">
+      <LayerProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <AppProvider>
+              <App />
+            </AppProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </LayerProvider>
+    </Theme>
+  </ErrorBoundary>
 )
