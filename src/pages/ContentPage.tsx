@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Loader2, AlertCircle, Pencil, Trash2,
+  Pencil, Trash2,
   XCircle, RefreshCw, ExternalLink, Eye, Clock, Image as ImageIcon,
-  Video as VideoIcon, GalleryHorizontal, Type as TypeIcon,
+  Video as VideoIcon, GalleryHorizontal, Type as TypeIcon, AlertCircle,
 } from 'lucide-react';
+import { ClickableCard } from '@astryxdesign/core/ClickableCard';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { TabList, Tab } from '@astryxdesign/core/TabList';
+import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
@@ -107,15 +112,11 @@ export default function ContentPage() {
     return (
       <div className="pop-page max-w-[640px]">
         <PageHeader title="Content" />
-        <div className="pop-card p-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
-            <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see your posts here.
-            </p>
-          </div>
-        </div>
+        <Banner
+          status="warning"
+          title="Populr isn't connected to a backend yet"
+          description="Set VITE_API_URL to your Populr backend to see your posts here."
+        />
       </div>
     );
   }
@@ -125,40 +126,29 @@ export default function ContentPage() {
       <PageHeader
         title="Content"
         subtitle="Everything you've created and published across your connected platforms."
-        action={
-          <button onClick={() => navigate('/create')} className="pop-btn-primary">
-            Create a post
-          </button>
-        }
+        action={<Button label="Create a post" variant="primary" onClick={() => navigate('/create')} />}
       />
 
-      <div className="flex items-center gap-1.5 mb-6 border-b border-[#E8E4DF]">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3.5 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-all ${tab === t.id ? 'border-chartreuse text-[#111111]' : 'border-transparent text-[#6B6B6B] hover:text-[#111111]'}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mb-6 overflow-x-auto">
+        <TabList value={tab} onChange={v => setTab(v as ContentTab)} hasDivider>
+          {TABS.map(t => (
+            <Tab key={t.id} value={t.id} label={t.label} />
+          ))}
+        </TabList>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 size={20} className="animate-spin text-[#6B6B6B]" />
+          <Spinner size="lg" />
         </div>
       ) : error ? (
-        <div className="pop-card p-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
-          <p className="text-[13px] text-[#111111]">{error}</p>
-        </div>
+        <Banner status="error" title="Couldn't load your posts" description={error} />
       ) : posts.length === 0 ? (
         <EmptyState
           icon="content"
           title="No posts yet"
           description="Create your first post and publish it across your connected platforms."
-          action={<button onClick={() => navigate('/create')} className="pop-btn-primary">Create a post</button>}
+          action={<Button label="Create a post" variant="primary" onClick={() => navigate('/create')} />}
         />
       ) : (
         <div className="space-y-3">
@@ -194,10 +184,11 @@ function PostCard({ post, busy, onOpen, onEdit, onDelete, onCancel, onRetry }: {
   const MediaTypeIcon = MEDIA_TYPE_ICON[p.media_type ?? 'text'];
   const status = p.status;
   const externalTarget = targets.find(t => t.url);
+  const captionPreview = p.content?.trim() ? p.content.trim().slice(0, 60) : 'No caption';
 
   return (
-    <div className="pop-card p-4 flex flex-col sm:flex-row gap-4">
-      <button onClick={onOpen} className="flex-shrink-0 w-full sm:w-28 aspect-square rounded-xl overflow-hidden bg-[#FAFAF8] border border-[#E8E4DF]">
+    <ClickableCard label={`Post: ${captionPreview}`} padding={4} className="flex flex-col sm:flex-row gap-4" onClick={onOpen}>
+      <div className="flex-shrink-0 w-full sm:w-28 aspect-square rounded-xl overflow-hidden bg-[#FAFAF8] border border-[#E8E4DF]">
         {thumb ? (
           thumb.media_type === 'video' ? (
             <video src={thumb.storage_url} className="w-full h-full object-cover" muted />
@@ -209,11 +200,11 @@ function PostCard({ post, busy, onOpen, onEdit, onDelete, onCancel, onRetry }: {
             <MediaTypeIcon size={20} className="text-[#9B9B8F]" />
           </div>
         )}
-      </button>
+      </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-3">
-          <button onClick={onOpen} className="text-left min-w-0">
+          <div className="min-w-0">
             <p className="text-[13px] text-[#111111] line-clamp-2">
               {p.content?.trim() || <span className="text-[#9B9B8F]">No caption</span>}
             </p>
@@ -223,7 +214,7 @@ function PostCard({ post, busy, onOpen, onEdit, onDelete, onCancel, onRetry }: {
               </span>
               <span className="pop-meta flex items-center gap-1"><Clock size={10} /> {timeLabel(p)}</span>
             </div>
-          </button>
+          </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {targets.map(t => {
               const meta = platformMeta(t.platform);
@@ -242,49 +233,43 @@ function PostCard({ post, busy, onOpen, onEdit, onDelete, onCancel, onRetry }: {
         <div className="flex items-center gap-2 mt-3 flex-wrap">
           {status === 'draft' && (
             <>
-              <button onClick={onEdit} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Pencil size={12} /> Edit</button>
-              <button onClick={onDelete} disabled={busy} className="pop-btn-ghost text-[12px] py-1.5 px-3 text-[#DC2626] disabled:opacity-40"><Trash2 size={12} /> Delete</button>
+              <Button variant="secondary" size="sm" label="Edit" icon={<Pencil size={12} />} onClick={onEdit} />
+              <Button variant="ghost" size="sm" label="Delete" icon={<Trash2 size={12} className="text-[#DC2626]" />} isDisabled={busy} onClick={onDelete} />
             </>
           )}
           {status === 'scheduled' && (
             <>
-              <button onClick={onOpen} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Eye size={12} /> View</button>
+              <Button variant="secondary" size="sm" label="View" icon={<Eye size={12} />} onClick={onOpen} />
               {/* No "Edit schedule" here: CreatePostPage has no schedule
                   control right now and always submits publishNow: true,
                   so reusing it would silently attempt an immediate
                   publish instead of editing the scheduled time. */}
-              <button onClick={onCancel} disabled={busy} className="pop-btn-ghost text-[12px] py-1.5 px-3 text-[#DC2626] disabled:opacity-40"><XCircle size={12} /> Cancel</button>
+              <Button variant="ghost" size="sm" label="Cancel" icon={<XCircle size={12} className="text-[#DC2626]" />} isDisabled={busy} onClick={onCancel} />
             </>
           )}
           {status === 'published' && (
             <>
-              <button onClick={onOpen} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Eye size={12} /> View details</button>
+              <Button variant="secondary" size="sm" label="View details" icon={<Eye size={12} />} onClick={onOpen} />
               {externalTarget?.url && (
-                <a href={externalTarget.url} target="_blank" rel="noopener noreferrer" className="pop-btn-ghost text-[12px] py-1.5 px-3">
-                  <ExternalLink size={12} /> Open on platform
-                </a>
+                <Button variant="ghost" size="sm" label="Open on platform" icon={<ExternalLink size={12} />} href={externalTarget.url} target="_blank" rel="noopener noreferrer" />
               )}
             </>
           )}
           {status === 'partially_published' && (
             <>
-              <button onClick={onOpen} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Eye size={12} /> View details</button>
-              <button onClick={onRetry} disabled={busy} className="pop-btn-secondary text-[12px] py-1.5 px-3 disabled:opacity-40">
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Retry failed destinations
-              </button>
+              <Button variant="secondary" size="sm" label="View details" icon={<Eye size={12} />} onClick={onOpen} />
+              <Button variant="secondary" size="sm" label="Retry failed destinations" icon={<RefreshCw size={12} />} isLoading={busy} isDisabled={busy} onClick={onRetry} />
             </>
           )}
           {status === 'failed' && (
             <>
-              <button onClick={onOpen} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><AlertCircle size={12} /> View error</button>
-              <button onClick={onEdit} className="pop-btn-tertiary text-[12px] py-1.5 px-3"><Pencil size={12} /> Edit</button>
-              <button onClick={onRetry} disabled={busy} className="pop-btn-secondary text-[12px] py-1.5 px-3 disabled:opacity-40">
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Retry
-              </button>
+              <Button variant="secondary" size="sm" label="View error" icon={<AlertCircle size={12} />} onClick={onOpen} />
+              <Button variant="secondary" size="sm" label="Edit" icon={<Pencil size={12} />} onClick={onEdit} />
+              <Button variant="secondary" size="sm" label="Retry" icon={<RefreshCw size={12} />} isLoading={busy} isDisabled={busy} onClick={onRetry} />
             </>
           )}
         </div>
       </div>
-    </div>
+    </ClickableCard>
   );
 }

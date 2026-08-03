@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  ArrowLeft, Loader2, AlertCircle,
+  ArrowLeft, AlertCircle,
   Pencil, Trash2, XCircle, RefreshCw, ExternalLink, Clock, Image as ImageIcon,
   Video as VideoIcon, GalleryHorizontal, Type as TypeIcon, User,
 } from 'lucide-react';
+import { Card } from '@astryxdesign/core/Card';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { platformMeta } from '../lib/platformMeta';
@@ -102,7 +106,7 @@ export default function PostDetailPage() {
   if (loading) {
     return (
       <div className="pop-page max-w-[720px] flex items-center justify-center py-24">
-        <Loader2 size={20} className="animate-spin text-[#6B6B6B]" />
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -110,11 +114,8 @@ export default function PostDetailPage() {
   if (error || !post) {
     return (
       <div className="pop-page max-w-[720px]">
-        <button onClick={() => navigate('/content')} className="pop-btn-ghost mb-6"><ArrowLeft size={16} /> Back to Content</button>
-        <div className="pop-card p-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
-          <p className="text-[13px] text-[#111111]">{error ?? 'This post could not be found.'}</p>
-        </div>
+        <Button variant="ghost" icon={<ArrowLeft size={16} />} label="Back to Content" className="mb-6" onClick={() => navigate('/content')} />
+        <Banner status="error" title="Couldn't load this post" description={error ?? 'This post could not be found.'} />
       </div>
     );
   }
@@ -125,7 +126,7 @@ export default function PostDetailPage() {
 
   return (
     <div className="pop-page max-w-[820px]">
-      <button onClick={() => navigate('/content')} className="pop-btn-ghost mb-6"><ArrowLeft size={16} /> Back to Content</button>
+      <Button variant="ghost" icon={<ArrowLeft size={16} />} label="Back to Content" className="mb-6" onClick={() => navigate('/content')} />
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* LEFT: media + caption */}
@@ -143,14 +144,14 @@ export default function PostDetailPage() {
               ))}
             </div>
           ) : (
-            <div className="pop-card p-8 flex flex-col items-center justify-center text-center">
+            <Card padding={8} className="flex flex-col items-center justify-center text-center">
               {(() => { const Icon = MEDIA_TYPE_ICON[p.media_type ?? 'text']; return <Icon size={22} className="text-[#9B9B8F] mb-2" />; })()}
               <p className="pop-meta">Text-only post — no media attached.</p>
-            </div>
+            </Card>
           )}
-          <div className="pop-card p-4">
+          <Card padding={4}>
             <p className="pop-body whitespace-pre-wrap">{p.content?.trim() || <span className="text-[#9B9B8F]">No caption</span>}</p>
-          </div>
+          </Card>
         </div>
 
         {/* RIGHT: status + destinations */}
@@ -165,7 +166,7 @@ export default function PostDetailPage() {
             <h1 className="pop-section-heading">Post details</h1>
           </div>
 
-          <div className="pop-card p-5 space-y-2.5">
+          <Card padding={5} className="space-y-2.5">
             <div className="flex items-center gap-2 text-[12px] text-[#6B6B6B]">
               <User size={13} /> Created by {user?.name || user?.email || 'you'}
             </div>
@@ -182,9 +183,9 @@ export default function PostDetailPage() {
                 <Clock size={13} /> Published {fullDate(p.published_at)}
               </div>
             )}
-          </div>
+          </Card>
 
-          <div className="pop-card p-5">
+          <Card padding={5}>
             <h2 className="pop-card-title mb-4">Destinations</h2>
             <div className="space-y-2.5">
               {targets.map(t => {
@@ -211,13 +212,13 @@ export default function PostDetailPage() {
                 );
               })}
             </div>
-          </div>
+          </Card>
 
           <div className="flex flex-wrap gap-2.5">
             {status === 'draft' && (
               <>
-                <button onClick={() => navigate('/create', { state: { editPostId: p.id } })} className="pop-btn-primary"><Pencil size={14} /> Edit</button>
-                <button onClick={handleDelete} disabled={busy} className="pop-btn-ghost text-[#DC2626] disabled:opacity-40"><Trash2 size={14} /> Delete</button>
+                <Button variant="primary" label="Edit" icon={<Pencil size={14} />} onClick={() => navigate('/create', { state: { editPostId: p.id } })} />
+                <Button variant="ghost" label="Delete" icon={<Trash2 size={14} className="text-[#DC2626]" />} isDisabled={busy} onClick={handleDelete} />
               </>
             )}
             {status === 'scheduled' && (
@@ -225,22 +226,16 @@ export default function PostDetailPage() {
               // control right now and always submits publishNow: true, so
               // reusing it would silently attempt an immediate publish
               // instead of editing the scheduled time.
-              <button onClick={handleCancel} disabled={busy} className="pop-btn-ghost text-[#DC2626] disabled:opacity-40">
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Cancel
-              </button>
+              <Button variant="ghost" label="Cancel" icon={<XCircle size={14} className="text-[#DC2626]" />} isLoading={busy} isDisabled={busy} onClick={handleCancel} />
             )}
             {status === 'failed' && (
               <>
-                <button onClick={() => navigate('/create', { state: { editPostId: p.id } })} className="pop-btn-tertiary"><Pencil size={14} /> Edit</button>
-                <button onClick={handleRetry} disabled={busy} className="pop-btn-primary disabled:opacity-40">
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Retry
-                </button>
+                <Button variant="secondary" label="Edit" icon={<Pencil size={14} />} onClick={() => navigate('/create', { state: { editPostId: p.id } })} />
+                <Button variant="primary" label="Retry" icon={<RefreshCw size={14} />} isLoading={busy} isDisabled={busy} onClick={handleRetry} />
               </>
             )}
             {status === 'partially_published' && anyFailed && (
-              <button onClick={handleRetry} disabled={busy} className="pop-btn-primary disabled:opacity-40">
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Retry failed destinations
-              </button>
+              <Button variant="primary" label="Retry failed destinations" icon={<RefreshCw size={14} />} isLoading={busy} isDisabled={busy} onClick={handleRetry} />
             )}
           </div>
         </div>

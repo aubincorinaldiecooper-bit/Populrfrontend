@@ -6,6 +6,12 @@ import {
   Upload, X as XIcon, GripVertical, Instagram, Music, Linkedin, AlertCircle,
   ChevronLeft, ChevronRight, Loader2, Check, ArrowRight, RefreshCw,
 } from 'lucide-react';
+import { Card } from '@astryxdesign/core/Card';
+import { SelectableCard } from '@astryxdesign/core/SelectableCard';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { TextArea } from '@astryxdesign/core/TextArea';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import PlatformPreviewCard from '../components/create-post/PlatformPreviewCard';
@@ -308,15 +314,11 @@ export default function CreatePostPage() {
     return (
       <div className="pop-page max-w-[640px]">
         <PageHeader title="Create Post" />
-        <div className="pop-card p-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
-            <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to create and publish posts.
-            </p>
-          </div>
-        </div>
+        <Banner
+          status="warning"
+          title="Populr isn't connected to a backend yet"
+          description="Set VITE_API_URL to your Populr backend to create and publish posts."
+        />
       </div>
     );
   }
@@ -324,7 +326,7 @@ export default function CreatePostPage() {
   if (loadingExisting) {
     return (
       <div className="pop-page max-w-[720px] flex items-center justify-center py-24">
-        <Loader2 size={20} className="animate-spin text-[#6B6B6B]" />
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -371,7 +373,7 @@ export default function CreatePostPage() {
 
         <div className="space-y-2.5 mb-8">
           {post.targets.map(t => (
-            <div key={t.id} className="pop-card p-4 flex items-center gap-3">
+            <Card key={t.id} padding={4} className="flex items-center gap-3">
               {(() => {
                 const P = PLATFORMS.find(p => p.id === t.platform);
                 const Icon = P?.icon ?? Instagram;
@@ -387,16 +389,17 @@ export default function CreatePostPage() {
                 {t.status === 'failed' && <AlertCircle size={11} />}
                 {destinationLabel(t.status)}
               </span>
-            </div>
+            </Card>
           ))}
         </div>
 
         {allDone && (
           <div className="flex flex-col sm:flex-row gap-2.5">
-            <button onClick={() => navigate(`/content/${post.post.id}`)} className="pop-btn-tertiary flex-1 justify-center">View post</button>
-            <button onClick={() => navigate('/content')} className="pop-btn-tertiary flex-1 justify-center">Go to Content</button>
+            <Button variant="secondary" label="View post" className="flex-1" onClick={() => navigate(`/content/${post.post.id}`)} />
+            <Button variant="secondary" label="Go to Content" className="flex-1" onClick={() => navigate('/content')} />
             {anyFailed && (
-              <button
+              <Button
+                variant="secondary" label="Retry failed platforms" icon={<RefreshCw size={14} />} className="flex-1"
                 onClick={async () => {
                   const { retryPostDestinations } = await import('../lib/api');
                   try {
@@ -406,14 +409,9 @@ export default function CreatePostPage() {
                     showToast(err instanceof Error ? err.message : 'Retry failed.', 'error');
                   }
                 }}
-                className="pop-btn-secondary flex-1 justify-center"
-              >
-                <RefreshCw size={14} /> Retry failed platforms
-              </button>
+              />
             )}
-            <button onClick={() => navigate('/')} className="pop-btn-primary flex-1 justify-center">
-              {anySucceeded ? 'Return Home' : 'Back to Home'}
-            </button>
+            <Button variant="primary" label={anySucceeded ? 'Return Home' : 'Back to Home'} className="flex-1" onClick={() => navigate('/')} />
           </div>
         )}
       </div>
@@ -430,9 +428,7 @@ export default function CreatePostPage() {
   return (
     <div className="pop-page max-w-[720px]">
       <div className="flex items-center justify-between mb-6">
-        <button onClick={step === 1 ? () => navigate(-1) : goBack} className="pop-btn-ghost">
-          <ChevronLeft size={16} /> Back
-        </button>
+        <Button variant="ghost" icon={<ChevronLeft size={16} />} label="Back" onClick={step === 1 ? () => navigate(-1) : goBack} />
         <div className="flex items-center gap-1.5">
           {[1, 2, 3].map(s => (
             <span key={s} className={`h-[3px] w-8 rounded-full ${s <= step ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`} />
@@ -446,14 +442,12 @@ export default function CreatePostPage() {
       {/* Step 1: media type + content */}
       {step === 1 && (
         connectedAccounts.length === 0 ? (
-          <div className="pop-card p-6 flex items-start gap-3">
-            <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-[13px] font-semibold text-[#111111]">Connect an account first</p>
-              <p className="text-[12px] text-[#6B6B6B] mt-1">Populr needs at least one connected account to know what you can post and where.</p>
-              <button onClick={() => navigate('/connections')} className="pop-btn-primary text-[12px] py-2 px-3 mt-3">Go to Connections</button>
-            </div>
-          </div>
+          <Banner
+            status="warning"
+            title="Connect an account first"
+            description="Populr needs at least one connected account to know what you can post and where."
+            endContent={<Button label="Go to Connections" variant="primary" size="sm" onClick={() => navigate('/connections')} />}
+          />
         ) : (
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -464,10 +458,12 @@ export default function CreatePostPage() {
                   .map(a => a.platform);
                 const uniquePlatforms = [...new Set(supportedPlatforms)];
                 return (
-                  <button
+                  <SelectableCard
                     key={mt.id}
-                    onClick={() => { setMediaType(mt.id); if (mt.id === 'text') setMediaItems([]); }}
-                    className={`pop-card p-5 text-left transition-all hover:border-[#D4CFC8] ${mediaType === mt.id ? 'border-chartreuse ring-2 ring-chartreuse/30' : ''}`}
+                    label={mt.label}
+                    padding={5}
+                    isSelected={mediaType === mt.id}
+                    onChange={() => { setMediaType(mt.id); if (mt.id === 'text') setMediaItems([]); }}
                   >
                     <Icon size={24} className="text-[#111111] mb-3" />
                     <p className="pop-card-title">{mt.label}</p>
@@ -481,7 +477,7 @@ export default function CreatePostPage() {
                         })}
                       </div>
                     )}
-                  </button>
+                  </SelectableCard>
                 );
               })}
             </div>
@@ -573,10 +569,13 @@ export default function CreatePostPage() {
                 const selected = selectedAccountIds.includes(a.id);
                 const caps = capabilities[a.platform];
                 return (
-                  <button
+                  <SelectableCard
                     key={a.id}
-                    onClick={() => setSelectedAccountIds(prev => selected ? prev.filter(id => id !== a.id) : [...prev, a.id])}
-                    className={`pop-card p-4 w-full text-left flex items-center gap-3 transition-all ${selected ? 'border-chartreuse ring-2 ring-chartreuse/30' : 'hover:border-[#D4CFC8]'}`}
+                    label={platformLabel(a.platform)}
+                    padding={4}
+                    className="w-full flex items-center gap-3"
+                    isSelected={selected}
+                    onChange={() => setSelectedAccountIds(prev => selected ? prev.filter(id => id !== a.id) : [...prev, a.id])}
                   >
                     <Icon size={22} style={{ color: P?.color }} />
                     <div className="flex-1 min-w-0">
@@ -591,7 +590,7 @@ export default function CreatePostPage() {
                     ) : (
                       <span className="w-5 h-5 rounded-full border-2 border-[#E8E4DF] flex-shrink-0" />
                     )}
-                  </button>
+                  </SelectableCard>
                 );
               })}
           </div>
@@ -619,14 +618,13 @@ export default function CreatePostPage() {
           })()}
 
           <div className="mt-8">
-            <label className="text-[13px] font-semibold text-[#111111]">Caption</label>
-            <p className="pop-body mt-1 mb-3">This caption will be used across your selected platforms. You can review how it appears on each platform before publishing.</p>
-            <textarea
+            <TextArea
+              label="Caption"
+              description="This caption will be used across your selected platforms. You can review how it appears on each platform before publishing."
               value={caption}
-              onChange={e => setCaption(e.target.value)}
+              onChange={setCaption}
               rows={6}
               placeholder="Write a caption…"
-              className="pop-input w-full resize-none"
             />
             <div className="flex items-center justify-between mt-1.5">
               <span className="pop-meta">{caption.length} characters</span>
@@ -705,9 +703,11 @@ export default function CreatePostPage() {
             </div>
           )}
 
-          <button onClick={() => setStep(2)} className="pop-btn-ghost mt-4 mx-auto block">Edit caption &amp; platforms</button>
+          <div className="mt-4 flex justify-center">
+            <Button variant="ghost" label="Edit caption & platforms" onClick={() => setStep(2)} />
+          </div>
 
-          <div className="pop-card p-5 mt-6">
+          <Card padding={5} className="mt-6">
             <div className="text-[12px] text-[#6B6B6B] space-y-0.5 mb-4 pb-4 border-b border-[#E8E4DF]">
               <p>Media: <span className="text-[#111111] font-medium capitalize">{mediaType}</span></p>
               <p>Destinations: <span className="text-[#111111] font-medium">{selectedAccountIds.length} platform{selectedAccountIds.length === 1 ? '' : 's'} ({selectedPlatforms.map(platformLabel).join(', ')})</span></p>
@@ -715,19 +715,18 @@ export default function CreatePostPage() {
               <p>Caption: <span className="text-[#111111] font-medium">{caption.trim() ? `${caption.length} characters` : 'Empty'}</span></p>
             </div>
 
-            <button onClick={handleSubmit} disabled={!canSubmit} className="pop-btn-primary w-full justify-center disabled:opacity-40 disabled:cursor-not-allowed">
-              {submitting ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} {publishButtonLabel()}
-            </button>
-          </div>
+            <Button
+              variant="primary" width="100%" icon={<ArrowRight size={15} />} label={publishButtonLabel()}
+              isLoading={submitting} isDisabled={!canSubmit} onClick={handleSubmit}
+            />
+          </Card>
         </div>
       )}
 
       {/* Footer nav for steps 1-2 */}
       {step < 3 && (
         <div className="flex justify-end mt-8">
-          <button onClick={goNext} disabled={!canContinueFrom(step)} className="pop-btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-            Continue <ArrowRight size={15} />
-          </button>
+          <Button variant="primary" label="Continue" endContent={<ArrowRight size={15} />} isDisabled={!canContinueFrom(step)} onClick={goNext} />
         </div>
       )}
     </div>
