@@ -5,6 +5,9 @@ import type { Segment, AISegment } from '../data';
 import {
   Search, Plus, Sparkles, ChevronLeft,
 } from 'lucide-react';
+import { ClickableCard } from '@astryxdesign/core/ClickableCard';
+import { Button } from '@astryxdesign/core/Button';
+import { TextInput } from '@astryxdesign/core/TextInput';
 import PlatformDot from '../components/PlatformDot';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
@@ -89,19 +92,12 @@ export default function SegmentsPage() {
   if (showBuilder) {
     return (
       <div className="p-6 lg:p-8 max-w-[700px] mx-auto">
-        <button onClick={() => setShowBuilder(false)}
-          className="text-[13px] text-[#6B6B6B] hover:text-[#111111] mb-5 flex items-center gap-1.5 transition-colors">
-          <ChevronLeft size={16} />Back to segments
-        </button>
+        <Button variant="ghost" size="sm" icon={<ChevronLeft size={16} />} label="Back to segments" className="mb-5" onClick={() => setShowBuilder(false)} />
         <h2 className="font-geist font-bold text-xl text-[#111111] mb-1">Create segment</h2>
         <p className="text-[13px] text-[#6B6B6B] mb-6">Define rules to automatically group contacts</p>
 
         <div className="space-y-4">
-          <div>
-            <label className="text-[12px] font-medium text-[#111111] mb-1 block">Segment name</label>
-            <input type="text" placeholder="e.g., High-intent Instagram followers"
-              className="w-full border border-[#E8E4DF] rounded-xl px-4 py-3 text-[13px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
-          </div>
+          <TextInput label="Segment name" placeholder="e.g., High-intent Instagram followers" value="" onChange={() => {}} />
 
           <div>
             <label className="text-[12px] font-medium text-[#111111] mb-2 block">Match conditions</label>
@@ -130,14 +126,8 @@ export default function SegmentsPage() {
           </div>
 
           <div className="flex items-center gap-2 pt-2">
-            <button onClick={() => { setShowBuilder(false); }}
-              className="flex-1 bg-chartreuse text-[#111111] rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all">
-              Create segment
-            </button>
-            <button onClick={() => setShowBuilder(false)}
-              className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2.5 text-[13px] font-medium hover:bg-[#FAFAF8] transition-all">
-              Cancel
-            </button>
+            <Button variant="primary" label="Create segment" className="flex-1" onClick={() => setShowBuilder(false)} />
+            <Button variant="secondary" label="Cancel" className="flex-1" onClick={() => setShowBuilder(false)} />
           </div>
         </div>
       </div>
@@ -147,21 +137,18 @@ export default function SegmentsPage() {
   if (selectedSegment) {
     return (
       <div className="pop-page">
-        <button onClick={() => setSelectedSegment(null)}
-          className="text-[13px] text-[#6B6B6B] hover:text-[#111111] mb-5 flex items-center gap-1.5 transition-colors">
-          <ChevronLeft size={16} />Back to segments
-        </button>
+        <Button variant="ghost" size="sm" icon={<ChevronLeft size={16} />} label="Back to segments" className="mb-5" onClick={() => setSelectedSegment(null)} />
 
         <PageHeader
           title={selectedSegment.name}
           subtitle={`${segmentContacts.length} contacts in this segment`}
           action={
-            <div className="flex items-center gap-2">
-              <div className="relative hidden sm:block">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-                <input type="text" placeholder="Search contacts..."
-                  className="w-48 bg-white border border-[#E8E4DF] rounded-[10px] pl-9 pr-3 py-2 text-[13px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
-              </div>
+            <div className="hidden sm:block">
+              <TextInput
+                label="Search contacts" isLabelHidden value="" onChange={() => {}}
+                placeholder="Search contacts..." startIcon={<Search size={16} />}
+                className="w-48"
+              />
             </div>
           }
         />
@@ -238,15 +225,14 @@ export default function SegmentsPage() {
         subtitle={`${segments.length} saved · ${aiSegments.length} AI-generated`}
         action={
           <div className="flex items-center gap-2">
-            <div className="relative hidden sm:block">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search segments..."
-                className="w-48 bg-white border border-[#E8E4DF] rounded-[10px] pl-9 pr-3 py-2 text-[13px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
+            <div className="hidden sm:block">
+              <TextInput
+                label="Search segments" isLabelHidden value={search} onChange={setSearch}
+                placeholder="Search segments..." startIcon={<Search size={16} />}
+                className="w-48"
+              />
             </div>
-            <button onClick={() => setShowBuilder(true)}
-              className="flex items-center gap-2 bg-chartreuse rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-[#111111] hover:bg-chartreuse-hover transition-all">
-              <Plus size={14} strokeWidth={2.5} />New segment
-            </button>
+            <Button variant="primary" label="New segment" icon={<Plus size={14} strokeWidth={2.5} />} onClick={() => setShowBuilder(true)} />
           </div>
         }
       />
@@ -263,8 +249,10 @@ export default function SegmentsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredAI.map((seg: AISegment) => (
-              <button key={seg.id} onClick={() => setSelectedSegment({ type: 'ai', id: seg.id, name: seg.name })}
-                className="bg-white rounded-2xl p-4 border border-[#E8E4DF] hover:border-chartreuse hover:shadow-card transition-all text-left">
+              <ClickableCard
+                key={seg.id} label={seg.name} padding={4}
+                onClick={() => setSelectedSegment({ type: 'ai', id: seg.id, name: seg.name })}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-geist font-semibold text-sm text-[#111111]">{seg.name}</h4>
                   <span className="font-geist-mono font-bold text-lg text-[#111111]">{seg.count}</span>
@@ -277,7 +265,7 @@ export default function SegmentsPage() {
                   })}
                   {seg.contactIds.length > 4 && <span className="text-[10px] text-[#9B9B8F] self-center">+{seg.contactIds.length - 4}</span>}
                 </div>
-              </button>
+              </ClickableCard>
             ))}
           </div>
         )}
@@ -291,14 +279,16 @@ export default function SegmentsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSaved.map(seg => (
-              <button key={seg.id} onClick={() => setSelectedSegment({ type: 'saved', id: seg.id, name: seg.name })}
-                className="bg-white rounded-2xl p-4 border border-[#E8E4DF] hover:border-[#D4CFC8] hover:shadow-card transition-all text-left">
+              <ClickableCard
+                key={seg.id} label={seg.name} padding={4}
+                onClick={() => setSelectedSegment({ type: 'saved', id: seg.id, name: seg.name })}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-geist font-semibold text-sm text-[#111111]">{seg.name}</h4>
                   <span className="font-geist-mono font-bold text-lg text-[#111111]">{seg.count}</span>
                 </div>
                 <p className="text-[11px] text-[#6B6B6B]">{seg.description}</p>
-              </button>
+              </ClickableCard>
             ))}
             <button onClick={() => setShowBuilder(true)}
               className="border border-dashed border-[#E8E4DF] rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-[#D4CFC8] hover:bg-[#FAFAF8] transition-all text-[#6B6B6B]">

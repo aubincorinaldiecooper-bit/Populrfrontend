@@ -2,6 +2,10 @@ import { useState } from 'react';
 import {
   Search, Users, Zap, Send, Pause, RotateCcw, Plus, MessageSquare,
 } from 'lucide-react';
+import { Button } from '@astryxdesign/core/Button';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { contacts, conversations } from '../data';
 import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
@@ -64,18 +68,17 @@ export default function InboxPage() {
     <div className="pop-page h-full flex flex-col max-w-[1400px]">
       {/* Sticky Toolbar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 pb-4 border-b border-[#E8E4DF]">
-        <div className="relative w-full sm:max-w-[320px]">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..."
-            className="pop-search w-full" />
-        </div>
-        <div className="flex gap-1 overflow-x-auto pb-1 w-full sm:w-auto">
-          {STATUS_FILTERS.map(f => (
-            <button key={f.key} onClick={() => setStatusFilter(f.key)}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${statusFilter === f.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-              {f.label}
-            </button>
-          ))}
+        <TextInput
+          label="Search conversations" isLabelHidden value={searchQuery} onChange={setSearchQuery}
+          placeholder="Search conversations..." startIcon={<Search size={16} />}
+          className="w-full sm:max-w-[320px]"
+        />
+        <div className="overflow-x-auto w-full sm:w-auto">
+          <TabList value={statusFilter} onChange={v => setStatusFilter(v as FilterStatus)}>
+            {STATUS_FILTERS.map(f => (
+              <Tab key={f.key} value={f.key} label={f.label} />
+            ))}
+          </TabList>
         </div>
       </div>
 
@@ -177,26 +180,24 @@ export default function InboxPage() {
               <div className="px-4 py-3 border-t border-[#E8E4DF] bg-white flex-shrink-0">
                 {showNoteInput ? (
                   <div className="space-y-2">
-                    <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add an internal note..."
-                      className="w-full h-20 border border-[#E8E4DF] rounded-xl p-3 text-[13px] placeholder:text-[#9B9B8F] resize-none focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
+                    <TextArea
+                      label="Internal note" isLabelHidden value={noteText} onChange={setNoteText}
+                      placeholder="Add an internal note..." rows={3}
+                    />
                     <div className="flex gap-2">
-                      <button onClick={handleAddNote} className="pop-btn-primary text-[12px] py-1.5 px-3">Add note</button>
-                      <button onClick={() => setShowNoteInput(false)} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Cancel</button>
+                      <Button variant="primary" size="sm" label="Add note" onClick={handleAddNote} />
+                      <Button variant="secondary" size="sm" label="Cancel" onClick={() => setShowNoteInput(false)} />
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <input type="text" value={replyText} onChange={e => setReplyText(e.target.value)}
+                    <TextInput
+                      label="Reply" isLabelHidden value={replyText} onChange={setReplyText}
                       onKeyDown={e => { if (e.key === 'Enter') handleSendReply(); }}
-                      placeholder="Type your reply..."
-                      className="flex-1 bg-[#FAFAF8] border border-[#E8E4DF] rounded-xl px-4 py-2.5 text-[13px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
-                    <button onClick={() => setShowNoteInput(true)} className="p-2.5 text-[#6B6B6B] hover:bg-[#FAFAF8] rounded-xl transition-all" title="Add note">
-                      <Plus size={18} />
-                    </button>
-                    <button onClick={handleSendReply} disabled={!replyText.trim()}
-                      className={`p-2.5 rounded-xl transition-all ${replyText.trim() ? 'bg-chartreuse text-[#111111]' : 'bg-[#E8E4DF] text-[#9B9B8F]'}`}>
-                      <Send size={16} />
-                    </button>
+                      placeholder="Type your reply..." className="flex-1"
+                    />
+                    <Button variant="ghost" isIconOnly icon={<Plus size={18} />} label="Add note" onClick={() => setShowNoteInput(true)} />
+                    <Button variant="primary" isIconOnly icon={<Send size={16} />} label="Send reply" isDisabled={!replyText.trim()} onClick={handleSendReply} />
                   </div>
                 )}
               </div>
@@ -248,21 +249,18 @@ export default function InboxPage() {
 
               <div className="space-y-2">
                 {activeConv?.isAutomated && !pausedAutomations.has(activeConv.id) && (
-                  <button onClick={() => { if (activeConv) setPausedAutomations(prev => new Set(prev).add(activeConv.id)); showToast('Automation paused', 'info'); }}
-                    className="w-full flex items-center gap-2 border border-[#E8E4DF] text-[#111111] rounded-xl px-3 py-2 text-[12px] font-medium hover:bg-[#FAFAF8] transition-all">
-                    <Pause size={14} />Pause automation
-                  </button>
+                  <Button
+                    variant="secondary" size="sm" label="Pause automation" icon={<Pause size={14} />} width="100%"
+                    onClick={() => { if (activeConv) setPausedAutomations(prev => new Set(prev).add(activeConv.id)); showToast('Automation paused', 'info'); }}
+                  />
                 )}
                 {activeConv?.isAutomated && pausedAutomations.has(activeConv.id) && (
-                  <button onClick={() => { if (activeConv) setPausedAutomations(prev => { const n = new Set(prev); n.delete(activeConv.id); return n; }); showToast('Automation resumed', 'success'); }}
-                    className="w-full flex items-center gap-2 bg-chartreuse text-[#111111] rounded-xl px-3 py-2 text-[12px] font-medium hover:bg-chartreuse-hover transition-all">
-                    <RotateCcw size={14} />Resume automation
-                  </button>
+                  <Button
+                    variant="primary" size="sm" label="Resume automation" icon={<RotateCcw size={14} />} width="100%"
+                    onClick={() => { if (activeConv) setPausedAutomations(prev => { const n = new Set(prev); n.delete(activeConv.id); return n; }); showToast('Automation resumed', 'success'); }}
+                  />
                 )}
-                <button onClick={() => openContactDrawer(activeContact.id, 'inbox')}
-                  className="w-full flex items-center gap-2 border border-[#E8E4DF] text-[#111111] rounded-xl px-3 py-2 text-[12px] font-medium hover:bg-[#FAFAF8] transition-all">
-                  <Users size={14} />View profile
-                </button>
+                <Button variant="secondary" size="sm" label="View profile" icon={<Users size={14} />} width="100%" onClick={() => openContactDrawer(activeContact.id, 'inbox')} />
               </div>
             </div>
           )}
