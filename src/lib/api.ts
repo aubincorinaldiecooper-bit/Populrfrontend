@@ -753,3 +753,61 @@ export async function adjustContactScore(id: string, delta: number, note?: strin
 export async function markContactConverted(id: string): Promise<void> {
   await apiFetch(`/api/contacts/${id}/converted`, { method: 'POST' });
 }
+
+// ============================================================
+// Posts library — the caller's own existing posts per connected account,
+// used to pick a specific post to attach an automation to. Distinct from
+// fetchPosts()/PostWithDetails above, which is the /api/publish drafting
+// flow's "what have I posted" list — this is populrbackend's /api/posts,
+// synced from Zernio and scoped server-side to the caller's own workspace.
+// ============================================================
+
+export interface PostLibraryItem {
+  id: string;
+  account_id: string;
+  platform: string;
+  external_post_id: string;
+  url: string | null;
+  caption: string | null;
+  media_url: string | null;
+  published_at: string | null;
+  likes: string | null;
+  comments: string | null;
+  shares: string | null;
+  saves: string | null;
+  views: string | null;
+  impressions: string | null;
+  reach: string | null;
+  engagement_rate: string | null;
+  account_username: string | null;
+  contacts_generated: string;
+  warm_leads: string;
+  hot_leads: string;
+  dms_sent: string;
+  funnels_attached: string;
+}
+
+/** GET /api/posts — the caller's own synced posts. Filters: accountId, platform. */
+export async function fetchPostsLibrary(filter: {
+  accountId?: string;
+  platform?: string;
+  limit?: number;
+} = {}): Promise<PostLibraryItem[]> {
+  const qs = new URLSearchParams();
+  if (filter.accountId) qs.set('accountId', filter.accountId);
+  if (filter.platform) qs.set('platform', filter.platform);
+  if (filter.limit !== undefined) qs.set('limit', String(filter.limit));
+  const query = qs.toString();
+  const data = await apiFetch<{ count: number; posts: PostLibraryItem[] }>(`/api/posts${query ? `?${query}` : ''}`);
+  return data.posts;
+}
+
+/** POST /api/posts/sync — refresh the library from Zernio for one (or all) of the caller's own accounts. */
+export async function syncPostsLibrary(accountId?: string): Promise<{ accounts: number; postsStored: number; errors: string[] }> {
+  return apiFetch('/api/posts/sync', { method: 'POST', body: accountId ? { accountId } : {} });
+}
+
+/** POST /api/posts/find-missing — "Can't find a post? Paste the URL." */
+export async function findMissingPost(accountId: string, url: string): Promise<{ post: PostLibraryItem; source: 'zernio' | 'url_only' }> {
+  return apiFetch('/api/posts/find-missing', { method: 'POST', body: { accountId, url } });
+}

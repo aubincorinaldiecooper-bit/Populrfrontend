@@ -1,23 +1,37 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { Button } from '@astryxdesign/core/Button';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
+import { Selector } from '@astryxdesign/core/Selector';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
+import { Switch } from '@astryxdesign/core/Switch';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Text } from '@astryxdesign/core/Text';
+import { Stack } from '@astryxdesign/core/Stack';
 import { useApp } from '../context/AppContext';
 import {
   createAutomation, updateAutomation, fetchCapabilities,
+  fetchPostsLibrary, syncPostsLibrary, findMissingPost,
   ApiError,
 } from '../lib/api';
 import type {
   AutomationRecord, AutomationInput, AutomationMatchMode, AutomationReplyChannel,
-  PlatformCapabilities,
+  PlatformCapabilities, PostLibraryItem,
 } from '../lib/api';
-import {
-  ChevronLeft, Check, AlertTriangle, Loader2,
-} from 'lucide-react';
+import { ChevronLeft, RefreshCw } from 'lucide-react';
 
 const MATCH_MODES: { value: AutomationMatchMode; label: string }[] = [
   { value: 'contains', label: 'Contains the keyword' },
   { value: 'exact', label: 'Matches exactly' },
   { value: 'starts_with', label: 'Starts with the keyword' },
 ];
+
+function fieldStatus(message?: string): { type: 'error'; message: string } | undefined {
+  return message ? { type: 'error', message } : undefined;
+}
 
 export default function AutomationBuilderPage() {
   const navigate = useNavigate();
@@ -32,7 +46,7 @@ export default function AutomationBuilderPage() {
   const [name, setName] = useState(editAuto?.name ?? '');
   const [accountId, setAccountId] = useState(editAuto?.account_id ?? '');
   const [postScope, setPostScope] = useState<'all' | 'specific'>(editAuto?.source_post_id ? 'specific' : 'all');
-  const [sourcePostId, setSourcePostId] = useState(editAuto?.source_post_id ?? '');
+  const [sourcePostId, setSourcePostId] = useState<string | null>(editAuto?.source_post_id ?? null);
   const [keywordsText, setKeywordsText] = useState((editAuto?.keywords ?? []).join(', '));
   const [matchMode, setMatchMode] = useState<AutomationMatchMode>(editAuto?.match_mode ?? 'contains');
   const [replyChannel, setReplyChannel] = useState<AutomationReplyChannel>(editAuto?.reply_channel ?? 'comment');
@@ -41,19 +55,75 @@ export default function AutomationBuilderPage() {
   const [linkUrl, setLinkUrl] = useState(editAuto?.link_url ?? '');
   const [tagsText, setTagsText] = useState((editAuto?.tags ?? []).join(', '));
   const [scoreDelta, setScoreDelta] = useState(editAuto?.score_delta ?? 0);
-  const [reviewFirst, setReviewFirst] = useState(editAuto?.ai_enabled && editAuto?.ai_mode === 'suggest');
+  const [reviewFirst, setReviewFirst] = useState(!!(editAuto?.ai_enabled && editAuto?.ai_mode === 'suggest'));
   const [active, setActive] = useState(editAuto?.active ?? true);
 
   const [capabilities, setCapabilities] = useState<Record<string, PlatformCapabilities>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverProblems, setServerProblems] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
+
+  // Real post picker — the account's own synced posts, never a hand-typed id.
+  const [libraryPosts, setLibraryPosts] = useState<PostLibraryItem[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsSyncing, setPostsSyncing] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [showFindMissing, setShowFindMissing] = useState(false);
+  const [missingUrl, setMissingUrl] = useState('');
+  const [findingMissing, setFindingMissing] = useState(false);
 
   useEffect(() => {
     fetchCapabilities()
       .then(list => setCapabilities(Object.fromEntries(list.map(c => [c.platform, c]))))
       .catch(err => console.error('[automations] failed to load platform capabilities:', err));
   }, []);
+
+  useEffect(() => {
+    if (postScope !== 'specific' || !accountId) {
+      // Clears stale options from a previous account/scope, not derived state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLibraryPosts([]);
+      return;
+    }
+    let cancelled = false;
+    setPostsLoading(true);
+    setPostsError(null);
+    fetchPostsLibrary({ accountId })
+      .then(posts => { if (!cancelled) setLibraryPosts(posts); })
+      .catch(err => { if (!cancelled) setPostsError(err instanceof Error ? err.message : 'Could not load your posts.'); })
+      .finally(() => { if (!cancelled) setPostsLoading(false); });
+    return () => { cancelled = true; };
+  }, [postScope, accountId]);
+
+  const handleSyncPosts = async () => {
+    if (!accountId) return;
+    setPostsSyncing(true);
+    setPostsError(null);
+    try {
+      await syncPostsLibrary(accountId);
+      setLibraryPosts(await fetchPostsLibrary({ accountId }));
+    } catch (err) {
+      setPostsError(err instanceof Error ? err.message : 'Could not sync your posts.');
+    } finally {
+      setPostsSyncing(false);
+    }
+  };
+
+  const handleFindMissing = async () => {
+    if (!accountId || !missingUrl.trim()) return;
+    setFindingMissing(true);
+    try {
+      const { post } = await findMissingPost(accountId, missingUrl.trim());
+      setLibraryPosts(prev => [post, ...prev.filter(p => p.id !== post.id)]);
+      setSourcePostId(post.id);
+      setShowFindMissing(false);
+      setMissingUrl('');
+      showToast('Post found and added', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not find that post.', 'error');
+    } finally {
+      setFindingMissing(false);
+    }
+  };
 
   const selectedAccount = connectedAccounts.find(a => a.id === accountId) ?? null;
   const caps = selectedAccount ? capabilities[selectedAccount.platform] : undefined;
@@ -77,12 +147,27 @@ export default function AutomationBuilderPage() {
     : replyChannel === 'both' && (!commentAllowed || !dmAllowed) ? (commentAllowed ? 'comment' : dmAllowed ? 'dm' : 'comment')
     : replyChannel;
 
+  const accountOptions = connectedAccounts.map(a => ({
+    value: a.id,
+    label: `${a.platform} — ${a.username ? `@${a.username}` : a.display_name ?? a.id}`,
+  }));
+
+  const postOptions = libraryPosts.map(p => ({
+    value: p.id,
+    label: p.caption?.trim()
+      ? `${p.caption.trim().slice(0, 60)}${p.caption.trim().length > 60 ? '…' : ''}`
+      : `Post ${p.external_post_id}`,
+    icon: p.media_url ? (
+      <img src={p.media_url} alt="" className="w-6 h-6 rounded object-cover" />
+    ) : undefined,
+  }));
+
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = 'Enter an automation name';
     if (!accountId) e.accountId = 'Select a connected account';
     if (!keywordsText.trim()) e.keywords = 'Enter at least one trigger keyword';
-    if (postScope === 'specific' && !String(sourcePostId).trim()) e.sourcePostId = 'Enter the post ID, or switch to All posts';
+    if (postScope === 'specific' && !sourcePostId) e.sourcePostId = 'Pick a post, or switch to All posts';
     if ((effectiveReplyChannel === 'comment' || effectiveReplyChannel === 'both') && !commentReplyBody.trim()) {
       e.commentReplyBody = 'Enter the public reply text';
     }
@@ -96,14 +181,13 @@ export default function AutomationBuilderPage() {
   const handleSave = async () => {
     setServerProblems([]);
     if (!validate()) return;
-    setSaving(true);
     try {
       const input: AutomationInput = {
         name: name.trim(),
         accountId,
         platform: selectedAccount!.platform,
         allPosts: postScope === 'all',
-        sourcePostId: postScope === 'specific' ? Number(sourcePostId) : null,
+        sourcePostId: postScope === 'specific' && sourcePostId ? Number(sourcePostId) : null,
         keywords: keywordsText.split(',').map(k => k.trim()).filter(Boolean),
         matchMode,
         replyChannel: effectiveReplyChannel,
@@ -136,194 +220,201 @@ export default function AutomationBuilderPage() {
       } else {
         showToast(err instanceof Error ? err.message : 'Could not save this automation.', 'error');
       }
-    } finally {
-      setSaving(false);
     }
   };
 
   return (
     <div className="pop-page max-w-[640px]">
-      <button onClick={() => navigate('/automations')} className="pop-btn-ghost mb-5">
-        <ChevronLeft size={16} />Back to automations
-      </button>
+      <Button label="Back to automations" variant="ghost" size="sm" icon={<ChevronLeft size={16} />} onClick={() => navigate('/automations')} />
 
-      <h1 className="pop-section-heading mb-1">{editAuto ? 'Edit automation' : 'Create automation'}</h1>
-      <p className="pop-body mb-6">
-        When someone comments a keyword on Instagram, Populr sends an approved reply, saves them as a contact, and tracks the conversation.
-      </p>
+      <div className="mt-4 mb-6">
+        <Heading level={1}>{editAuto ? 'Edit automation' : 'Create automation'}</Heading>
+        <Text type="supporting" display="block" className="mt-1">
+          When someone comments a keyword on Instagram, Populr sends an approved reply, saves them as a contact, and tracks the conversation.
+        </Text>
+      </div>
 
       {serverProblems.length > 0 && (
-        <div className="bg-[#FEE2E2] border border-[#FCA5A5] rounded-xl p-4 mb-5 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
-          <div className="text-[13px] text-[#991B1B] space-y-1">
-            {serverProblems.map((p, i) => <p key={i}>{p}</p>)}
-          </div>
+        <div className="mb-5">
+          <Banner status="error" title="This automation can't be saved as configured">
+            <ul className="list-disc pl-4 space-y-0.5">
+              {serverProblems.map((p, i) => <li key={i}>{p}</li>)}
+            </ul>
+          </Banner>
         </div>
       )}
 
-      <div className="space-y-5">
-        <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Automation name</label>
-          {errors.name && <p className="text-[11px] text-coral mb-1 flex items-center gap-1"><AlertTriangle size={10} />{errors.name}</p>}
-          <input type="text" value={name} onChange={e => setName(e.target.value)}
-            placeholder="e.g., Free guide keyword"
-            className={`pop-input w-full ${errors.name ? 'border-coral' : ''}`} />
-        </div>
+      <Stack gap={5}>
+        <TextInput
+          label="Automation name"
+          value={name}
+          onChange={setName}
+          placeholder="e.g., Free guide keyword"
+          status={fieldStatus(errors.name)}
+        />
+
+        {connectedAccounts.length === 0 ? (
+          <Text type="body" display="block">
+            No connected accounts yet. <button onClick={() => navigate('/connections')} className="underline">Connect one</button> first.
+          </Text>
+        ) : (
+          <Selector
+            label="Connected account"
+            options={accountOptions}
+            value={accountId}
+            onChange={value => { setAccountId(value); setSourcePostId(null); }}
+            placeholder="Select an account…"
+            hasSearch
+            status={fieldStatus(errors.accountId)}
+          />
+        )}
 
         <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Connected account</label>
-          {errors.accountId && <p className="text-[11px] text-coral mb-1 flex items-center gap-1"><AlertTriangle size={10} />{errors.accountId}</p>}
-          {connectedAccounts.length === 0 ? (
-            <p className="text-[12px] text-[#6B6B6B]">
-              No connected accounts yet. <button onClick={() => navigate('/connections')} className="underline">Connect one</button> first.
-            </p>
-          ) : (
-            <select value={accountId} onChange={e => setAccountId(e.target.value)}
-              className={`pop-input w-full ${errors.accountId ? 'border-coral' : ''}`}>
-              <option value="">Select an account…</option>
-              {connectedAccounts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.platform} — {a.username ? `@${a.username}` : a.display_name ?? a.id}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+          <Text type="label" display="block" className="mb-1.5">Which posts</Text>
+          <SegmentedControl label="Which posts" value={postScope} onChange={v => setPostScope(v as 'all' | 'specific')} layout="fill">
+            <SegmentedControlItem value="all" label="All posts" />
+            <SegmentedControlItem value="specific" label="Specific post" isDisabled={!accountId} />
+          </SegmentedControl>
 
-        <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Which posts</label>
-          <div className="flex gap-2">
-            <button onClick={() => setPostScope('all')}
-              className={`flex-1 border rounded-lg px-3 py-2 text-[12px] font-medium transition-all ${postScope === 'all' ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'}`}>
-              All posts
-            </button>
-            <button onClick={() => setPostScope('specific')}
-              className={`flex-1 border rounded-lg px-3 py-2 text-[12px] font-medium transition-all ${postScope === 'specific' ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'}`}>
-              Specific post
-            </button>
-          </div>
-          {postScope === 'specific' && (
-            <div className="mt-2">
-              {errors.sourcePostId && <p className="text-[11px] text-coral mb-1 flex items-center gap-1"><AlertTriangle size={10} />{errors.sourcePostId}</p>}
-              <input type="text" value={sourcePostId} onChange={e => setSourcePostId(e.target.value)}
-                placeholder="Post ID"
-                className={`pop-input w-full ${errors.sourcePostId ? 'border-coral' : ''}`} />
+          {postScope === 'specific' && accountId && (
+            <div className="mt-3">
+              <Stack direction="horizontal" gap={2} align="end">
+                <div className="flex-1">
+                  <Selector
+                    label="Post"
+                    isLabelHidden
+                    options={postOptions}
+                    value={sourcePostId ?? undefined}
+                    onChange={value => setSourcePostId(value)}
+                    placeholder={postsLoading ? 'Loading your posts…' : 'Select a post…'}
+                    hasSearch
+                    isLoading={postsLoading}
+                    isDisabled={postsLoading}
+                    status={postsError ? { type: 'error', message: postsError } : fieldStatus(errors.sourcePostId)}
+                  />
+                </div>
+                <Button
+                  label="Sync posts"
+                  variant="secondary"
+                  size="md"
+                  icon={<RefreshCw size={13} />}
+                  isIconOnly
+                  clickAction={handleSyncPosts}
+                  isLoading={postsSyncing}
+                  tooltip="Refresh your posts from Instagram"
+                />
+              </Stack>
+              {!postsLoading && !postsError && libraryPosts.length === 0 && (
+                <Text type="supporting" display="block" className="mt-1">
+                  No posts synced yet — try &ldquo;Sync posts&rdquo;, or paste a link below.
+                </Text>
+              )}
+              <button onClick={() => setShowFindMissing(v => !v)} className="text-[11px] text-[#6B6B6B] hover:text-[#111111] underline mt-1.5">
+                Can&apos;t find your post? Paste the link
+              </button>
+              {showFindMissing && (
+                <Stack direction="horizontal" gap={2} className="mt-2" align="end">
+                  <div className="flex-1">
+                    <TextInput
+                      label="Post URL"
+                      isLabelHidden
+                      value={missingUrl}
+                      onChange={setMissingUrl}
+                      placeholder="https://instagram.com/p/…"
+                    />
+                  </div>
+                  <Button label="Find" variant="secondary" size="md" clickAction={handleFindMissing} isLoading={findingMissing} isDisabled={!missingUrl.trim()} />
+                </Stack>
+              )}
             </div>
           )}
         </div>
 
+        <TextInput
+          label="Trigger keywords"
+          value={keywordsText}
+          onChange={setKeywordsText}
+          placeholder="link, guide, price"
+          description="Comma-separated. Matching is case-insensitive."
+          status={fieldStatus(errors.keywords)}
+        />
+
         <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Trigger keywords</label>
-          {errors.keywords && <p className="text-[11px] text-coral mb-1 flex items-center gap-1"><AlertTriangle size={10} />{errors.keywords}</p>}
-          <input type="text" value={keywordsText} onChange={e => setKeywordsText(e.target.value)}
-            placeholder="link, guide, price"
-            className={`pop-input w-full ${errors.keywords ? 'border-coral' : ''}`} />
-          <p className="text-[11px] text-[#9B9B8F] mt-1">Comma-separated. Matching is case-insensitive.</p>
+          <Text type="label" display="block" className="mb-1.5">Match mode</Text>
+          <SegmentedControl label="Match mode" value={matchMode} onChange={v => setMatchMode(v as AutomationMatchMode)} layout="fill">
+            {MATCH_MODES.map(m => <SegmentedControlItem key={m.value} value={m.value} label={m.label} />)}
+          </SegmentedControl>
         </div>
 
         <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Match mode</label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {MATCH_MODES.map(m => (
-              <button key={m.value} onClick={() => setMatchMode(m.value)}
-                className={`border rounded-lg px-3 py-2 text-[11px] font-medium text-left transition-all ${matchMode === m.value ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'}`}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Reply with</label>
-          {caps?.caveat && (
-            <p className="text-[11px] text-[#9B9B8F] mb-2 leading-relaxed">{caps.caveat}</p>
-          )}
-          <div className="flex gap-2">
-            <button onClick={() => commentAllowed && setReplyChannel('comment')} disabled={!commentAllowed}
-              className={`flex-1 border rounded-lg px-3 py-2 text-[12px] font-medium transition-all ${effectiveReplyChannel === 'comment' ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'} ${!commentAllowed ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              Public reply
-            </button>
-            <button onClick={() => dmAllowed && setReplyChannel('dm')} disabled={!dmAllowed}
-              className={`flex-1 border rounded-lg px-3 py-2 text-[12px] font-medium transition-all ${effectiveReplyChannel === 'dm' ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'} ${!dmAllowed ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              DM
-            </button>
-            <button onClick={() => commentAllowed && dmAllowed && setReplyChannel('both')} disabled={!commentAllowed || !dmAllowed}
-              className={`flex-1 border rounded-lg px-3 py-2 text-[12px] font-medium transition-all ${effectiveReplyChannel === 'both' ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'} ${(!commentAllowed || !dmAllowed) ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              Both
-            </button>
-          </div>
+          <Text type="label" display="block" className="mb-1.5">Reply with</Text>
+          {caps?.caveat && <Text type="supporting" display="block" className="mb-2">{caps.caveat}</Text>}
+          <SegmentedControl label="Reply with" value={effectiveReplyChannel} onChange={v => setReplyChannel(v as AutomationReplyChannel)} layout="fill">
+            <SegmentedControlItem value="comment" label="Public reply" isDisabled={!commentAllowed} />
+            <SegmentedControlItem value="dm" label="DM" isDisabled={!dmAllowed} />
+            <SegmentedControlItem value="both" label="Both" isDisabled={!commentAllowed || !dmAllowed} />
+          </SegmentedControl>
         </div>
 
         {(effectiveReplyChannel === 'comment' || effectiveReplyChannel === 'both') && (
-          <div>
-            <label className="text-[12px] font-medium text-[#111111] mb-1 block">Public reply text</label>
-            {errors.commentReplyBody && <p className="text-[11px] text-coral mb-1 flex items-center gap-1"><AlertTriangle size={10} />{errors.commentReplyBody}</p>}
-            <textarea value={commentReplyBody} onChange={e => setCommentReplyBody(e.target.value)}
-              placeholder="Thanks! Check your DMs 👋"
-              className={`pop-input w-full h-16 resize-none ${errors.commentReplyBody ? 'border-coral' : ''}`} />
-          </div>
+          <TextArea
+            label="Public reply text"
+            value={commentReplyBody}
+            onChange={setCommentReplyBody}
+            placeholder="Thanks! Check your DMs 👋"
+            rows={2}
+            status={fieldStatus(errors.commentReplyBody)}
+          />
         )}
 
         {(effectiveReplyChannel === 'dm' || effectiveReplyChannel === 'both') && (
-          <div>
-            <label className="text-[12px] font-medium text-[#111111] mb-1 block">DM text</label>
-            {errors.messageBody && <p className="text-[11px] text-coral mb-1 flex items-center gap-1"><AlertTriangle size={10} />{errors.messageBody}</p>}
-            <textarea value={messageBody} onChange={e => setMessageBody(e.target.value)}
-              placeholder="Hey {{name}}! Here's the link you asked about: {{link}}"
-              className={`pop-input w-full h-20 resize-none ${errors.messageBody ? 'border-coral' : ''}`} />
-          </div>
+          <TextArea
+            label="DM text"
+            value={messageBody}
+            onChange={setMessageBody}
+            placeholder="Hey {{name}}! Here's the link you asked about: {{link}}"
+            rows={3}
+            status={fieldStatus(errors.messageBody)}
+          />
         )}
 
-        <div>
-          <label className="text-[12px] font-medium text-[#111111] mb-1 block">Link (optional)</label>
-          <input type="text" value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
-            placeholder="https://your-link.com" className="pop-input w-full" />
-        </div>
+        <TextInput label="Link" isOptional value={linkUrl} onChange={setLinkUrl} placeholder="https://your-link.com" />
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-[12px] font-medium text-[#111111] mb-1 block">Tags (optional)</label>
-            <input type="text" value={tagsText} onChange={e => setTagsText(e.target.value)}
-              placeholder="lead_magnet, warm" className="pop-input w-full" />
+        <Stack direction="horizontal" gap={4}>
+          <div className="flex-1">
+            <TextInput label="Tags" isOptional value={tagsText} onChange={setTagsText} placeholder="lead_magnet, warm" />
           </div>
-          <div>
-            <label className="text-[12px] font-medium text-[#111111] mb-1 block">Score increase (optional)</label>
-            <input type="number" value={scoreDelta} onChange={e => setScoreDelta(Number(e.target.value))}
-              className="pop-input w-full" />
+          <div className="flex-1">
+            <NumberInput label="Score increase" isOptional value={scoreDelta} onChange={setScoreDelta} min={0} />
           </div>
-        </div>
+        </Stack>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between py-2 border-b border-[#E8E4DF]">
-            <div>
-              <span className="text-[13px] text-[#111111]">Review-first</span>
-              <p className="text-[11px] text-[#6B6B6B]">Draft a reply for you to approve instead of sending it automatically.</p>
-            </div>
-            <button onClick={() => setReviewFirst(v => !v)}
-              className={`w-10 h-6 rounded-full relative transition-all flex-shrink-0 ${reviewFirst ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`}>
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${reviewFirst ? 'right-1' : 'left-1'}`} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b border-[#E8E4DF]">
-            <div>
-              <span className="text-[13px] text-[#111111]">Active</span>
-              <p className="text-[11px] text-[#6B6B6B]">Paused automations record engagement but never send a reply.</p>
-            </div>
-            <button onClick={() => setActive(v => !v)}
-              className={`w-10 h-6 rounded-full relative transition-all flex-shrink-0 ${active ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`}>
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${active ? 'right-1' : 'left-1'}`} />
-            </button>
-          </div>
-        </div>
+        <Stack gap={1}>
+          <Switch
+            label="Review-first"
+            description="Draft a reply for you to approve instead of sending it automatically."
+            value={reviewFirst}
+            onChange={setReviewFirst}
+            labelSpacing="spread"
+          />
+          <Switch
+            label="Active"
+            description="Paused automations record engagement but never send a reply."
+            value={active}
+            onChange={setActive}
+            labelSpacing="spread"
+          />
+        </Stack>
 
-        <div className="flex gap-3 pt-2 pb-8">
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 bg-chartreuse text-[#111111] rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            {saving ? 'Saving…' : editAuto ? 'Update automation' : 'Save automation'}
-          </button>
+        <div className="pt-2 pb-8">
+          <Button
+            label={editAuto ? 'Update automation' : 'Save automation'}
+            variant="primary"
+            width="100%"
+            clickAction={handleSave}
+          />
         </div>
-      </div>
+      </Stack>
     </div>
   );
 }
