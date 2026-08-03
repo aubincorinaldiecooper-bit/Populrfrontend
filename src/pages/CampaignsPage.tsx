@@ -104,7 +104,7 @@ export default function CampaignsPage() {
         <TextInput
           label="Search campaigns" isLabelHidden value={search} onChange={setSearch}
           placeholder="Search campaigns..." startIcon={<Search size={16} />}
-          size="sm" className="w-full sm:max-w-[280px]"
+          className="w-full sm:max-w-[280px]"
         />
         <div className="overflow-x-auto w-full sm:w-auto">
           <TabList value={tab} onChange={v => setTab(v as StatusTab)}>

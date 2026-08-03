@@ -233,7 +233,7 @@ function ContactDetailView({
         <Card padding={4}>
           <p className="pop-meta mb-2">Adjust lead score</p>
           <div className="flex gap-2 items-start">
-            <NumberInput label="Score delta" isLabelHidden value={scoreDelta} onChange={setScoreDelta} hasClear placeholder="e.g. 10 or -10" size="sm" className="flex-1" />
+            <NumberInput label="Score delta" isLabelHidden value={scoreDelta} onChange={setScoreDelta} hasClear placeholder="e.g. 10 or -10" className="flex-1" />
             <Button variant="secondary" size="sm" label="Apply" isLoading={busyScore} isDisabled={busyScore || scoreDelta == null} onClick={handleAdjustScore} />
           </div>
         </Card>
@@ -256,7 +256,7 @@ function ContactDetailView({
           <TextInput
             label="Add a tag" isLabelHidden value={newTag} onChange={setNewTag}
             onKeyDown={e => e.key === 'Enter' && handleAddTag()}
-            placeholder="Add a tag" size="sm" className="flex-1"
+            placeholder="Add a tag" className="flex-1"
           />
           <Button variant="secondary" size="sm" isIconOnly icon={<Plus size={12} />} label="Add tag" isDisabled={busyTag || !newTag.trim()} onClick={handleAddTag} />
         </div>
@@ -449,7 +449,7 @@ export default function ContactsPage() {
           <TextInput
             label="Search contacts" isLabelHidden value={search} onChange={setSearch}
             placeholder="Search contacts..." startIcon={<Search size={16} />}
-            size="sm" className="w-full sm:w-56"
+            className="w-full sm:w-56"
           />
         }
       />
