@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Button } from '@astryxdesign/core/Button';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { TabList, Tab } from '@astryxdesign/core/TabList';
+import { Card } from '@astryxdesign/core/Card';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Text } from '@astryxdesign/core/Text';
 import { useApp } from '../context/AppContext';
 import {
   isBackendConfigured, fetchAutomations, updateAutomation, deleteAutomation, fetchAutomationEvents,
 } from '../lib/api';
 import type { AutomationRecord, AutomationEvent, ConnectedAccount } from '../lib/api';
 import {
-  Search, Play, Pause, Zap, ArrowLeft, Plus, Loader2, AlertCircle, Trash2, Pencil,
+  Search, Play, Pause, Zap, ArrowLeft, Plus, Loader2, Trash2, Pencil,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
@@ -72,78 +79,74 @@ function AutomationDetail({
 
   return (
     <div className="pop-page max-w-[900px]">
-      <button onClick={onBack} className="pop-btn-ghost mb-5">
-        <ArrowLeft size={16} />Back to automations
-      </button>
+      <Button label="Back to automations" variant="ghost" size="sm" icon={<ArrowLeft size={16} />} onClick={onBack} />
 
-      <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mt-4 mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <StatusPill status={automation.active ? 'active' : 'paused'} />
             {reviewFirst && <StatusPill status="reply recommended" />}
           </div>
-          <h1 className="pop-section-heading">{automation.name}</h1>
+          <Heading level={1}>{automation.name}</Heading>
           <div className="flex items-center gap-1.5 mt-1.5">
             <PlatformDot platform={automation.platform} size={8} />
-            <span className="text-[13px] text-[#6B6B6B] capitalize">{automation.platform}</span>
+            <Text type="body" color="secondary">{automation.platform}</Text>
             {account && (
-              <span className="text-[13px] text-[#6B6B6B]">
+              <Text type="body" color="secondary">
                 · {account.username ? `@${account.username}` : account.display_name ?? account.id}
-              </span>
+              </Text>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={onEdit} className="pop-btn-primary">
-            <Pencil size={14} />Edit
-          </button>
-          <button onClick={onToggleActive} disabled={busy}
-            className={`${automation.active ? 'pop-btn-tertiary' : 'pop-btn-primary'} disabled:opacity-60`}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : automation.active ? <Pause size={14} /> : <Play size={14} />}
-            {automation.active ? 'Pause' : 'Resume'}
-          </button>
-          <button onClick={onDelete} disabled={busy}
-            className="pop-btn-tertiary text-[#DC2626] border-[#FCA5A5] hover:bg-[#FEE2E2] disabled:opacity-60">
-            <Trash2 size={14} />Delete
-          </button>
+          <Button label="Edit" variant="primary" size="sm" icon={<Pencil size={14} />} onClick={onEdit} />
+          <Button
+            label={automation.active ? 'Pause' : 'Resume'}
+            variant="secondary"
+            size="sm"
+            icon={automation.active ? <Pause size={14} /> : <Play size={14} />}
+            clickAction={onToggleActive}
+            isLoading={busy}
+          />
+          <Button label="Delete" variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={onDelete} isDisabled={busy} />
         </div>
       </div>
 
-      <div className="pop-card p-5 mb-5 space-y-4">
-        <h2 className="pop-card-title">Configuration</h2>
+      <Card padding={5} className="mb-5">
+        <Heading level={2} className="mb-4">Configuration</Heading>
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <p className="pop-meta">Trigger</p>
-            <p className="text-[13px] text-[#111111] mt-0.5">
+            <Text type="supporting" display="block">Trigger</Text>
+            <Text type="body" display="block" className="mt-0.5">
               {automation.all_posts ? 'Any post' : `Post ${automation.source_post_id}`} · comment {MATCH_MODE_LABEL[automation.match_mode] ?? automation.match_mode}
-            </p>
-            <p className="text-[12px] text-[#6B6B6B] mt-0.5">{automation.keywords.join(', ')}</p>
+            </Text>
+            <Text type="supporting" display="block" className="mt-0.5">{automation.keywords.join(', ')}</Text>
           </div>
           <div>
-            <p className="pop-meta">Reply channel</p>
-            <p className="text-[13px] text-[#111111] mt-0.5">{REPLY_CHANNEL_LABEL[automation.reply_channel] ?? automation.reply_channel}</p>
+            <Text type="supporting" display="block">Reply channel</Text>
+            <Text type="body" display="block" className="mt-0.5">{REPLY_CHANNEL_LABEL[automation.reply_channel] ?? automation.reply_channel}</Text>
           </div>
           {automation.comment_reply_body && (
             <div>
-              <p className="pop-meta">Public reply text</p>
-              <p className="text-[13px] text-[#111111] mt-0.5">{automation.comment_reply_body}</p>
+              <Text type="supporting" display="block">Public reply text</Text>
+              <Text type="body" display="block" className="mt-0.5">{automation.comment_reply_body}</Text>
             </div>
           )}
           {automation.message_body && (
             <div>
-              <p className="pop-meta">DM text</p>
-              <p className="text-[13px] text-[#111111] mt-0.5">{automation.message_body}</p>
+              <Text type="supporting" display="block">DM text</Text>
+              <Text type="body" display="block" className="mt-0.5">{automation.message_body}</Text>
             </div>
           )}
           {automation.link_url && (
             <div>
-              <p className="pop-meta">Link</p>
-              <p className="text-[13px] text-[#111111] mt-0.5 truncate">{automation.link_url}</p>
+              <Text type="supporting" display="block">Link</Text>
+              <Text type="body" display="block" className="mt-0.5 truncate">{automation.link_url}</Text>
             </div>
           )}
           {automation.tags.length > 0 && (
             <div>
-              <p className="pop-meta">Tags</p>
+              <Text type="supporting" display="block">Tags</Text>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {automation.tags.map(t => <StatusPill key={t} status={t} className="text-[10px]" />)}
               </div>
@@ -151,23 +154,23 @@ function AutomationDetail({
           )}
           {automation.score_delta !== 0 && (
             <div>
-              <p className="pop-meta">Lead score</p>
-              <p className="text-[13px] text-[#111111] mt-0.5">+{automation.score_delta} per match</p>
+              <Text type="supporting" display="block">Lead score</Text>
+              <Text type="body" display="block" className="mt-0.5">+{automation.score_delta} per match</Text>
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
-      <div className="pop-card p-5">
-        <h2 className="pop-card-title mb-4">Recent activity</h2>
+      <Card padding={5}>
+        <Heading level={2} className="mb-4">Recent activity</Heading>
         {eventsLoading && (
           <div className="flex items-center justify-center py-8 text-[#6B6B6B]">
             <Loader2 size={18} className="animate-spin mr-2" /> Loading activity...
           </div>
         )}
-        {!eventsLoading && eventsError && <p className="text-[12px] text-[#DC2626]">{eventsError}</p>}
+        {!eventsLoading && eventsError && <Banner status="error" title={eventsError} />}
         {!eventsLoading && !eventsError && events.length === 0 && (
-          <p className="text-[12px] text-[#6B6B6B]">No activity yet. This fills in as people engage with your keywords.</p>
+          <Text type="body" color="secondary" display="block">No activity yet. This fills in as people engage with your keywords.</Text>
         )}
         {!eventsLoading && !eventsError && events.length > 0 && (
           <div className="space-y-2">
@@ -187,7 +190,7 @@ function AutomationDetail({
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -290,44 +293,38 @@ export default function AutomationsPage() {
         subtitle={backendConfigured ? `${activeCount} active · ${automationList.length} total` : undefined}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-            <div className="relative w-full sm:w-auto">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search automations..."
-                className="pop-search w-full sm:w-56" />
+            <div className="w-full sm:w-56">
+              <TextInput
+                label="Search automations"
+                isLabelHidden
+                value={search}
+                onChange={setSearch}
+                placeholder="Search automations..."
+                startIcon={<Search size={16} />}
+              />
             </div>
-            <button onClick={() => navigate('/automations/new')} className="pop-btn-primary w-full sm:w-auto justify-center">
-              <Plus size={14} strokeWidth={2.5} />Create automation
-            </button>
+            <Button label="Create automation" variant="primary" icon={<Plus size={14} strokeWidth={2.5} />} width="100%" onClick={() => navigate('/automations/new')} />
           </div>
         }
       />
 
       {!backendConfigured && (
-        <div className="pop-card p-6 mb-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
-            <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see real automations here. This page never shows placeholder data in its place.
-            </p>
-          </div>
+        <div className="mb-6">
+          <Banner
+            status="warning"
+            title="Populr isn't connected to a backend yet"
+            description="Set VITE_API_URL to your Populr backend to see real automations here. This page never shows placeholder data in its place."
+          />
         </div>
       )}
 
       {backendConfigured && (
         <>
-          <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
-            {[
-              { key: 'all' as StatusTab, label: 'All', count: automationList.length },
-              { key: 'active' as StatusTab, label: 'Active', count: activeCount },
-              { key: 'paused' as StatusTab, label: 'Paused', count: pausedCount },
-            ].map(t => (
-              <button key={t.key} onClick={() => setStatusTab(t.key)}
-                className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${statusTab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-                {t.label} <span className="text-[10px] opacity-60">({t.count})</span>
-              </button>
-            ))}
-          </div>
+          <TabList value={statusTab} onChange={v => setStatusTab(v as StatusTab)} hasDivider>
+            <Tab value="all" label="All" endContent={<span className="text-[10px] opacity-60">{automationList.length}</span>} />
+            <Tab value="active" label="Active" endContent={<span className="text-[10px] opacity-60">{activeCount}</span>} />
+            <Tab value="paused" label="Paused" endContent={<span className="text-[10px] opacity-60">{pausedCount}</span>} />
+          </TabList>
 
           {loading && (
             <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
@@ -336,40 +333,42 @@ export default function AutomationsPage() {
           )}
 
           {!loading && error && (
-            <div className="pop-card p-6 flex items-start gap-3">
-              <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load automations</p>
-                <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
-                <button onClick={load} className="pop-btn-secondary text-[12px] py-1.5 px-3 mt-3">Try again</button>
-              </div>
+            <div className="mt-5">
+              <Banner status="error" title="Couldn't load automations" description={error}
+                endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />} />
             </div>
           )}
 
           {!loading && !error && automationList.length === 0 && !accountsLoading && connectedAccounts.length === 0 && (
-            <EmptyState icon="automations" title="Connect an account first"
-              description="Automations reply to comments and DMs on your connected accounts. Connect one to get started."
-              action={<button onClick={() => navigate('/connections')} className="pop-btn-primary">Connect an account</button>} />
+            <div className="mt-5">
+              <EmptyState icon="automations" title="Connect an account first"
+                description="Automations reply to comments and DMs on your connected accounts. Connect one to get started."
+                action={<Button label="Connect an account" variant="primary" onClick={() => navigate('/connections')} />} />
+            </div>
           )}
 
           {!loading && !error && automationList.length === 0 && (accountsLoading || connectedAccounts.length > 0) && (
-            <EmptyState icon="automations" title="No automations yet"
-              description="Create an automation to reply to comments and DMs automatically, and start capturing contacts."
-              action={<button onClick={() => navigate('/automations/new')} className="pop-btn-primary">Create automation</button>} />
+            <div className="mt-5">
+              <EmptyState icon="automations" title="No automations yet"
+                description="Create an automation to reply to comments and DMs automatically, and start capturing contacts."
+                action={<Button label="Create automation" variant="primary" onClick={() => navigate('/automations/new')} />} />
+            </div>
           )}
 
           {!loading && !error && automationList.length > 0 && filtered.length === 0 && (
-            <EmptyState icon="search" title="Nothing matches" description="Try a different search or status filter." />
+            <div className="mt-5">
+              <EmptyState icon="search" title="Nothing matches" description="Try a different search or status filter." />
+            </div>
           )}
 
           {!loading && !error && filtered.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-3 mt-5">
               {filtered.map(a => {
                 const account = accountById[a.account_id];
                 const reviewFirst = a.ai_enabled && a.ai_mode === 'suggest';
                 const busy = busyId === a.id;
                 return (
-                  <div key={a.id} className="pop-card p-4 pop-card-hover cursor-pointer" onClick={() => setDetailId(a.id)}>
+                  <Card key={a.id} padding={4} className="pop-card-hover cursor-pointer" onClick={() => setDetailId(a.id)}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 min-w-0">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${a.active ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
@@ -396,18 +395,20 @@ export default function AutomationsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => handleEdit(a)} disabled={busy} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all disabled:opacity-50" title="Edit">
-                          <Pencil size={14} className="text-[#6B6B6B]" />
-                        </button>
-                        <button onClick={() => handleToggleActive(a)} disabled={busy} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all disabled:opacity-50" title={a.active ? 'Pause' : 'Resume'}>
-                          {busy ? <Loader2 size={14} className="animate-spin text-[#6B6B6B]" /> : a.active ? <Pause size={14} className="text-[#6B6B6B]" /> : <Play size={14} className="text-[#10B981]" />}
-                        </button>
-                        <button onClick={() => handleDelete(a)} disabled={busy} className="p-2 hover:bg-[#FEE2E2] rounded-lg transition-all disabled:opacity-50" title="Delete">
-                          <Trash2 size={14} className="text-[#DC2626]" />
-                        </button>
+                        <Button label="Edit" variant="ghost" size="sm" icon={<Pencil size={14} />} isIconOnly isDisabled={busy} onClick={() => handleEdit(a)} />
+                        <Button
+                          label={a.active ? 'Pause' : 'Resume'}
+                          variant="ghost"
+                          size="sm"
+                          icon={busy ? <Loader2 size={14} className="animate-spin" /> : a.active ? <Pause size={14} /> : <Play size={14} />}
+                          isIconOnly
+                          isDisabled={busy}
+                          onClick={() => handleToggleActive(a)}
+                        />
+                        <Button label="Delete" variant="ghost" size="sm" icon={<Trash2 size={14} className="text-[#DC2626]" />} isIconOnly isDisabled={busy} onClick={() => handleDelete(a)} />
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
