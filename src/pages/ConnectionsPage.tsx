@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, ArrowRight, RefreshCw } from 'lucide-react';
+import { Instagram, Music, Linkedin, Twitter, MessageCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import { Spinner } from '@astryxdesign/core/Spinner';
-import { Card } from '@astryxdesign/core/Card';
 import { Banner } from '@astryxdesign/core/Banner';
-import { Text } from '@astryxdesign/core/Text';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
@@ -142,8 +140,11 @@ export default function ConnectionsPage() {
   const modalAccount = accounts.find(a => a.platform === disconnectModalPlatform);
   const isDisconnectingModal = !!modalAccount && disconnectingAccountId === modalAccount.id;
 
+  const availableCount = PLATFORMS.length - connectedCount;
+  const progressPct = Math.round((connectedCount / PLATFORMS.length) * 100);
+
   return (
-    <div className="pop-page max-w-[720px]">
+    <div className="pop-page">
       <PageHeader
         title="Connections"
         subtitle="Connect the accounts you want Populr to review for meaningful engagement. One is enough to get started."
@@ -158,6 +159,39 @@ export default function ConnectionsPage() {
         />
       )}
 
+      {/* Summary panel: everything here is computed from the real connected-platform
+          list above — no invented numbers. */}
+      <div className="pop-card p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-5">
+        <div className="flex-1 min-w-0">
+          <p className="font-geist font-bold text-[20px] text-[#111111]">
+            <span className="font-geist-mono">{connectedCount}</span> of <span className="font-geist-mono">{PLATFORMS.length}</span> connected
+          </p>
+          <div className="h-1.5 rounded-full bg-[#F0EEEA] mt-3 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-chartreuse transition-all"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <p className="pop-meta mt-2">More channels connected means more opportunities Populr can surface for you.</p>
+        </div>
+        <div className="flex items-center gap-4 sm:gap-6 sm:border-l sm:border-[#E8E4DF] sm:pl-6">
+          <div>
+            <p className="font-geist-mono font-bold text-xl text-[#111111]">{connectedCount}</p>
+            <p className="pop-meta">Connected</p>
+          </div>
+          <div>
+            <p className="font-geist-mono font-bold text-xl text-[#111111]">{availableCount}</p>
+            <p className="pop-meta">Available</p>
+          </div>
+          <div>
+            <p className={`font-geist font-bold text-sm ${connectedCount > 0 ? 'text-[#059669]' : 'text-[#9B9B8F]'}`}>
+              {connectedCount > 0 ? 'Unlocked' : 'Locked'}
+            </p>
+            <p className="pop-meta">Opportunities</p>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-3 mb-6">
         {PLATFORMS.map(p => {
           const cp = connectedPlatforms.find(c => c.id === p.id);
@@ -171,62 +205,48 @@ export default function ConnectionsPage() {
           // which covers the whole page while open.
           const realAccount = accounts.find(a => a.platform === p.id);
 
+          const statusMeta: Record<string, { label: string; dot: string; text: string }> = {
+            connected: { label: 'Connected', dot: 'bg-[#059669]', text: 'text-[#059669]' },
+            connecting: { label: 'Connecting', dot: 'bg-[#D97706]', text: 'text-[#D97706]' },
+            syncing: { label: 'Finishing connection…', dot: 'bg-[#D97706]', text: 'text-[#D97706]' },
+            error: { label: 'Connection failed', dot: 'bg-[#DC2626]', text: 'text-[#DC2626]' },
+            reconnect_required: { label: 'Reconnect required', dot: 'bg-[#DC2626]', text: 'text-[#DC2626]' },
+            idle: { label: 'Not connected', dot: 'bg-[#D4CFC8]', text: 'text-[#9B9B8F]' },
+          };
+          const meta = statusMeta[status] ?? statusMeta.idle;
+          const isLoadingStatus = status === 'connecting' || status === 'syncing';
+
           return (
-            <Card key={p.id} padding={4}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
-                  <Icon size={20} style={{ color: p.color }} />
+            <div key={p.id} className="pop-card p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
+                  <Icon size={21} style={{ color: p.color }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[14px] font-semibold text-[#111111]">{p.name}</span>
-                    {status === 'connected' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#E0F5E9] text-[#059669]">
-                        <Check size={10} /> Connected
-                      </span>
-                    )}
-                    {status === 'connecting' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
-                        <Spinner size="sm" shade="inherit" /> Connecting
-                      </span>
-                    )}
-                    {status === 'syncing' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
-                        <Spinner size="sm" shade="inherit" /> Finishing connection…
-                      </span>
-                    )}
-                    {status === 'error' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
-                        Connection failed
-                      </span>
-                    )}
-                    {status === 'reconnect_required' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
-                        Reconnect required
-                      </span>
-                    )}
-                    {status === 'idle' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FAFAF8] text-[#9B9B8F]">
-                        Not connected
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="pop-card-title">{p.name}</span>
+                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${meta.text}`}>
+                      {isLoadingStatus ? <Spinner size="sm" shade="inherit" /> : <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${meta.dot}`} />}
+                      {meta.label}
+                    </span>
                     {limited && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#EFF6FF] text-[#3B82F6]">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#3B82F6]">
+                        <span className="w-[7px] h-[7px] rounded-full flex-shrink-0 bg-[#3B82F6]" />
                         Limited access
                       </span>
                     )}
                   </div>
                   {(status === 'connected' || status === 'reconnect_required') && cp?.handle && (
-                    <p className="text-[12px] text-[#6B6B6B] mt-0.5">{cp.handle}</p>
+                    <p className="pop-meta mt-1 font-geist-mono">{cp.handle}</p>
                   )}
                   {status === 'error' && cp?.errorMessage && (
-                    <p className="text-[12px] text-[#DC2626] mt-0.5">{cp.errorMessage}</p>
+                    <p className="text-[12px] text-[#DC2626] mt-1">{cp.errorMessage}</p>
                   )}
                   {status === 'reconnect_required' && (
-                    <p className="text-[12px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>
+                    <p className="text-[12px] text-[#DC2626] mt-1">Authorization expired — reconnect to keep this account active.</p>
                   )}
                   {limited && caps?.caveat && (
-                    <p className="text-[11px] text-[#9B9B8F] mt-1 leading-relaxed">{caps.caveat}</p>
+                    <p className="pop-meta mt-1 leading-relaxed">{caps.caveat}</p>
                   )}
                 </div>
                 <div className="flex-shrink-0">
@@ -256,25 +276,18 @@ export default function ConnectionsPage() {
                   )}
                 </div>
               </div>
-            </Card>
+            </div>
           );
         })}
       </div>
 
-      <div className="flex items-center justify-between">
-        <Text type="supporting" color="secondary">
-          {connectedCount > 0
-            ? `${connectedCount} of ${PLATFORMS.length} connected`
-            : 'Connect at least one account to see opportunities.'}
-        </Text>
-        <Button
-          label="Go to Opportunities"
-          variant="primary"
-          endContent={<ArrowRight size={14} />}
-          isDisabled={connectedCount === 0}
-          onClick={() => navigate('/opportunities')}
-        />
-      </div>
+      <button
+        onClick={() => connectedCount > 0 && navigate('/opportunities')}
+        disabled={connectedCount === 0}
+        className="pop-btn-primary w-full justify-center py-3.5 text-[14px] disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        Go to Opportunities <ArrowRight size={15} />
+      </button>
 
       <AlertDialog
         isOpen={disconnectModalPlatform !== null}
