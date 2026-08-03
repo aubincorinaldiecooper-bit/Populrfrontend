@@ -43,7 +43,7 @@ const statusVariant: Record<string, BadgeVariant> = {
   'needs-attention': 'error',
 };
 
-export default function StatusPill({ status, className }: { status: string; className?: string }) {
+export default function StatusPill({ status, label, className }: { status: string; label?: string; className?: string }) {
   const variant = statusVariant[status.toLowerCase()] ?? 'neutral';
-  return <Badge variant={variant} label={status} className={className} />;
+  return <Badge variant={variant} label={label ?? status} className={className} />;
 }

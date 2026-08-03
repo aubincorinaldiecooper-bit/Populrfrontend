@@ -22,10 +22,19 @@ import { VStack } from '@astryxdesign/core/VStack';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import { isBackendConfigured } from '../lib/api';
-import type { ConnectedAccount } from '../lib/api';
+import type { AccountStatus, ConnectedAccount } from '../lib/api';
 
 const iconMap: Record<string, React.ElementType> = {
   instagram: Instagram, tiktok: Video, linkedin: Linkedin, twitter: Twitter, reddit: MessageCircle,
+};
+
+// StatusPill's `status` prop doubles as the variant lookup key, so the raw
+// enum has to stay lowercase/underscored for that to match — this maps it
+// to display text separately rather than mangling the lookup key.
+const ACCOUNT_STATUS_LABEL: Record<AccountStatus, string> = {
+  connected: 'Connected',
+  disconnected: 'Disconnected',
+  reconnect_required: 'Reconnect required',
 };
 
 function capitalize(s: string): string {
@@ -229,7 +238,7 @@ export default function SettingsPage() {
                   <VStack gap={0.5} style={{ flex: 1, minWidth: 0 }}>
                     <HStack gap={2} align="center" wrap="wrap">
                       <Text type="body" weight="semibold" className="capitalize">{acc.platform}</Text>
-                      <StatusPill status={acc.status} className="text-[10px]" />
+                      <StatusPill status={acc.status} label={ACCOUNT_STATUS_LABEL[acc.status]} className="text-[10px]" />
                     </HStack>
                     <Text type="supporting" color="secondary">
                       {acc.username ? `@${acc.username}` : acc.display_name || 'Unknown account'}
