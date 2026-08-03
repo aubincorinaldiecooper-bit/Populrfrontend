@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Zap, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Zap, ArrowRight, Loader2 } from 'lucide-react';
+import { Card } from '@astryxdesign/core/Card';
+import { ClickableCard } from '@astryxdesign/core/ClickableCard';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Text } from '@astryxdesign/core/Text';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured, fetchAutomationsSummary, fetchContacts, fetchOpportunities } from '../lib/api';
@@ -10,6 +16,17 @@ interface HomeMetrics {
   summary: AutomationsSummary;
   contactsTotal: number;
   opportunitiesNeedingReview: number;
+}
+
+function StatCard({ value, label, sub, tone }: { value: number; label: string; sub?: string; tone?: 'warning' | 'error' }) {
+  const toneColor = tone === 'error' ? 'text-[#DC2626]' : tone === 'warning' ? 'text-[#D97706]' : 'text-[#111111]';
+  return (
+    <Card padding={4}>
+      <p className={`font-geist-mono font-bold text-2xl ${toneColor}`}>{value}</p>
+      <Text type="supporting" display="block" className="mt-1">{label}</Text>
+      {sub && <Text type="supporting" display="block" className="mt-0.5" color="disabled">{sub}</Text>}
+    </Card>
+  );
 }
 
 export default function HomePage() {
@@ -54,97 +71,72 @@ export default function HomePage() {
         subtitle="Here's what Populr has been handling for you."
       />
 
-      <button
-        onClick={() => navigate('/automations/new')}
-        className="pop-card p-6 w-full flex items-center gap-4 mb-10 border-chartreuse hover:bg-[#FAFAF8] transition-all text-left group"
-      >
-        <span className="w-12 h-12 rounded-2xl bg-chartreuse flex items-center justify-center flex-shrink-0">
-          <Zap size={22} className="text-[#111111]" />
-        </span>
-        <div className="min-w-0">
-          <p className="pop-card-title">Create an automation</p>
-          <p className="pop-body mt-0.5">Reply to comments and DMs automatically when someone uses a keyword, and start capturing contacts.</p>
+      <ClickableCard label="Create an automation" onClick={() => navigate('/automations/new')} padding={6} className="mb-10 border-chartreuse hover:bg-[#FAFAF8] transition-all">
+        <div className="flex items-center gap-4">
+          <span className="w-12 h-12 rounded-2xl bg-chartreuse flex items-center justify-center flex-shrink-0">
+            <Zap size={22} className="text-[#111111]" />
+          </span>
+          <div className="min-w-0">
+            <Text type="body" weight="bold" display="block">Create an automation</Text>
+            <Text type="supporting" color="secondary" display="block" className="mt-0.5">
+              Reply to comments and DMs automatically when someone uses a keyword, and start capturing contacts.
+            </Text>
+          </div>
+          <ArrowRight size={18} className="ml-auto flex-shrink-0 text-[#9B9B8F]" />
         </div>
-        <ArrowRight size={18} className="ml-auto flex-shrink-0 text-[#9B9B8F] group-hover:text-[#111111] transition-colors" />
-      </button>
+      </ClickableCard>
 
-      <h2 className="pop-section-heading mb-4">Your automations at a glance</h2>
+      <Heading level={2} className="mb-4">Your automations at a glance</Heading>
 
       {!backendConfigured ? (
-        <div className="pop-card p-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-          <p className="text-[13px] text-[#111111]">
-            Populr isn&apos;t connected to a backend yet — set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to see your real metrics here.
-          </p>
-        </div>
+        <Banner status="warning" title="Populr isn't connected to a backend yet" description="Set VITE_API_URL to see your real metrics here." />
       ) : loading ? (
         <div className="flex items-center justify-center py-14">
           <Loader2 size={20} className="animate-spin text-[#6B6B6B]" />
         </div>
       ) : error ? (
-        <div className="pop-card p-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-[13px] text-[#111111]">{error}</p>
-            <button onClick={load} className="pop-btn-secondary text-[12px] py-1.5 px-3 mt-3">Try again</button>
-          </div>
-        </div>
+        <Banner status="error" title={error} endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />} />
       ) : !metrics || metrics.summary.totalCount === 0 ? (
-        <div className="pop-card p-8 text-center">
+        <Card padding={8} className="text-center">
           <Zap size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-          <p className="text-[14px] font-semibold text-[#111111]">No automations yet</p>
-          <p className="text-[12px] text-[#6B6B6B] mt-1.5 max-w-sm mx-auto">
+          <Text type="body" weight="bold" display="block">No automations yet</Text>
+          <Text type="supporting" color="secondary" display="block" className="mt-1.5 max-w-sm mx-auto">
             Create your first automation to start replying to comments and DMs automatically.
-          </p>
-          <button onClick={() => navigate('/automations/new')} className="pop-btn-primary text-[12px] py-2 px-4 mt-4 inline-flex">
-            Create automation
-          </button>
-        </div>
+          </Text>
+          <div className="mt-4 inline-flex">
+            <Button label="Create automation" variant="primary" onClick={() => navigate('/automations/new')} />
+          </div>
+        </Card>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
-            <div className="pop-card p-4">
-              <p className="font-geist-mono font-bold text-2xl text-[#111111]">{metrics.summary.activeCount}</p>
-              <p className="text-[11px] text-[#6B6B6B] mt-1">Active automations</p>
-              <p className="text-[10px] text-[#9B9B8F] mt-0.5">of {metrics.summary.totalCount} total</p>
-            </div>
-            <div className="pop-card p-4">
-              <p className="font-geist-mono font-bold text-2xl text-[#111111]">{metrics.summary.interactionsHandled}</p>
-              <p className="text-[11px] text-[#6B6B6B] mt-1">Interactions handled</p>
-            </div>
-            <div className="pop-card p-4">
-              <p className="font-geist-mono font-bold text-2xl text-[#111111]">{metrics.summary.repliesSent}</p>
-              <p className="text-[11px] text-[#6B6B6B] mt-1">Replies sent</p>
-            </div>
-            <button onClick={() => navigate('/contacts')} className="pop-card p-4 pop-card-hover cursor-pointer text-left">
+            <StatCard value={metrics.summary.activeCount} label="Active automations" sub={`of ${metrics.summary.totalCount} total`} />
+            <StatCard value={metrics.summary.interactionsHandled} label="Interactions handled" />
+            <StatCard value={metrics.summary.repliesSent} label="Replies sent" />
+            <ClickableCard label="Contacts captured" onClick={() => navigate('/contacts')} padding={4}>
               <p className="font-geist-mono font-bold text-2xl text-[#111111]">{metrics.contactsTotal}</p>
-              <p className="text-[11px] text-[#6B6B6B] mt-1">Contacts captured</p>
-            </button>
-            <button onClick={() => navigate('/opportunities')} className="pop-card p-4 pop-card-hover cursor-pointer text-left">
+              <Text type="supporting" display="block" className="mt-1">Contacts captured</Text>
+            </ClickableCard>
+            <ClickableCard label="Opportunities needing review" onClick={() => navigate('/opportunities')} padding={4}>
               <p className={`font-geist-mono font-bold text-2xl ${metrics.opportunitiesNeedingReview > 0 ? 'text-[#D97706]' : 'text-[#111111]'}`}>
                 {metrics.opportunitiesNeedingReview}
               </p>
-              <p className="text-[11px] text-[#6B6B6B] mt-1">Opportunities needing review</p>
-            </button>
-            <div className="pop-card p-4">
-              <p className={`font-geist-mono font-bold text-2xl ${metrics.summary.failedAutomationsCount > 0 ? 'text-[#DC2626]' : 'text-[#111111]'}`}>
-                {metrics.summary.failedAutomationsCount}
-              </p>
-              <p className="text-[11px] text-[#6B6B6B] mt-1">Automations with a failure</p>
-            </div>
+              <Text type="supporting" display="block" className="mt-1">Opportunities needing review</Text>
+            </ClickableCard>
+            <StatCard value={metrics.summary.failedAutomationsCount} label="Automations with a failure" tone={metrics.summary.failedAutomationsCount > 0 ? 'error' : undefined} />
           </div>
 
-          <div className="pop-card p-5">
-            <p className="pop-meta mb-1.5">Best-performing automation</p>
+          <Card padding={5}>
+            <Text type="supporting" display="block" className="mb-1.5">Best-performing automation</Text>
             {metrics.summary.bestPerforming ? (
               <button onClick={() => navigate('/automations')} className="flex items-center justify-between w-full text-left group">
                 <span className="text-[14px] font-semibold text-[#111111] group-hover:underline">{metrics.summary.bestPerforming.name}</span>
                 <span className="text-[12px] text-[#6B6B6B]">{metrics.summary.bestPerforming.repliesSent} replies sent</span>
               </button>
             ) : (
-              <p className="text-[13px] text-[#6B6B6B]">Not enough data yet — this fills in once your automations start replying.</p>
+              <Text type="body" color="secondary" display="block">Not enough data yet — this fills in once your automations start replying.</Text>
             )}
-          </div>
+          </Card>
         </>
       )}
     </div>

@@ -4,6 +4,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { Card } from '@astryxdesign/core/Card';
+import { ClickableCard } from '@astryxdesign/core/ClickableCard';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Heading } from '@astryxdesign/core/Heading';
 import { Text } from '@astryxdesign/core/Text';
@@ -368,7 +369,7 @@ export default function AutomationsPage() {
                 const reviewFirst = a.ai_enabled && a.ai_mode === 'suggest';
                 const busy = busyId === a.id;
                 return (
-                  <Card key={a.id} padding={4} className="pop-card-hover cursor-pointer" onClick={() => setDetailId(a.id)}>
+                  <ClickableCard key={a.id} label={`${a.name} automation`} padding={4} className="pop-card-hover" onClick={() => setDetailId(a.id)}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 min-w-0">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${a.active ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
@@ -394,7 +395,7 @@ export default function AutomationsPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         <Button label="Edit" variant="ghost" size="sm" icon={<Pencil size={14} />} isIconOnly isDisabled={busy} onClick={() => handleEdit(a)} />
                         <Button
                           label={a.active ? 'Pause' : 'Resume'}
@@ -408,7 +409,7 @@ export default function AutomationsPage() {
                         <Button label="Delete" variant="ghost" size="sm" icon={<Trash2 size={14} className="text-[#DC2626]" />} isIconOnly isDisabled={busy} onClick={() => handleDelete(a)} />
                       </div>
                     </div>
-                  </Card>
+                  </ClickableCard>
                 );
               })}
             </div>
