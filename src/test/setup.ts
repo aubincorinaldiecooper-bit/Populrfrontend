@@ -21,3 +21,19 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 });
+
+// jsdom reflects <dialog>'s `open` attribute but doesn't implement the
+// showModal()/close() methods (longstanding jsdom gap) — Astryx's
+// Dialog/AlertDialog and anything built on them call these directly, so
+// without a polyfill every test that opens one throws "not a function".
+if (!HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.open = true;
+  };
+}
+if (!HTMLDialogElement.prototype.close) {
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+  };
+}

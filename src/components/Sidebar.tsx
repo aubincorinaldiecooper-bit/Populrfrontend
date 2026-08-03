@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router';
 import {
   Home, Zap, Sparkles, Users, Link2, Settings, Menu, X,
 } from 'lucide-react';
+import { Button } from '@astryxdesign/core/Button';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
@@ -24,39 +25,34 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export default function Sidebar() {
-  const location = useLocation();
-  const { onboardingComplete, accounts } = useApp();
-  const { user } = useAuth();
-  const sidebarRef = useRef<HTMLElement>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const identity = resolveIdentity(user, accounts);
+function isActivePath(pathname: string, path: string): boolean {
+  if (path === '/') return pathname === '/';
+  return pathname.startsWith(path);
+}
 
-  useEffect(() => {
-    if (sidebarRef.current && onboardingComplete) {
-      gsap.fromTo(sidebarRef.current, { x: -220, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: 'power3.out', delay: 0.1 });
-    }
-  }, [onboardingComplete]);
-
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
-
-  const NavContent = () => (
+/** Hoisted out of Sidebar so it isn't recreated (and its subtree remounted)
+ * on every render — it's rendered twice (desktop + mobile drawer). */
+function NavContent({
+  pathname, identity, onNavigate,
+}: {
+  pathname: string;
+  identity: ReturnType<typeof resolveIdentity>;
+  onNavigate: () => void;
+}) {
+  return (
     <>
-      <Link to="/" className="px-6 pt-6 pb-4 flex items-center gap-2 shrink-0" onClick={() => setMobileOpen(false)}>
+      <Link to="/" className="px-6 pt-6 pb-4 flex items-center gap-2 shrink-0" onClick={onNavigate}>
         <div className="w-2 h-2 rounded-full bg-chartreuse" />
         <span className="font-geist font-bold text-lg text-[#111111]">Populr</span>
       </Link>
 
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {navItems.map(item => {
-          const active = isActive(item.path);
+          const active = isActivePath(pathname, item.path);
           const Icon = item.icon;
           if (item.primary) {
             return (
-              <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)}
+              <Link key={item.path} to={item.path} onClick={onNavigate}
                 className="flex items-center gap-3 px-3 py-2.5 my-1 rounded-lg bg-chartreuse text-[#111111] font-semibold transition-all hover:brightness-95">
                 <Icon size={18} strokeWidth={2.5} />
                 <span className="text-[13px]">{item.label}</span>
@@ -64,7 +60,7 @@ export default function Sidebar() {
             );
           }
           return (
-            <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)}
+            <Link key={item.path} to={item.path} onClick={onNavigate}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${active ? 'bg-[rgba(200,255,61,0.08)] text-[#111111] font-semibold border-l-[3px] border-chartreuse' : 'bg-transparent text-[#6B6B6B] font-medium border-l-[3px] border-transparent hover:bg-[#FAFAF8] hover:text-[#111111]'}`}>
               <Icon size={18} strokeWidth={active ? 2.5 : 2} />
               <span className="text-[13px]">{item.label}</span>
@@ -74,7 +70,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-3 pb-3 space-y-0.5 shrink-0 border-t border-[#E8E4DF] pt-2">
-        <Link to="/settings" onClick={() => setMobileOpen(false)}
+        <Link to="/settings" onClick={onNavigate}
           className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-[#FAFAF8] transition-all">
           {identity.avatarUrl ? (
             <img src={identity.avatarUrl} alt={identity.name} className="w-8 h-8 rounded-full object-cover" />
@@ -92,14 +88,34 @@ export default function Sidebar() {
       </div>
     </>
   );
+}
+
+export default function Sidebar() {
+  const location = useLocation();
+  const { onboardingComplete, accounts } = useApp();
+  const { user } = useAuth();
+  const sidebarRef = useRef<HTMLElement>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const identity = resolveIdentity(user, accounts);
+
+  useEffect(() => {
+    if (sidebarRef.current && onboardingComplete) {
+      gsap.fromTo(sidebarRef.current, { x: -220, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: 'power3.out', delay: 0.1 });
+    }
+  }, [onboardingComplete]);
+
+  const closeMobileNav = () => setMobileOpen(false);
 
   return (
     <>
       {/* Mobile top bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-[#E8E4DF] z-[55] flex items-center px-4 gap-3">
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#FAFAF8] transition-all">
-          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+        <Button
+          variant="ghost" isIconOnly
+          icon={mobileOpen ? <X size={20} /> : <Menu size={20} />}
+          label={mobileOpen ? 'Close menu' : 'Open menu'}
+          onClick={() => setMobileOpen(!mobileOpen)}
+        />
         <Link to="/" className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-chartreuse" />
           <span className="font-geist font-bold text-lg text-[#111111]">Populr</span>
@@ -108,14 +124,14 @@ export default function Sidebar() {
 
       {/* Desktop sidebar */}
       <aside ref={sidebarRef} className="hidden lg:flex fixed left-0 top-0 h-screen w-[220px] bg-white border-r border-[#E8E4DF] z-50 flex-col">
-        <NavContent />
+        <NavContent pathname={location.pathname} identity={identity} onNavigate={closeMobileNav} />
       </aside>
 
       {/* Mobile sidebar overlay */}
-      {mobileOpen && <div className="lg:hidden fixed inset-0 bg-[rgba(0,0,0,0.3)] z-[45]" onClick={() => setMobileOpen(false)} />}
+      {mobileOpen && <div className="lg:hidden fixed inset-0 bg-[rgba(0,0,0,0.3)] z-[45]" onClick={closeMobileNav} />}
 
       <aside className={`lg:hidden fixed left-0 top-0 h-screen w-[260px] bg-white border-r border-[#E8E4DF] z-[50] flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <NavContent />
+        <NavContent pathname={location.pathname} identity={identity} onNavigate={closeMobileNav} />
       </aside>
     </>
   );

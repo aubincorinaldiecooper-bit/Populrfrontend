@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, AlertCircle, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
+import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import { Spinner } from '@astryxdesign/core/Spinner';
+import { Card } from '@astryxdesign/core/Card';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Text } from '@astryxdesign/core/Text';
+import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
@@ -134,6 +138,10 @@ export default function ConnectionsPage() {
     }
   };
 
+  const modalPlatform = PLATFORMS.find(pl => pl.id === disconnectModalPlatform);
+  const modalAccount = accounts.find(a => a.platform === disconnectModalPlatform);
+  const isDisconnectingModal = !!modalAccount && disconnectingAccountId === modalAccount.id;
+
   return (
     <div className="pop-page max-w-[720px]">
       <PageHeader
@@ -142,15 +150,12 @@ export default function ConnectionsPage() {
       />
 
       {!backendConfigured && (
-        <div className="pop-card p-6 mb-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
-            <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to connect real accounts here.
-            </p>
-          </div>
-        </div>
+        <Banner
+          status="warning"
+          title="Populr isn't connected to a backend yet"
+          description="Set VITE_API_URL to your Populr backend to connect real accounts here."
+          className="mb-6"
+        />
       )}
 
       <div className="space-y-3 mb-6">
@@ -167,7 +172,7 @@ export default function ConnectionsPage() {
           const realAccount = accounts.find(a => a.platform === p.id);
 
           return (
-            <div key={p.id} className="pop-card p-4">
+            <Card key={p.id} padding={4}>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
                   <Icon size={20} style={{ color: p.color }} />
@@ -251,17 +256,17 @@ export default function ConnectionsPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-[12px] text-[#6B6B6B]">
+        <Text type="supporting" color="secondary">
           {connectedCount > 0
             ? `${connectedCount} of ${PLATFORMS.length} connected`
             : 'Connect at least one account to see opportunities.'}
-        </p>
+        </Text>
         <Button
           label="Go to Opportunities"
           variant="primary"
@@ -271,40 +276,16 @@ export default function ConnectionsPage() {
         />
       </div>
 
-      {disconnectModalPlatform && (() => {
-        const modalPlatform = PLATFORMS.find(pl => pl.id === disconnectModalPlatform);
-        const modalAccount = accounts.find(a => a.platform === disconnectModalPlatform);
-        const isDisconnectingModal = !!modalAccount && disconnectingAccountId === modalAccount.id;
-        return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
-              <h3 className="font-geist font-bold text-base text-[#111111]">
-                Disconnect {modalPlatform?.name ?? disconnectModalPlatform}?
-              </h3>
-              <p className="text-[13px] text-[#6B6B6B] mt-2">
-                Populr will stop reviewing engagement on this account. You can reconnect it any time.
-              </p>
-              <div className="flex gap-3 mt-5">
-                <button
-                  onClick={() => setDisconnectModalPlatform(null)}
-                  disabled={isDisconnectingModal}
-                  className="pop-btn-secondary flex-1 text-[13px] py-2.5 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => modalAccount && handleDisconnect(modalAccount.id)}
-                  disabled={!modalAccount || isDisconnectingModal}
-                  className="flex-1 bg-[#DC2626] text-white rounded-[10px] text-[13px] py-2.5 font-semibold hover:bg-[#B91C1C] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isDisconnectingModal && <Loader2 size={14} className="animate-spin" />}
-                  {isDisconnectingModal ? 'Disconnecting…' : 'Disconnect account'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <AlertDialog
+        isOpen={disconnectModalPlatform !== null}
+        onOpenChange={(open) => { if (!open) setDisconnectModalPlatform(null); }}
+        title={`Disconnect ${modalPlatform?.name ?? disconnectModalPlatform ?? ''}?`}
+        description="Populr will stop reviewing engagement on this account. You can reconnect it any time."
+        actionLabel={isDisconnectingModal ? 'Disconnecting…' : 'Disconnect account'}
+        actionVariant="destructive"
+        isActionLoading={isDisconnectingModal}
+        onAction={() => modalAccount && handleDisconnect(modalAccount.id)}
+      />
     </div>
   );
 }

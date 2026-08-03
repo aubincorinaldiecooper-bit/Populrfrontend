@@ -5,9 +5,15 @@ import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
 import {
   Instagram, Video, Linkedin, Twitter, MessageCircle, Link2, LogOut,
-  Trash2, AlertTriangle,
-  Loader2, ChevronDown, RefreshCw,
+  Trash2, RefreshCw,
 } from 'lucide-react';
+import { Card } from '@astryxdesign/core/Card';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Text } from '@astryxdesign/core/Text';
+import { TabList, Tab } from '@astryxdesign/core/TabList';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured } from '../lib/api';
 import type { ConnectedAccount, AccountStatus } from '../lib/api';
@@ -22,7 +28,11 @@ const statusConfig: Record<AccountStatus, { label: string; color: string; bg: st
   reconnect_required: { label: 'Reconnect required', color: 'text-[#DC2626]', bg: 'bg-[#FEE2E2]' },
 };
 
-type Tab = 'profile' | 'accounts';
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+type SettingsTab = 'profile' | 'accounts';
 
 export default function SettingsPage() {
   const {
@@ -33,8 +43,7 @@ export default function SettingsPage() {
   const identity = resolveIdentity(user, accounts);
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
-  const [mobileTabsOpen, setMobileTabsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
 
   const [disconnectModal, setDisconnectModal] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -83,51 +92,33 @@ export default function SettingsPage() {
     }
   };
 
-  const tabs: { key: Tab; label: string }[] = [
+  const tabs: { key: SettingsTab; label: string }[] = [
     { key: 'profile', label: 'Account' },
     { key: 'accounts', label: 'Connected Accounts' },
   ];
 
-  const activeLabel = tabs.find(t => t.key === activeTab)?.label || 'Account';
   const connectedAccounts = accounts.filter((a: ConnectedAccount) => a.status === 'connected');
   const backendConfigured = isBackendConfigured();
+
+  const disconnectTarget = disconnectModal ? accounts.find((a: ConnectedAccount) => a.id === disconnectModal) : undefined;
+  const isDisconnecting = disconnectModal !== null && disconnecting === disconnectModal;
 
   return (
     <div className="p-6 lg:p-8 max-w-[900px] mx-auto">
       <PageHeader title="Settings" />
 
-      {/* Tabs - Desktop */}
-      <div className="hidden md:flex gap-1 mb-6 border-b border-[#E8E4DF]">
-        {tabs.map(tab => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 text-[13px] font-medium transition-all border-b-2 -mb-px ${activeTab === tab.key ? 'border-chartreuse text-[#111111]' : 'border-transparent text-[#6B6B6B] hover:text-[#111111]'}`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tabs - Mobile dropdown */}
-      <div className="md:hidden mb-6 relative">
-        <button onClick={() => setMobileTabsOpen(!mobileTabsOpen)}
-          className="w-full flex items-center justify-between border border-[#E8E4DF] rounded-xl px-4 py-3 bg-white text-[13px] font-medium text-[#111111]">
-          {activeLabel}<ChevronDown size={16} className={`transition-transform ${mobileTabsOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {mobileTabsOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E8E4DF] rounded-xl shadow-lg z-20 overflow-hidden">
-            {tabs.map(tab => (
-              <button key={tab.key} onClick={() => { setActiveTab(tab.key); setMobileTabsOpen(false); }}
-                className={`w-full text-left px-4 py-3 text-[13px] transition-all ${activeTab === tab.key ? 'bg-[#FAFAF8] font-semibold text-[#111111]' : 'text-[#6B6B6B] hover:bg-[#FAFAF8]'}`}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="mb-6 overflow-x-auto">
+        <TabList value={activeTab} onChange={v => setActiveTab(v as SettingsTab)} hasDivider>
+          {tabs.map(tab => (
+            <Tab key={tab.key} value={tab.key} label={tab.label} />
+          ))}
+        </TabList>
       </div>
 
       {/* ─── ACCOUNT TAB ─── */}
       {activeTab === 'profile' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+          <Card padding={6}>
             <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Account</h2>
             <div className="flex items-center gap-4 mb-6">
               {identity.avatarUrl ? (
@@ -144,11 +135,11 @@ export default function SettingsPage() {
                 <p className="text-[11px] text-[#9B9B8F] mt-1">{connectedAccounts.length} platform{connectedAccounts.length === 1 ? '' : 's'} connected</p>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Connected identities */}
           {connectedAccounts.length > 0 && (
-            <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+            <Card padding={6}>
               <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Connected social identities</h2>
               <div className="flex flex-wrap gap-2">
                 {connectedAccounts.map((acc: ConnectedAccount) => {
@@ -161,32 +152,27 @@ export default function SettingsPage() {
                   );
                 })}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Session */}
-          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+          <Card padding={6}>
             <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Session</h2>
             <p className="text-[13px] text-[#6B6B6B] mb-4">
               {user?.email
                 ? <>Signed in as <span className="font-medium text-[#111111]">{user.email}</span>.</>
                 : 'Signed in.'}
             </p>
-            <button
+            <Button
+              variant="secondary" icon={<LogOut size={14} />}
+              label={signingOut ? 'Signing out…' : 'Sign out'}
+              isLoading={signingOut} isDisabled={signingOut}
               onClick={handleSignOut}
-              disabled={signingOut}
-              className="inline-flex items-center gap-2 rounded-[10px] border border-[#E8E4DF] px-4 py-2.5 text-[13px] font-semibold text-[#111111] hover:bg-[#FAFAF8] transition-all disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {signingOut ? (
-                <><Loader2 size={14} className="animate-spin" /> Signing out…</>
-              ) : (
-                <><LogOut size={14} /> Sign out</>
-              )}
-            </button>
+            />
             <p className="text-[11px] text-[#9B9B8F] mt-3">
               Signing out ends your session on this device. It doesn't disconnect your social accounts.
             </p>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -199,32 +185,31 @@ export default function SettingsPage() {
               <p className="text-[12px] text-[#6B6B6B] mt-0.5">View and manage the accounts Populr can review for engagement.</p>
             </div>
             {accounts.length > 0 && (
-              <span className="text-[11px] text-[#9B9B8F]">{connectedAccounts.length} of {accounts.length} connected</span>
+              <Text type="supporting" color="disabled">{connectedAccounts.length} of {accounts.length} connected</Text>
             )}
           </div>
 
           {!backendConfigured && (
-            <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF] flex items-start gap-3">
-              <AlertTriangle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
-                <p className="text-[12px] text-[#6B6B6B] mt-1">Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to see real connected accounts here.</p>
-              </div>
-            </div>
+            <Banner
+              status="warning"
+              title="Populr isn't connected to a backend yet"
+              description="Set VITE_API_URL to see real connected accounts here."
+            />
           )}
 
           {backendConfigured && accountsLoading && (
-            <div className="flex items-center justify-center py-12 text-[#6B6B6B]">
-              <Loader2 size={20} className="animate-spin mr-2" /> Loading connected accounts...
+            <div className="flex items-center justify-center py-12 gap-2">
+              <Spinner size="lg" />
+              <Text type="body" color="secondary">Loading connected accounts...</Text>
             </div>
           )}
 
           {backendConfigured && !accountsLoading && accounts.length === 0 && (
-            <div className="bg-white rounded-2xl p-8 border border-[#E8E4DF] text-center">
+            <Card padding={8} className="text-center">
               <Link2 size={22} className="text-[#9B9B8F] mx-auto mb-3" />
-              <p className="text-[14px] font-semibold text-[#111111]">No accounts connected yet</p>
-              <p className="text-[12px] text-[#6B6B6B] mt-1.5">Connect Instagram, TikTok, LinkedIn, Twitter, or Reddit from the Connections page.</p>
-            </div>
+              <Text type="body" weight="bold" display="block">No accounts connected yet</Text>
+              <Text type="supporting" color="secondary" display="block" className="mt-1.5">Connect Instagram, TikTok, LinkedIn, Twitter, or Reddit from the Connections page.</Text>
+            </Card>
           )}
 
           {backendConfigured && !accountsLoading && accounts.map((acc: ConnectedAccount) => {
@@ -235,86 +220,53 @@ export default function SettingsPage() {
             const isDisconnected = acc.status === 'disconnected';
 
             return (
-              <div key={acc.id} className={`bg-white rounded-2xl border transition-all ${needsReconnect ? 'border-[#FECACA]' : 'border-[#E8E4DF]'}`}>
-                <div className="p-5">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#FAFAF8] overflow-hidden">
-                      {acc.avatar_url ? (
-                        <img src={acc.avatar_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <Icon size={22} className={isConnected ? 'text-[#111111]' : 'text-[#9B9B8F]'} />
-                      )}
+              <Card key={acc.id} padding={5} variant={needsReconnect ? 'red' : 'default'}>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#FAFAF8] overflow-hidden">
+                    {acc.avatar_url ? (
+                      <img src={acc.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Icon size={22} className={isConnected ? 'text-[#111111]' : 'text-[#9B9B8F]'} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-[14px] font-semibold text-[#111111] capitalize">{acc.platform}</p>
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>{status.label}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[14px] font-semibold text-[#111111] capitalize">{acc.platform}</p>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>{status.label}</span>
-                      </div>
-                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">
-                        {acc.username ? `@${acc.username}` : acc.display_name || 'Unknown account'}
-                      </p>
-                      {needsReconnect && <p className="text-[11px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>}
-                      {isDisconnected && <p className="text-[11px] text-[#6B6B6B] mt-0.5">Historical data preserved. New activity will not sync.</p>}
-                    </div>
+                    <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                      {acc.username ? `@${acc.username}` : acc.display_name || 'Unknown account'}
+                    </p>
+                    {needsReconnect && <p className="text-[11px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>}
+                    {isDisconnected && <p className="text-[11px] text-[#6B6B6B] mt-0.5">Historical data preserved. New activity will not sync.</p>}
+                  </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
-                      {isConnected && (
-                        <button onClick={() => setDisconnectModal(acc.id)}
-                          className="p-2 text-[#9B9B8F] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-all" title="Disconnect">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                      {(needsReconnect || isDisconnected) && (
-                        <button onClick={() => beginPlatformConnect(acc.platform)}
-                          className="flex items-center gap-1.5 border border-[#E8E4DF] text-[#111111] rounded-lg px-3 py-2 text-[12px] font-medium hover:bg-[#FAFAF8] transition-all">
-                          <RefreshCw size={14} />Reconnect
-                        </button>
-                      )}
-                    </div>
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                    {isConnected && (
+                      <Button variant="ghost" size="sm" isIconOnly icon={<Trash2 size={16} />} label="Disconnect" onClick={() => setDisconnectModal(acc.id)} />
+                    )}
+                    {(needsReconnect || isDisconnected) && (
+                      <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} label="Reconnect" onClick={() => beginPlatformConnect(acc.platform)} />
+                    )}
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
       )}
 
-      {/* ─── MODALS ─── */}
-
-      {/* Disconnect Confirmation Modal */}
-      {disconnectModal && (() => {
-        const acc = accounts.find((a: ConnectedAccount) => a.id === disconnectModal);
-        if (!acc) return null;
-        const isDisconnecting = disconnecting === disconnectModal;
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-[#FEE2E2] flex items-center justify-center">
-                  <AlertTriangle size={20} className="text-[#DC2626]" />
-                </div>
-                <h3 className="font-geist font-bold text-base text-[#111111] capitalize">Disconnect {acc.platform}?</h3>
-              </div>
-              <div className="bg-[#FAFAF8] rounded-xl p-4 mb-5 space-y-2">
-                <p className="text-[12px] text-[#6B6B6B]">Historical opportunities and conversations will <span className="font-semibold text-[#111111]">remain visible</span>.</p>
-                <p className="text-[12px] text-[#6B6B6B]">Populr will <span className="font-semibold text-[#DC2626]">stop syncing</span> new engagement from this account.</p>
-              </div>
-              <div className="flex gap-2.5">
-                <button onClick={() => setDisconnectModal(null)} disabled={isDisconnecting}
-                  className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2.5 text-[13px] font-medium hover:bg-[#FAFAF8] transition-all disabled:opacity-50">
-                  Cancel
-                </button>
-                <button onClick={() => handleDisconnect(disconnectModal)} disabled={isDisconnecting}
-                  className="flex-1 bg-[#DC2626] text-white rounded-[10px] py-2.5 text-[13px] font-semibold hover:bg-[#B91C1C] transition-all disabled:opacity-60 flex items-center justify-center gap-2">
-                  {isDisconnecting && <Loader2 size={14} className="animate-spin" />}
-                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect account'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <AlertDialog
+        isOpen={disconnectModal !== null}
+        onOpenChange={(open) => { if (!open) setDisconnectModal(null); }}
+        title={`Disconnect ${disconnectTarget ? capitalize(disconnectTarget.platform) : ''}?`}
+        description="Historical opportunities and conversations will remain visible. Populr will stop syncing new engagement from this account."
+        actionLabel={isDisconnecting ? 'Disconnecting...' : 'Disconnect account'}
+        actionVariant="destructive"
+        isActionLoading={isDisconnecting}
+        onAction={() => disconnectModal && handleDisconnect(disconnectModal)}
+      />
     </div>
   );
 }

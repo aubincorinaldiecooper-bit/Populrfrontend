@@ -1,5 +1,6 @@
 import { contacts, conversations, campaigns, contentItems } from '../data';
 import { TrendingUp, Users, MessageSquare, MousePointerClick, Lightbulb } from 'lucide-react';
+import { Card } from '@astryxdesign/core/Card';
 import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
 
@@ -23,18 +24,18 @@ export default function AnalyticsPage() {
         ].map(stat => {
           const Icon = stat.icon;
           return (
-            <div key={stat.label} className="bg-white rounded-xl p-5 border border-[#E8E4DF]">
+            <Card key={stat.label} padding={5}>
               <div className="flex items-center gap-2 mb-2"><Icon size={16} className="text-[#6B6B6B]" /><span className="text-xs text-[#6B6B6B]">{stat.label}</span></div>
               <p className="font-geist-mono font-bold text-2xl text-[#111111]">{stat.value}</p>
               <p className="text-[11px] text-[#10B981] mt-1">{stat.change}</p>
-            </div>
+            </Card>
           );
         })}
       </div>
 
       {/* Platform + Relationship */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+        <Card padding={6}>
           <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Contacts by platform</h2>
           <div className="space-y-3">
             {(['instagram', 'tiktok', 'youtube', 'twitter'] as const).map(platform => {
@@ -53,9 +54,9 @@ export default function AnalyticsPage() {
               );
             })}
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+        <Card padding={6}>
           <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Relationship distribution</h2>
           <div className="space-y-3">
             {[
@@ -77,11 +78,11 @@ export default function AnalyticsPage() {
               );
             })}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Content Attribution */}
-      <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF] mb-8">
+      <Card padding={6} className="mb-8">
         <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Content-to-contact attribution</h2>
         <div className="space-y-4">
           {contentItems.map(item => (
@@ -111,10 +112,10 @@ export default function AnalyticsPage() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Plain-language insight */}
-      <div className="bg-white rounded-xl p-4 border border-[#E8E4DF] flex items-start gap-3">
+      <Card padding={4} className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-full bg-[#FFF3E0] flex items-center justify-center flex-shrink-0">
           <Lightbulb size={14} className="text-[#D97706]" />
         </div>
@@ -122,7 +123,7 @@ export default function AnalyticsPage() {
           <p className="text-[13px] font-medium text-[#111111]">Insight</p>
           <p className="text-[12px] text-[#6B6B6B] mt-0.5">Instagram generated the most contacts, while TikTok produced the highest percentage of Interested contacts. Your Style Guide post is your strongest conversion driver.</p>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { initialsFrom } from '../lib/identity';
 import {
   isBackendConfigured, fetchContacts, fetchContact, updateContact, setContactTag,
   adjustContactScore, markContactConverted, fetchOpportunities, CONTACT_STAGES,
 } from '../lib/api';
 import type { ContactRecord, ContactDetail as ContactDetailData, Opportunity } from '../lib/api';
 import {
-  Search, Loader2, AlertCircle, ArrowLeft, Plus, X, ExternalLink,
+  Search, ArrowLeft, Plus, X, ExternalLink,
 } from 'lucide-react';
+import { Card } from '@astryxdesign/core/Card';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Text } from '@astryxdesign/core/Text';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
+import { TabList, Tab } from '@astryxdesign/core/TabList';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { Avatar } from '@astryxdesign/core/Avatar';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import PlatformDot from '../components/PlatformDot';
@@ -18,6 +27,12 @@ const STAGE_LABEL: Record<string, string> = {
   cold: 'Cold', interested: 'Interested', warm: 'Warm', hot: 'Hot',
   needs_reply: 'Needs reply', converted: 'Converted',
 };
+
+// Distinct from the 'needs_reply' *stage* value below — this marks the
+// separate needs-reply boolean quick-filter so the two don't collide as
+// TabList values (a contact can be in the "needs_reply" stage without its
+// needs_reply flag set, and vice versa).
+const NEEDS_REPLY_FILTER_VALUE = '__needs_reply_flag__';
 
 // Mirrors OpportunitiesPage's STATUS_DOT palette so an opportunity reads the
 // same way wherever it appears, rather than each page inventing its own.
@@ -40,16 +55,6 @@ function relativeTime(iso: string | null): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function Avatar({ url, name }: { url: string | null; name: string }) {
-  return url ? (
-    <img src={url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-  ) : (
-    <div className="w-9 h-9 rounded-full bg-[#FAFAF8] border border-[#E8E4DF] flex items-center justify-center text-[11px] font-semibold text-[#6B6B6B] flex-shrink-0">
-      {initialsFrom(name)}
-    </div>
-  );
-}
-
 function ContactDetailView({
   contact, accountLabel, onBack, onSaved,
 }: {
@@ -66,7 +71,7 @@ function ContactDetailView({
   const [newTag, setNewTag] = useState('');
   const [busyTag, setBusyTag] = useState(false);
   const [busyStage, setBusyStage] = useState(false);
-  const [scoreDelta, setScoreDelta] = useState('');
+  const [scoreDelta, setScoreDelta] = useState<number | null>(null);
   const [busyScore, setBusyScore] = useState(false);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [oppsLoading, setOppsLoading] = useState(true);
@@ -168,14 +173,13 @@ function ContactDetailView({
   };
 
   const handleAdjustScore = async () => {
-    const delta = Number(scoreDelta);
-    if (!Number.isFinite(delta) || delta === 0) return;
+    if (scoreDelta == null || scoreDelta === 0) return;
     setBusyScore(true);
     try {
-      const leadScore = await adjustContactScore(contact.id, delta);
+      const leadScore = await adjustContactScore(contact.id, scoreDelta);
       setDetail(d => (d ? { ...d, contact: { ...d.contact, lead_score: leadScore } } : d));
       onSaved({ ...current, lead_score: leadScore });
-      setScoreDelta('');
+      setScoreDelta(null);
       showToast('Lead score updated', 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not adjust lead score.', 'error');
@@ -186,12 +190,10 @@ function ContactDetailView({
 
   return (
     <div className="pop-page max-w-[820px]">
-      <button onClick={onBack} className="pop-btn-ghost mb-5">
-        <ArrowLeft size={16} />Back to contacts
-      </button>
+      <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} label="Back to contacts" className="mb-5" onClick={onBack} />
 
       <div className="flex items-start gap-4 mb-6">
-        <Avatar url={current.avatar_url} name={current.name ?? current.handle ?? 'Contact'} />
+        <Avatar src={current.avatar_url ?? undefined} name={current.name ?? current.handle ?? 'Contact'} size="md" tooltip={false} className="flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="pop-section-heading">{current.handle ? `@${current.handle}` : current.name ?? 'Unknown contact'}</h1>
@@ -213,7 +215,7 @@ function ContactDetailView({
       </div>
 
       <div className="grid sm:grid-cols-2 gap-5 mb-5">
-        <div className="pop-card p-4">
+        <Card padding={4}>
           <p className="pop-meta mb-2">Stage</p>
           <div className="flex flex-wrap gap-1.5">
             {CONTACT_STAGES.map(s => (
@@ -224,25 +226,20 @@ function ContactDetailView({
             ))}
           </div>
           {current.stage !== 'converted' && (
-            <button onClick={handleConverted} disabled={busyStage} className="pop-btn-secondary text-[11px] py-1.5 px-3 mt-3 disabled:opacity-60">
-              Mark converted
-            </button>
+            <Button variant="secondary" size="sm" label="Mark converted" isDisabled={busyStage} className="mt-3" onClick={handleConverted} />
           )}
-        </div>
+        </Card>
 
-        <div className="pop-card p-4">
+        <Card padding={4}>
           <p className="pop-meta mb-2">Adjust lead score</p>
-          <div className="flex gap-2">
-            <input type="number" value={scoreDelta} onChange={e => setScoreDelta(e.target.value)} placeholder="e.g. 10 or -10"
-              className="pop-input flex-1 text-[12px] py-1.5" />
-            <button onClick={handleAdjustScore} disabled={busyScore || !scoreDelta} className="pop-btn-secondary text-[11px] px-3 disabled:opacity-60">
-              {busyScore ? <Loader2 size={12} className="animate-spin" /> : 'Apply'}
-            </button>
+          <div className="flex gap-2 items-start">
+            <NumberInput label="Score delta" isLabelHidden value={scoreDelta} onChange={setScoreDelta} hasClear placeholder="e.g. 10 or -10" className="flex-1" />
+            <Button variant="secondary" size="sm" label="Apply" isLoading={busyScore} isDisabled={busyScore || scoreDelta == null} onClick={handleAdjustScore} />
           </div>
-        </div>
+        </Card>
       </div>
 
-      <div className="pop-card p-4 mb-5">
+      <Card padding={4} className="mb-5">
         <p className="pop-meta mb-2">Tags</p>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {current.tags.length === 0 && <span className="text-[12px] text-[#9B9B8F]">No tags yet.</span>}
@@ -256,27 +253,30 @@ function ContactDetailView({
           ))}
         </div>
         <div className="flex gap-2">
-          <input type="text" value={newTag} onChange={e => setNewTag(e.target.value)}
+          <TextInput
+            label="Add a tag" isLabelHidden value={newTag} onChange={setNewTag}
             onKeyDown={e => e.key === 'Enter' && handleAddTag()}
-            placeholder="Add a tag" className="pop-input flex-1 text-[12px] py-1.5" />
-          <button onClick={handleAddTag} disabled={busyTag || !newTag.trim()} className="pop-btn-secondary text-[11px] px-3 disabled:opacity-60">
-            <Plus size={12} />
-          </button>
+            placeholder="Add a tag" className="flex-1"
+          />
+          <Button variant="secondary" size="sm" isIconOnly icon={<Plus size={12} />} label="Add tag" isDisabled={busyTag || !newTag.trim()} onClick={handleAddTag} />
         </div>
-      </div>
+      </Card>
 
-      <div className="pop-card p-4 mb-5">
+      <Card padding={4} className="mb-5">
         <p className="pop-meta mb-2">Notes</p>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-          className="pop-input w-full resize-none text-[13px]" placeholder="Private notes about this contact…" />
-        <button onClick={handleSaveNotes} disabled={savingNotes || notes === (current.notes ?? '')}
-          className="pop-btn-secondary text-[11px] py-1.5 px-3 mt-2 disabled:opacity-60">
-          {savingNotes ? 'Saving…' : 'Save notes'}
-        </button>
-      </div>
+        <TextArea
+          label="Notes" isLabelHidden value={notes} onChange={setNotes} rows={3}
+          placeholder="Private notes about this contact…"
+        />
+        <Button
+          variant="secondary" size="sm" label={savingNotes ? 'Saving…' : 'Save notes'} className="mt-2"
+          isLoading={savingNotes} isDisabled={savingNotes || notes === (current.notes ?? '')}
+          onClick={handleSaveNotes}
+        />
+      </Card>
 
       {(detail?.sourceAutomation || detail?.sourcePost || current.source_type) && (
-        <div className="pop-card p-4 mb-5">
+        <Card padding={4} className="mb-5">
           <p className="pop-meta mb-2">How they found you</p>
           <p className="text-[13px] text-[#111111]">
             {detail?.sourceAutomation ? `Via automation "${detail.sourceAutomation.name}"` : `Source: ${current.source_type}`}
@@ -287,14 +287,15 @@ function ContactDetailView({
               View source post <ExternalLink size={11} />
             </a>
           )}
-        </div>
+        </Card>
       )}
 
-      <div className="pop-card p-5 mb-5">
+      <Card padding={5} className="mb-5">
         <h2 className="pop-card-title mb-3">Conversation history</h2>
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-[#6B6B6B]">
-            <Loader2 size={18} className="animate-spin mr-2" /> Loading...
+          <div className="flex items-center justify-center py-8 gap-2">
+            <Spinner size="md" />
+            <Text type="body" color="secondary">Loading...</Text>
           </div>
         ) : !detail || detail.messages.length === 0 ? (
           <p className="text-[12px] text-[#6B6B6B]">No messages yet.</p>
@@ -310,13 +311,14 @@ function ContactDetailView({
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="pop-card p-5">
+      <Card padding={5}>
         <h2 className="pop-card-title mb-3">Related opportunities</h2>
         {oppsLoading ? (
-          <div className="flex items-center justify-center py-8 text-[#6B6B6B]">
-            <Loader2 size={18} className="animate-spin mr-2" /> Loading...
+          <div className="flex items-center justify-center py-8 gap-2">
+            <Spinner size="md" />
+            <Text type="body" color="secondary">Loading...</Text>
           </div>
         ) : opportunities.length === 0 ? (
           <p className="text-[12px] text-[#6B6B6B]">No opportunities from this contact yet.</p>
@@ -336,7 +338,7 @@ function ContactDetailView({
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -344,12 +346,13 @@ function ContactDetailView({
 const PAGE_SIZE = 50;
 
 export default function ContactsPage() {
-  const { accounts } = useApp();
+  const { accounts, showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const [contactList, setContactList] = useState<ContactRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -363,28 +366,46 @@ export default function ContactsPage() {
   }, [search]);
 
   const requestSeq = useRef(0);
-  const load = useCallback(() => {
-    if (!backendConfigured) { setLoading(false); return; }
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    setError(null);
-    fetchContacts({
-      search: debouncedSearch || undefined,
-      stage: stageFilter,
-      needsReply: needsReplyOnly ? true : undefined,
-      limit: PAGE_SIZE,
-    })
-      .then(r => {
-        if (seq !== requestSeq.current) return;
-        setContactList(r.contacts);
-        setTotal(r.total);
+  const runFetch = useCallback(
+    ({ offset, limit, append }: { offset: number; limit: number; append: boolean }) => {
+      if (!backendConfigured) { setLoading(false); return; }
+      const seq = ++requestSeq.current;
+      if (append) setLoadingMore(true);
+      else { setLoading(true); setError(null); }
+      fetchContacts({
+        search: debouncedSearch || undefined,
+        stage: stageFilter,
+        needsReply: needsReplyOnly ? true : undefined,
+        limit,
+        offset,
       })
-      .catch(err => {
-        if (seq !== requestSeq.current) return;
-        setError(err instanceof Error ? err.message : 'Could not load contacts right now.');
-      })
-      .finally(() => { if (seq === requestSeq.current) setLoading(false); });
-  }, [backendConfigured, debouncedSearch, stageFilter, needsReplyOnly]);
+        .then(r => {
+          if (seq !== requestSeq.current) return;
+          setContactList(prev => (append ? [...prev, ...r.contacts] : r.contacts));
+          setTotal(r.total);
+        })
+        .catch(err => {
+          if (seq !== requestSeq.current) return;
+          const message = err instanceof Error ? err.message : 'Could not load contacts right now.';
+          if (append) showToast(message, 'error');
+          else setError(message);
+        })
+        .finally(() => {
+          if (seq === requestSeq.current) { setLoading(false); setLoadingMore(false); }
+        });
+    },
+    [backendConfigured, debouncedSearch, stageFilter, needsReplyOnly, showToast]
+  );
+
+  const load = useCallback(
+    () => runFetch({ offset: 0, limit: PAGE_SIZE, append: false }),
+    [runFetch]
+  );
+
+  const loadMore = useCallback(
+    () => runFetch({ offset: contactList.length, limit: PAGE_SIZE, append: true }),
+    [runFetch, contactList.length]
+  );
 
   useEffect(() => {
     // Data fetch from the backend, not derived state.
@@ -396,6 +417,13 @@ export default function ContactsPage() {
 
   const handleSavedFromDetail = (updated: ContactRecord) => {
     setContactList(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+  };
+
+  const activeFilterValue = needsReplyOnly ? NEEDS_REPLY_FILTER_VALUE : (stageFilter ?? 'all');
+  const handleFilterChange = (value: string) => {
+    if (value === 'all') { setStageFilter(undefined); setNeedsReplyOnly(false); }
+    else if (value === NEEDS_REPLY_FILTER_VALUE) { setNeedsReplyOnly(true); setStageFilter(undefined); }
+    else { setStageFilter(value); setNeedsReplyOnly(false); }
   };
 
   const detail = detailId ? contactList.find(c => c.id === detailId) ?? null : null;
@@ -418,60 +446,49 @@ export default function ContactsPage() {
         title="Contacts"
         subtitle={backendConfigured ? `${total} ${total === 1 ? 'person has' : 'people have'} engaged with you` : undefined}
         action={
-          <div className="relative w-full sm:w-auto">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts..."
-              className="pop-search w-full sm:w-56" />
-          </div>
+          <TextInput
+            label="Search contacts" isLabelHidden value={search} onChange={setSearch}
+            placeholder="Search contacts..." startIcon={<Search size={16} />}
+            className="w-full sm:w-56"
+          />
         }
       />
 
       {!backendConfigured && (
-        <div className="pop-card p-6 mb-6 flex items-start gap-3">
-          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
-            <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see real contacts here. This page never shows placeholder data in its place.
-            </p>
-          </div>
-        </div>
+        <Banner
+          status="warning"
+          title="Populr isn't connected to a backend yet"
+          description="Set VITE_API_URL to your Populr backend to see real contacts here. This page never shows placeholder data in its place."
+          className="mb-6"
+        />
       )}
 
       {backendConfigured && (
         <>
-          <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
-            <button onClick={() => { setStageFilter(undefined); setNeedsReplyOnly(false); }}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${!stageFilter && !needsReplyOnly ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-              All
-            </button>
-            <button onClick={() => { setNeedsReplyOnly(true); setStageFilter(undefined); }}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${needsReplyOnly ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-              Needs reply
-            </button>
-            {CONTACT_STAGES.map(s => (
-              <button key={s} onClick={() => { setStageFilter(s); setNeedsReplyOnly(false); }}
-                className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${stageFilter === s ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-                {STAGE_LABEL[s] ?? s}
-              </button>
-            ))}
+          <div className="overflow-x-auto pb-1 mb-5">
+            <TabList value={activeFilterValue} onChange={handleFilterChange}>
+              <Tab value="all" label="All" />
+              <Tab value={NEEDS_REPLY_FILTER_VALUE} label="Needs reply" />
+              {CONTACT_STAGES.map(s => (
+                <Tab key={s} value={s} label={STAGE_LABEL[s] ?? s} />
+              ))}
+            </TabList>
           </div>
 
           {loading && (
-            <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
-              <Loader2 size={20} className="animate-spin mr-2" /> Loading contacts...
+            <div className="flex items-center justify-center py-16 gap-2">
+              <Spinner size="lg" />
+              <Text type="body" color="secondary">Loading contacts...</Text>
             </div>
           )}
 
           {!loading && error && (
-            <div className="pop-card p-6 flex items-start gap-3">
-              <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load contacts</p>
-                <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
-                <button onClick={load} className="pop-btn-secondary text-[12px] py-1.5 px-3 mt-3">Try again</button>
-              </div>
-            </div>
+            <Banner
+              status="error"
+              title="Couldn't load contacts"
+              description={error}
+              endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />}
+            />
           )}
 
           {!loading && !error && contactList.length === 0 && (
@@ -480,14 +497,14 @@ export default function ContactsPage() {
           )}
 
           {!loading && !error && contactList.length > 0 && (
-            <div className="pop-card overflow-hidden">
+            <Card padding={0} className="overflow-hidden">
               <div className="divide-y divide-[#F0EEEA]">
                 {contactList.map(c => {
                   const account = c.account_id ? accountById[c.account_id] : undefined;
                   return (
                     <button key={c.id} onClick={() => setDetailId(c.id)}
                       className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-[#FAFAF8] transition-colors">
-                      <Avatar url={c.avatar_url} name={c.name ?? c.handle ?? 'Contact'} />
+                      <Avatar src={c.avatar_url ?? undefined} name={c.name ?? c.handle ?? 'Contact'} size="md" tooltip={false} className="flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-[13px] font-semibold text-[#111111] truncate">{c.handle ? `@${c.handle}` : c.name ?? 'Unknown'}</p>
@@ -508,6 +525,16 @@ export default function ContactsPage() {
                   );
                 })}
               </div>
+            </Card>
+          )}
+
+          {!loading && !error && contactList.length > 0 && contactList.length < total && (
+            <div className="flex flex-col items-center gap-2 mt-5">
+              <Button
+                variant="secondary" size="sm" label={loadingMore ? 'Loading...' : 'Load more'}
+                isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}
+              />
+              <Text type="supporting" color="disabled">Showing {contactList.length} of {total}</Text>
             </div>
           )}
         </>

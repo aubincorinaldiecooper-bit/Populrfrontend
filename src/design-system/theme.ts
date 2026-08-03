@@ -41,6 +41,15 @@ export const populrTheme = defineTheme({
     '--color-text-accent': '#111111',
     '--color-icon-accent': '#111111',
     '--color-background-body': '#F3F0EC', // matches --pop-cream (30 23% 94%)
+    // Astryx derives these from neutralStyle: 'warm', which shades them a
+    // visible yellow-tinted white — never noticed while Button/Spinner were
+    // the only Astryx surfaces in use, since neither renders a large fill.
+    // Every existing card/input across the pre-Astryx Tailwind UI is a flat
+    // #FFFFFF against the cream body background (.pop-card, .pop-input);
+    // pinned to match exactly, same as the other tokens below.
+    '--color-background-surface': '#FFFFFF',
+    '--color-background-card': '#FFFFFF',
+    '--color-background-popover': '#FFFFFF',
     '--color-text-primary': '#111111',
     '--color-text-secondary': '#6B6B6B',
     '--color-border': '#E8E4DF',
