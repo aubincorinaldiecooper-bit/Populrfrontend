@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { initialsFrom } from '../lib/identity';
 import {
   isBackendConfigured, fetchContacts, fetchContact, updateContact, setContactTag,
   adjustContactScore, markContactConverted, fetchOpportunities, CONTACT_STAGES,
@@ -18,6 +17,7 @@ import { TextArea } from '@astryxdesign/core/TextArea';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { Spinner } from '@astryxdesign/core/Spinner';
+import { Avatar } from '@astryxdesign/core/Avatar';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import PlatformDot from '../components/PlatformDot';
@@ -53,16 +53,6 @@ function relativeTime(iso: string | null): string {
   const days = Math.round(hours / 24);
   if (days < 7) return `${days}d ago`;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function Avatar({ url, name }: { url: string | null; name: string }) {
-  return url ? (
-    <img src={url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-  ) : (
-    <div className="w-9 h-9 rounded-full bg-[#FAFAF8] border border-[#E8E4DF] flex items-center justify-center text-[11px] font-semibold text-[#6B6B6B] flex-shrink-0">
-      {initialsFrom(name)}
-    </div>
-  );
 }
 
 function ContactDetailView({
@@ -203,7 +193,7 @@ function ContactDetailView({
       <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} label="Back to contacts" className="mb-5" onClick={onBack} />
 
       <div className="flex items-start gap-4 mb-6">
-        <Avatar url={current.avatar_url} name={current.name ?? current.handle ?? 'Contact'} />
+        <Avatar src={current.avatar_url ?? undefined} name={current.name ?? current.handle ?? 'Contact'} size="md" tooltip={false} className="flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="pop-section-heading">{current.handle ? `@${current.handle}` : current.name ?? 'Unknown contact'}</h1>
@@ -514,7 +504,7 @@ export default function ContactsPage() {
                   return (
                     <button key={c.id} onClick={() => setDetailId(c.id)}
                       className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-[#FAFAF8] transition-colors">
-                      <Avatar url={c.avatar_url} name={c.name ?? c.handle ?? 'Contact'} />
+                      <Avatar src={c.avatar_url ?? undefined} name={c.name ?? c.handle ?? 'Contact'} size="md" tooltip={false} className="flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-[13px] font-semibold text-[#111111] truncate">{c.handle ? `@${c.handle}` : c.name ?? 'Unknown'}</p>
