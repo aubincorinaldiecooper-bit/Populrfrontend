@@ -54,16 +54,89 @@ export default {
         },
         coral: 'hsl(var(--pop-coral))',
         cream: 'hsl(var(--pop-cream))',
+
+        // ─── Material-3 redesign palette (literal, single light theme) ───
+        // Ported verbatim from the redesign mockups so their markup can be
+        // reused directly. `bg-primary`/`bg-background`/`bg-secondary`/
+        // `border`/`ring` continue to resolve through shadcn's CSS vars
+        // (set to these same values in index.css), so shadcn primitives and
+        // this token set stay visually identical.
+        surface: {
+          DEFAULT: '#faf9f6',
+          dim: '#dbdad7',
+          bright: '#faf9f6',
+          variant: '#e3e2e0',
+          tint: '#5e5e5e',
+          'container-lowest': '#ffffff',
+          'container-low': '#f4f3f1',
+          container: '#efeeeb',
+          'container-high': '#e9e8e5',
+          'container-highest': '#e3e2e0',
+        },
+        'on-surface': '#1a1c1a',
+        'on-surface-variant': '#4c4546',
+        'on-background': '#1a1c1a',
+        outline: {
+          DEFAULT: '#7e7576',
+          variant: '#cfc4c5',
+        },
+        'inverse-surface': '#2f312f',
+        'inverse-on-surface': '#f2f1ee',
+        'inverse-primary': '#c6c6c6',
+        'on-primary': '#ffffff',
+        'primary-container': '#1b1b1b',
+        'on-primary-container': '#848484',
+        'primary-fixed': '#e2e2e2',
+        'primary-fixed-dim': '#c6c6c6',
+        'on-primary-fixed': '#1b1b1b',
+        'on-primary-fixed-variant': '#474747',
+        olive: '#536500',
+        'secondary-container': '#d3ef6c',
+        'on-secondary-container': '#596c00',
+        'secondary-fixed': '#d3ef6c',
+        'secondary-fixed-dim': '#b7d253',
+        'on-secondary': '#ffffff',
+        'on-secondary-fixed': '#171e00',
+        'on-secondary-fixed-variant': '#3e4c00',
+        tertiary: '#000000',
+        'tertiary-container': '#270058',
+        'on-tertiary': '#ffffff',
+        'on-tertiary-container': '#9c62ff',
+        'tertiary-fixed': '#ebdcff',
+        'tertiary-fixed-dim': '#d4bbff',
+        'on-tertiary-fixed': '#270058',
+        'on-tertiary-fixed-variant': '#5d00c2',
+        error: {
+          DEFAULT: '#ba1a1a',
+          container: '#ffdad6',
+        },
+        'on-error': '#ffffff',
+        'on-error-container': '#93000a',
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        xl: '16px',
       },
       fontFamily: {
         geist: ['Geist', 'sans-serif'],
         mono: ['GeistMono', 'ui-monospace', 'monospace'],
         'geist-mono': ['GeistMono', 'ui-monospace', 'monospace'],
+        // ─── Redesign type roles ───
+        // Roboto Flex is the primary UI face (display + body); JetBrains Mono
+        // carries data labels / metrics per the mockups' label-sm role.
+        display: ['"Roboto Flex Variable"', 'Roboto Flex', 'sans-serif'],
+        body: ['"Roboto Flex Variable"', 'Roboto Flex', 'sans-serif'],
+        label: ['"JetBrains Mono Variable"', 'ui-monospace', 'monospace'],
+      },
+      fontSize: {
+        'display-lg': ['48px', { lineHeight: '56px', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'display-lg-mobile': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'headline-md': ['24px', { lineHeight: '32px', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'label-sm': ['12px', { lineHeight: '16px', letterSpacing: '0.05em', fontWeight: '500' }],
+        'body-lg': ['18px', { lineHeight: '28px', fontWeight: '400' }],
+        'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
       },
       boxShadow: {
         card: '0 4px 16px rgba(17, 17, 17, 0.06)',

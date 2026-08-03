@@ -10,9 +10,9 @@ export default function Layout({ children }: { children?: ReactNode }) {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-cream">
+    <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="lg:ml-[220px] min-h-screen pt-14 lg:pt-0">
+      <main className="md:ml-[280px] min-h-screen pt-16 md:pt-0">
         {/* Scoped to the content area and keyed on the route, so a crash on
             one page (e.g. a lazy chunk failing to load after a redeploy)
             shows a recoverable message here instead of blanking the whole

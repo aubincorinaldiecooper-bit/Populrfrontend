@@ -50,35 +50,38 @@
     --pop-coral: 14 100% 64%;
     --pop-purple: 262 83% 58%;
 
-    /* ─── shadcn mapping ─── */
-    --background: 30 23% 94%;
-    --foreground: 0 0% 7%;
+    /* ─── shadcn mapping (Material-3 redesign palette) ─────────────────
+     * Black primary, lime secondary/accent, warm off-white surfaces.
+     * Kept in sync with the literal Material-3 tokens in tailwind.config.js
+     * so shadcn primitives and ported mockup markup render identically. */
+    --background: 45 29% 97%;
+    --foreground: 120 4% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 7%;
+    --card-foreground: 120 4% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 7%;
-    --primary: 78 100% 62%;
-    --primary-foreground: 0 0% 7%;
-    --secondary: 30 14% 95%;
-    --secondary-foreground: 0 0% 7%;
-    --muted: 30 14% 95%;
-    --muted-foreground: 0 0% 42%;
-    --accent: 78 100% 62%;
-    --accent-foreground: 0 0% 7%;
-    --destructive: 14 100% 64%;
+    --popover-foreground: 120 4% 11%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 73 80% 68%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 45 11% 93%;
+    --muted-foreground: 351 5% 28%;
+    --accent: 73 80% 68%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 75% 42%;
     --destructive-foreground: 0 0% 100%;
-    --border: 30 12% 90%;
-    --input: 30 12% 90%;
-    --ring: 78 100% 62%;
-    --radius: 0.625rem;
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 7%;
-    --sidebar-primary: 78 100% 62%;
-    --sidebar-primary-foreground: 0 0% 7%;
-    --sidebar-accent: 30 14% 95%;
-    --sidebar-accent-foreground: 0 0% 7%;
-    --sidebar-border: 30 12% 90%;
-    --sidebar-ring: 78 100% 62%;
+    --border: 40 5% 88%;
+    --input: 40 5% 88%;
+    --ring: 0 0% 0%;
+    --radius: 0.75rem;
+    --sidebar-background: 45 29% 97%;
+    --sidebar-foreground: 120 4% 11%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 73 80% 68%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 40 5% 88%;
+    --sidebar-ring: 0 0% 0%;
   }
 
   * {
@@ -86,7 +89,7 @@
   }
 
   body {
-    @apply bg-cream text-foreground font-geist antialiased;
+    @apply bg-background text-foreground font-body antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
