@@ -1,9 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { useApp } from '../context/AppContext';
+import { useNavigate } from 'react-router';
 import {
   Plus, Play, Pause, Search, Megaphone, ArrowRight,
 } from 'lucide-react';
+import { ClickableCard } from '@astryxdesign/core/ClickableCard';
+import { Button } from '@astryxdesign/core/Button';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { TabList, Tab } from '@astryxdesign/core/TabList';
+import { useApp } from '../context/AppContext';
+import { campaigns } from '../data';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import EmptyState from '../components/EmptyState';
@@ -17,7 +22,7 @@ function CampaignRow({
   campaign: typeof campaigns[0]; onToggle: () => void; onEdit: () => void;
 }) {
   return (
-    <div className="pop-card p-4 pop-card-hover cursor-pointer" onClick={onEdit}>
+    <ClickableCard label={`${campaign.name} campaign`} padding={4} className="pop-card-hover" onClick={onEdit}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${campaign.status === 'active' ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
@@ -37,19 +42,18 @@ function CampaignRow({
             <span>{campaign.conversions} conv.</span>
             <span>{campaign.clicks} clicks</span>
           </div>
-          <button onClick={e => { e.stopPropagation(); onEdit(); }} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all" title="Edit">
-            <ArrowRight size={14} className="text-[#6B6B6B]" />
-          </button>
-          <button onClick={e => { e.stopPropagation(); onToggle(); }} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all">
-            {campaign.status === 'active' ? <Pause size={14} className="text-[#6B6B6B]" /> : <Play size={14} className="text-[#10B981]" />}
-          </button>
+          <Button variant="ghost" size="sm" isIconOnly icon={<ArrowRight size={14} />} label="Edit" onClick={onEdit} />
+          <Button
+            variant="ghost" size="sm" isIconOnly
+            icon={campaign.status === 'active' ? <Pause size={14} /> : <Play size={14} className="text-[#10B981]" />}
+            label={campaign.status === 'active' ? 'Pause' : 'Resume'}
+            onClick={onToggle}
+          />
         </div>
       </div>
-    </div>
+    </ClickableCard>
   );
 }
-
-import { campaigns } from '../data';
 
 export default function CampaignsPage() {
   const navigate = useNavigate();
@@ -91,30 +95,23 @@ export default function CampaignsPage() {
         title="Campaigns"
         subtitle="Reach the audiences Populr has identified for you."
         action={
-          <Link to="/campaigns/new" className="pop-btn-primary">
-            <Plus size={14} strokeWidth={2.5} />Create campaign
-          </Link>
+          <Button label="Create campaign" variant="primary" icon={<Plus size={14} strokeWidth={2.5} />} onClick={() => navigate('/campaigns/new')} />
         }
       />
 
       {/* Search + Tabs */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
-        <div className="relative w-full sm:max-w-[280px]">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search campaigns..."
-            className="pop-search w-full" />
-        </div>
-        <div className="flex gap-1 overflow-x-auto pb-1 w-full sm:w-auto">
-          {([
-            { key: 'active' as StatusTab, label: 'Active', count: counts.active },
-            { key: 'drafts' as StatusTab, label: 'Drafts', count: counts.drafts },
-            { key: 'completed' as StatusTab, label: 'Completed', count: counts.completed },
-          ]).map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${tab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-              {t.label} <span className="text-[10px] opacity-60">({t.count})</span>
-            </button>
-          ))}
+        <TextInput
+          label="Search campaigns" isLabelHidden value={search} onChange={setSearch}
+          placeholder="Search campaigns..." startIcon={<Search size={16} />}
+          size="sm" className="w-full sm:max-w-[280px]"
+        />
+        <div className="overflow-x-auto w-full sm:w-auto">
+          <TabList value={tab} onChange={v => setTab(v as StatusTab)}>
+            <Tab value="active" label="Active" endContent={<span className="text-[10px] opacity-60">{counts.active}</span>} />
+            <Tab value="drafts" label="Drafts" endContent={<span className="text-[10px] opacity-60">{counts.drafts}</span>} />
+            <Tab value="completed" label="Completed" endContent={<span className="text-[10px] opacity-60">{counts.completed}</span>} />
+          </TabList>
         </div>
       </div>
 
@@ -124,7 +121,7 @@ export default function CampaignsPage() {
           icon="campaigns"
           title="No active campaigns"
           description="Reach your first audience. Start from an opportunity Populr has identified."
-          action={<Link to="/opportunities" className="pop-btn-primary">View opportunities</Link>}
+          action={<Button label="View opportunities" variant="primary" onClick={() => navigate('/opportunities')} />}
         />
       )}
       {filtered.length === 0 && tab === 'drafts' && !search && (
@@ -132,7 +129,7 @@ export default function CampaignsPage() {
           icon="campaigns"
           title="No drafts"
           description="Save a campaign as a draft while building it."
-          action={<Link to="/campaigns/new" className="pop-btn-primary">Create campaign</Link>}
+          action={<Button label="Create campaign" variant="primary" onClick={() => navigate('/campaigns/new')} />}
         />
       )}
       {filtered.length === 0 && tab === 'completed' && !search && (

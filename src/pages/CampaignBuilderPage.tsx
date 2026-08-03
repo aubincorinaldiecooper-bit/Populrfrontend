@@ -1,5 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { Card } from '@astryxdesign/core/Card';
+import { SelectableCard } from '@astryxdesign/core/SelectableCard';
+import { Button } from '@astryxdesign/core/Button';
+import { Banner } from '@astryxdesign/core/Banner';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { Switch } from '@astryxdesign/core/Switch';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
@@ -392,19 +400,19 @@ export default function CampaignBuilderPage() {
       <div className="bg-white border-b border-[#E8E4DF] px-6 py-2 flex-shrink-0 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={handleBack} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all">
-              {step === 1 ? <X size={18} className="text-[#6B6B6B]" /> : <ChevronLeft size={18} className="text-[#6B6B6B]" />}
-            </button>
+            <Button
+              variant="ghost" size="sm" isIconOnly
+              icon={step === 1 ? <X size={18} /> : <ChevronLeft size={18} />}
+              label={step === 1 ? 'Close' : 'Back'}
+              onClick={handleBack}
+            />
             <div>
               <h1 className="font-geist font-bold text-base text-[#111111]">{isEditMode ? 'Edit campaign' : 'Create campaign'}</h1>
               <p className="text-[11px] text-[#6B6B6B]">Step {step} of {TOTAL_STEPS}: {stepTitles[step - 1]}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleSaveDraft}
-              className="text-[12px] font-medium text-[#6B6B6B] hover:text-[#111111] transition-all flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-[#FAFAF8]">
-              <Save size={14} />Save draft
-            </button>
+            <Button variant="ghost" size="sm" label="Save draft" icon={<Save size={14} />} onClick={handleSaveDraft} />
           </div>
         </div>
         {/* Step indicators */}
@@ -436,15 +444,19 @@ export default function CampaignBuilderPage() {
                       const Icon = g.icon;
                       const sel = selectedGoal === g.label;
                       return (
-                        <button key={g.id} onClick={() => { setSelectedGoal(g.label); setErrors(prev => { const n = { ...prev }; delete n.goal; return n; }); }}
-                          className={`flex items-start gap-2.5 border rounded-xl p-2.5 text-left transition-all ${sel ? 'border-[#111111] bg-[#FAFAF8]' : 'border-[#E8E4DF] hover:border-[#D4CFC8]'}`}>
+                        <SelectableCard
+                          key={g.id} label={g.label} padding={3}
+                          className="flex items-start gap-2.5"
+                          isSelected={sel}
+                          onChange={() => { setSelectedGoal(g.label); setErrors(prev => { const n = { ...prev }; delete n.goal; return n; }); }}
+                        >
                           <Icon size={18} className="text-[#6B6B6B] flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="text-[13px] font-semibold text-[#111111]">{g.label}</p>
                             <p className="text-[11px] text-[#6B6B6B]">{g.desc}</p>
                           </div>
                           {sel && <Check size={16} className="text-[#111111] ml-auto flex-shrink-0" />}
-                        </button>
+                        </SelectableCard>
                       );
                     })}
                   </div>
@@ -460,8 +472,12 @@ export default function CampaignBuilderPage() {
                       const Icon = sp.icon;
                       const sel = selectedStart === sp.id;
                       return (
-                        <button key={sp.id} onClick={() => { setSelectedStart(sp.id); setErrors(prev => { const n = { ...prev }; delete n.start; return n; }); }}
-                          className={`w-full flex items-start gap-3 border rounded-xl p-3 text-left transition-all ${sel ? 'border-[#111111] bg-[#FAFAF8]' : sp.prominent ? 'border-chartreuse/50 hover:border-chartreuse' : 'border-[#E8E4DF] hover:border-[#D4CFC8]'}`}>
+                        <SelectableCard
+                          key={sp.id} label={sp.label} padding={3}
+                          className="w-full flex items-start gap-3"
+                          isSelected={sel}
+                          onChange={() => { setSelectedStart(sp.id); setErrors(prev => { const n = { ...prev }; delete n.start; return n; }); }}
+                        >
                           <Icon size={18} className={`flex-shrink-0 mt-0.5 ${sp.prominent ? 'text-chartreuse' : 'text-[#6B6B6B]'}`} />
                           <div className="flex-1">
                             <p className="text-[13px] font-semibold text-[#111111]">{sp.label}</p>
@@ -470,7 +486,7 @@ export default function CampaignBuilderPage() {
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${sel ? 'border-[#111111] bg-[#111111]' : 'border-[#E8E4DF]'}`}>
                             {sel && <div className="w-2 h-2 rounded-full bg-white" />}
                           </div>
-                        </button>
+                        </SelectableCard>
                       );
                     })}
                   </div>
@@ -521,13 +537,17 @@ export default function CampaignBuilderPage() {
                       {contentItems.map(item => {
                         const sel = selectedContent === item.id;
                         return (
-                          <button key={item.id} onClick={() => setSelectedContent(item.id)}
-                            className={`relative rounded-xl overflow-hidden border-2 transition-all ${sel ? 'border-chartreuse' : 'border-transparent hover:border-[#E8E4DF]'}`}>
+                          <SelectableCard
+                            key={item.id} label={item.title} padding={0}
+                            className="relative overflow-hidden"
+                            isSelected={sel}
+                            onChange={() => setSelectedContent(item.id)}
+                          >
                             <img src={item.thumbnail} alt="" className="w-full aspect-[3/4] object-cover" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
                             <p className="absolute bottom-2 left-2 right-2 text-white text-[10px] font-semibold">{item.title}</p>
                             {sel && <div className="absolute top-2 left-2 w-5 h-5 bg-chartreuse rounded-full flex items-center justify-center"><Check size={12} className="text-[#111111]" /></div>}
-                          </button>
+                          </SelectableCard>
                         );
                       })}
                     </div>
@@ -540,8 +560,12 @@ export default function CampaignBuilderPage() {
                     {errors.segment && <p className="text-[11px] text-coral mb-2">{errors.segment}</p>}
                     <div className="space-y-2">
                       {intentGroups.map(ig => (
-                        <button key={ig.id} onClick={() => setSelectedSegment(ig.id)}
-                          className={`w-full flex items-center gap-3 border rounded-xl p-3 text-left transition-all ${selectedSegment === ig.id ? 'border-[#111111] bg-[#FAFAF8]' : 'border-[#E8E4DF] hover:border-[#D4CFC8]'}`}>
+                        <SelectableCard
+                          key={ig.id} label={ig.name} padding={3}
+                          className="w-full flex items-center gap-3"
+                          isSelected={selectedSegment === ig.id}
+                          onChange={() => setSelectedSegment(ig.id)}
+                        >
                           <div className={`w-8 h-8 rounded-lg ${ig.bg} flex items-center justify-center flex-shrink-0`}>
                             <span className="text-[11px] font-bold">{ig.percentage}%</span>
                           </div>
@@ -550,7 +574,7 @@ export default function CampaignBuilderPage() {
                             <p className="text-[11px] text-[#6B6B6B]">{ig.count} contacts · avg score {ig.avgScore}</p>
                           </div>
                           {selectedSegment === ig.id && <Check size={16} className="text-[#111111]" />}
-                        </button>
+                        </SelectableCard>
                       ))}
                     </div>
                   </div>
@@ -560,9 +584,10 @@ export default function CampaignBuilderPage() {
                   <div>
                     <h2 className="font-geist font-bold text-base text-[#111111] mb-1">Enter a keyword</h2>
                     {errors.keyword && <p className="text-[11px] text-coral mb-2">{errors.keyword}</p>}
-                    <input type="text" value={keywordValue} onChange={e => setKeywordValue(e.target.value)}
+                    <TextInput
+                      label="Keyword" isLabelHidden value={keywordValue} onChange={setKeywordValue}
                       placeholder="e.g., guide, pricing, collab"
-                      className="w-full border border-[#E8E4DF] rounded-xl px-4 py-3 text-[13px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
+                    />
                   </div>
                 )}
 
@@ -572,14 +597,18 @@ export default function CampaignBuilderPage() {
                     {errors.template && <p className="text-[11px] text-coral mb-2">{errors.template}</p>}
                     <div className="space-y-2">
                       {campaignTemplates.map(t => (
-                        <button key={t.id} onClick={() => { setSelectedTemplate(t); setMessageText(t.messageTemplate); }}
-                          className={`w-full flex items-start gap-3 border rounded-xl p-3 text-left transition-all ${selectedTemplate?.id === t.id ? 'border-chartreuse bg-[#FAFAF8]' : 'border-[#E8E4DF] hover:border-[#D4CFC8]'}`}>
+                        <SelectableCard
+                          key={t.id} label={t.name} padding={3}
+                          className="w-full flex items-start gap-3"
+                          isSelected={selectedTemplate?.id === t.id}
+                          onChange={() => { setSelectedTemplate(t); setMessageText(t.messageTemplate); }}
+                        >
                           <div className="flex-1">
                             <p className="text-[13px] font-semibold text-[#111111]">{t.name}</p>
                             <p className="text-[11px] text-[#6B6B6B]">{t.description}</p>
                           </div>
                           {selectedTemplate?.id === t.id && <Check size={16} className="text-chartreuse" />}
-                        </button>
+                        </SelectableCard>
                       ))}
                     </div>
                   </div>
@@ -595,38 +624,32 @@ export default function CampaignBuilderPage() {
                   <h2 className="font-geist font-bold text-lg text-[#111111] mb-1">Write your message</h2>
                   <p className="text-[13px] text-[#6B6B6B]">What should contacts receive?</p>
                   {errors.message && <p className="text-[11px] text-coral mt-2 flex items-center gap-1"><AlertTriangle size={10} />{errors.message}</p>}
-                  <textarea value={messageText} onChange={e => setMessageText(e.target.value)}
-                    placeholder="Hey! Thanks for your interest. Here's what I promised..."
-                    className={`w-full h-20 border rounded-xl p-3 text-[12px] placeholder:text-[#9B9B8F] resize-none focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all mt-2 ${errors.message ? 'border-coral' : 'border-[#E8E4DF]'}`} />
+                  <div className="mt-2">
+                    <TextArea
+                      label="Message" isLabelHidden value={messageText} onChange={setMessageText}
+                      placeholder="Hey! Thanks for your interest. Here's what I promised..." rows={3}
+                    />
+                  </div>
                 </div>
 
                 {/* Destination */}
                 <div>
                   <h2 className="font-geist font-bold text-base text-[#111111] mb-3">Destination</h2>
-                  <div className="flex gap-2 mb-3">
-                    {(['link', 'rich-media'] as const).map(dt => (
-                      <button key={dt} onClick={() => setDestinationType(dt)}
-                        className={`flex items-center gap-2 border rounded-lg px-4 py-2.5 text-[12px] font-medium transition-all ${destinationType === dt ? 'border-[#111111] bg-[#FAFAF8] text-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B]'}`}>
-                        {dt === 'link' ? <><Plus size={14} />Link</> : <><Image size={14} />Rich media</>}
-                      </button>
-                    ))}
+                  <div className="mb-3">
+                    <SegmentedControl label="Destination type" value={destinationType} onChange={v => setDestinationType(v as 'link' | 'rich-media')}>
+                      <SegmentedControlItem value="link" label="Link" icon={<Plus size={14} />} />
+                      <SegmentedControlItem value="rich-media" label="Rich media" icon={<Image size={14} />} />
+                    </SegmentedControl>
                   </div>
 
                   {destinationType === 'link' && (
                     <div className="space-y-2">
-                      <div>
-                        <label className="text-[11px] font-medium text-[#111111] mb-1 block">Destination URL</label>
-                        <input type="text" value={destinationUrl} onChange={e => setDestinationUrl(e.target.value)}
-                          placeholder="https://..."
-                          className={`w-full border rounded-xl px-3 py-2 text-[12px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all ${errors.destination ? 'border-coral' : 'border-[#E8E4DF]'}`} />
-                        {errors.destination && <p className="text-[11px] text-coral mt-1">{errors.destination}</p>}
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-[#111111] mb-1 block">Button label</label>
-                        <input type="text" value={buttonLabel} onChange={e => setButtonLabel(e.target.value)}
-                          placeholder="Learn more"
-                          className="w-full border border-[#E8E4DF] rounded-xl px-3 py-2 text-[12px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
-                      </div>
+                      <TextInput
+                        label="Destination URL" value={destinationUrl} onChange={setDestinationUrl}
+                        placeholder="https://..."
+                        status={errors.destination ? { type: 'error', message: errors.destination } : undefined}
+                      />
+                      <TextInput label="Button label" value={buttonLabel} onChange={setButtonLabel} placeholder="Learn more" />
                     </div>
                   )}
 
@@ -636,11 +659,15 @@ export default function CampaignBuilderPage() {
                         const Icon = rm.icon;
                         const sel = richMediaType === rm.id;
                         return (
-                          <button key={rm.id} onClick={() => setRichMediaType(rm.id)}
-                            className={`flex flex-col items-center gap-2 border rounded-xl p-4 transition-all ${sel ? 'border-[#111111] bg-[#FAFAF8]' : 'border-[#E8E4DF] hover:border-[#D4CFC8]'}`}>
+                          <SelectableCard
+                            key={rm.id} label={rm.label} padding={4}
+                            className="flex flex-col items-center gap-2"
+                            isSelected={sel}
+                            onChange={() => setRichMediaType(rm.id)}
+                          >
                             <Icon size={20} className="text-[#6B6B6B]" />
                             <span className="text-[11px] font-medium text-[#111111]">{rm.label}</span>
-                          </button>
+                          </SelectableCard>
                         );
                       })}
                     </div>
@@ -648,19 +675,15 @@ export default function CampaignBuilderPage() {
                 </div>
 
                 {/* Contact Collection */}
-                <div className="border border-[#E8E4DF] rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h3 className="text-[12px] font-semibold text-[#111111]">Collect information before continuing</h3>
-                      <p className="text-[10px] text-[#6B6B6B]">Ask contacts for details before they receive the destination</p>
-                    </div>
-                    <button onClick={() => setCollectInfo(!collectInfo)}
-                      className={`w-10 h-6 rounded-full relative transition-all ${collectInfo ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`}>
-                      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${collectInfo ? 'right-1' : 'left-1'}`} />
-                    </button>
-                  </div>
+                <Card padding={3}>
+                  <Switch
+                    label="Collect information before continuing"
+                    description="Ask contacts for details before they receive the destination"
+                    value={collectInfo}
+                    onChange={setCollectInfo}
+                  />
                   {collectInfo && (
-                    <div className="space-y-2 animate-fade-in">
+                    <div className="space-y-2 mt-3 animate-fade-in">
                       <div>
                         <label className="text-[11px] font-medium text-[#111111] mb-1 block">Field to collect</label>
                         <select value={collectField} onChange={e => setCollectField(e.target.value)}
@@ -668,15 +691,13 @@ export default function CampaignBuilderPage() {
                           {COLLECTION_FIELDS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
                         </select>
                       </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-[#111111] mb-1 block">Your question</label>
-                        <input type="text" value={collectQuestion} onChange={e => setCollectQuestion(e.target.value)}
-                          placeholder={COLLECTION_FIELDS.find(f => f.id === collectField)?.placeholder}
-                          className="w-full border border-[#E8E4DF] rounded-xl px-3 py-2 text-[12px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
-                      </div>
+                      <TextInput
+                        label="Your question" value={collectQuestion} onChange={setCollectQuestion}
+                        placeholder={COLLECTION_FIELDS.find(f => f.id === collectField)?.placeholder}
+                      />
                     </div>
                   )}
-                </div>
+                </Card>
               </div>
             )}
 
@@ -684,19 +705,15 @@ export default function CampaignBuilderPage() {
             {step === 4 && (
               <div className="space-y-4 animate-fade-in">
                 {/* Follow-ups */}
-                <div className="border border-[#E8E4DF] rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h2 className="font-geist font-bold text-base text-[#111111]">Follow-up message</h2>
-                      <p className="text-[10px] text-[#6B6B6B]">Send a follow-up if the contact does not take action</p>
-                    </div>
-                    <button onClick={() => setFollowUpEnabled(!followUpEnabled)}
-                      className={`w-10 h-6 rounded-full relative transition-all ${followUpEnabled ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`}>
-                      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${followUpEnabled ? 'right-1' : 'left-1'}`} />
-                    </button>
-                  </div>
+                <Card padding={3}>
+                  <Switch
+                    label="Follow-up message"
+                    description="Send a follow-up if the contact does not take action"
+                    value={followUpEnabled}
+                    onChange={setFollowUpEnabled}
+                  />
                   {followUpEnabled && (
-                    <div className="space-y-2 animate-fade-in">
+                    <div className="space-y-2 mt-3 animate-fade-in">
                       <div>
                         <label className="text-[11px] font-medium text-[#111111] mb-1 block">Delay</label>
                         <div className="flex gap-1.5 flex-wrap">
@@ -708,33 +725,21 @@ export default function CampaignBuilderPage() {
                           ))}
                         </div>
                       </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-[#111111] mb-1 block">Follow-up message</label>
-                        <textarea value={followUpMessage} onChange={e => setFollowUpMessage(e.target.value)}
-                          placeholder="Just following up — did you get a chance to check it out?"
-                          className="w-full h-16 border border-[#E8E4DF] rounded-xl p-2.5 text-[11px] placeholder:text-[#9B9B8F] resize-none focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all" />
-                      </div>
+                      <TextArea
+                        label="Follow-up message" isLabelHidden value={followUpMessage} onChange={setFollowUpMessage}
+                        placeholder="Just following up — did you get a chance to check it out?" rows={2}
+                      />
                     </div>
                   )}
-                </div>
+                </Card>
 
                 {/* Conversion behavior */}
                 <div>
                   <h2 className="font-geist font-bold text-base text-[#111111] mb-3">After conversion</h2>
-                  <div className="space-y-2">
-                    {[
-                      { label: 'Stop campaign after conversion', state: stopAfterConversion, set: setStopAfterConversion },
-                      { label: 'Move contact to Interested after meaningful reply', state: moveToInterested, set: setMoveToInterested },
-                      { label: 'Mark conversion after destination action', state: markConversion, set: setMarkConversion },
-                    ].map(item => (
-                      <div key={item.label} className="flex items-center justify-between py-1.5">
-                        <span className="text-[12px] text-[#111111]">{item.label}</span>
-                        <button onClick={() => item.set(!item.state)}
-                          className={`w-10 h-6 rounded-full relative transition-all ${item.state ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`}>
-                          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${item.state ? 'right-1' : 'left-1'}`} />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <Switch label="Stop campaign after conversion" value={stopAfterConversion} onChange={setStopAfterConversion} />
+                    <Switch label="Move contact to Interested after meaningful reply" value={moveToInterested} onChange={setMoveToInterested} />
+                    <Switch label="Mark conversion after destination action" value={markConversion} onChange={setMarkConversion} />
                   </div>
                 </div>
 
@@ -746,17 +751,22 @@ export default function CampaignBuilderPage() {
                   </div>
                   <p className="text-[12px] text-[#6B6B6B] mb-3">Pause automation and alert the team when:</p>
                   <div className="space-y-1.5">
-                    {REVIEW_RULES.map(rule => (
-                      <button key={rule.id} onClick={() => {
-                        setReviewRules(prev => prev.includes(rule.id) ? prev.filter(r => r !== rule.id) : [...prev, rule.id]);
-                      }}
-                        className={`w-full flex items-center gap-3 border rounded-lg px-3 py-2.5 text-left transition-all ${reviewRules.includes(rule.id) ? 'border-chartreuse bg-[#FAFAF8]' : 'border-[#E8E4DF] hover:border-[#D4CFC8]'}`}>
-                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${reviewRules.includes(rule.id) ? 'border-chartreuse bg-chartreuse' : 'border-[#E8E4DF]'}`}>
-                          {reviewRules.includes(rule.id) && <Check size={10} className="text-[#111111]" />}
-                        </div>
-                        <span className="text-[12px] text-[#111111]">{rule.label}</span>
-                      </button>
-                    ))}
+                    {REVIEW_RULES.map(rule => {
+                      const checked = reviewRules.includes(rule.id);
+                      return (
+                        <SelectableCard
+                          key={rule.id} label={rule.label} padding={3}
+                          className="w-full flex items-center gap-3"
+                          isSelected={checked}
+                          onChange={() => setReviewRules(prev => checked ? prev.filter(r => r !== rule.id) : [...prev, rule.id])}
+                        >
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${checked ? 'border-chartreuse bg-chartreuse' : 'border-[#E8E4DF]'}`}>
+                            {checked && <Check size={10} className="text-[#111111]" />}
+                          </div>
+                          <span className="text-[12px] text-[#111111]">{rule.label}</span>
+                        </SelectableCard>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -772,32 +782,30 @@ export default function CampaignBuilderPage() {
 
                 {/* Warnings */}
                 {warnings.length > 0 && (
-                  <div className="bg-[#FFF3E0] border border-[#FDE68A] rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle size={16} className="text-[#D97706]" />
-                      <p className="text-[13px] font-semibold text-[#D97706]">{warnings.length} warning{warnings.length > 1 ? 's' : ''}</p>
-                    </div>
-                    <ul className="space-y-1">
-                      {warnings.map((w, i) => (
-                        <li key={i} className="text-[12px] text-[#6B6B6B] flex items-start gap-2">
-                          <span className="w-1 h-1 rounded-full bg-[#D97706] mt-1.5 flex-shrink-0" />{w}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  <Banner
+                    status="warning"
+                    title={`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`}
+                    description={
+                      <ul className="space-y-1 mt-1">
+                        {warnings.map((w, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="w-1 h-1 rounded-full bg-current mt-1.5 flex-shrink-0" />{w}
+                          </li>
+                        ))}
+                      </ul>
+                    }
+                  />
                 )}
 
                 {/* Campaign name */}
-                <div>
-                  <label className="text-[12px] font-medium text-[#111111] mb-1 block">Campaign name</label>
-                  <input type="text" value={campaignName} onChange={e => setCampaignName(e.target.value)}
-                    placeholder="Summer Style Guide Launch"
-                    className={`w-full border rounded-xl px-3 py-2 text-[12px] placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all ${errors.name ? 'border-coral' : 'border-[#E8E4DF]'}`} />
-                  {errors.name && <p className="text-[11px] text-coral mt-1">{errors.name}</p>}
-                </div>
+                <TextInput
+                  label="Campaign name" value={campaignName} onChange={setCampaignName}
+                  placeholder="Summer Style Guide Launch"
+                  status={errors.name ? { type: 'error', message: errors.name } : undefined}
+                />
 
                 {/* Summary */}
-                <div className="bg-white border border-[#E8E4DF] rounded-xl p-3 space-y-2">
+                <Card padding={3} className="space-y-2">
                   {[
                     { label: 'Goal', value: selectedGoal || '—' },
                     { label: 'Starting point', value: STARTING_POINTS.find(s => s.id === selectedStart)?.label || '—' },
@@ -814,33 +822,24 @@ export default function CampaignBuilderPage() {
                       <span className="text-[12px] text-[#111111] break-words">{row.value}</span>
                     </div>
                   ))}
-                </div>
+                </Card>
 
                 {/* Actions */}
                 <div className="flex gap-3">
-                  <button onClick={handleSaveDraft}
-                    className="flex-1 border border-[#E8E4DF] text-[#111111] rounded-[10px] py-2 text-[12px] font-semibold hover:bg-[#FAFAF8] transition-all flex items-center justify-center gap-2">
-                    <Save size={13} />Save draft
-                  </button>
-                  <button onClick={handleActivate}
-                    className="flex-1 bg-chartreuse text-[#111111] rounded-[10px] py-2 text-[12px] font-semibold hover:bg-chartreuse-hover transition-all flex items-center justify-center gap-2">
-                    <Sparkles size={13} />{isEditMode ? 'Update campaign' : 'Activate campaign'}
-                  </button>
+                  <Button variant="secondary" size="sm" label="Save draft" icon={<Save size={13} />} className="flex-1" onClick={handleSaveDraft} />
+                  <Button
+                    variant="primary" size="sm" label={isEditMode ? 'Update campaign' : 'Activate campaign'}
+                    icon={<Sparkles size={13} />} className="flex-1" onClick={handleActivate}
+                  />
                 </div>
               </div>
             )}
 
             {/* ─── Footer Navigation ─── */}
             <div className="flex items-center justify-between mt-4 mb-2">
-              <button onClick={handleBack}
-                className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#111111] transition-all flex items-center gap-1">
-                {step > 1 ? <><ChevronLeft size={16} />Back</> : 'Cancel'}
-              </button>
+              <Button variant="ghost" label={step > 1 ? 'Back' : 'Cancel'} icon={step > 1 ? <ChevronLeft size={16} /> : undefined} onClick={handleBack} />
               {step < TOTAL_STEPS && (
-                <button onClick={handleNext} disabled={!canProceed()}
-                  className={`px-6 py-2.5 rounded-[10px] text-[13px] font-semibold transition-all ${canProceed() ? 'bg-chartreuse text-[#111111] hover:bg-chartreuse-hover' : 'bg-[#E8E4DF] text-[#9B9B8F] cursor-not-allowed'}`}>
-                  Continue
-                </button>
+                <Button variant="primary" label="Continue" isDisabled={!canProceed()} onClick={handleNext} />
               )}
             </div>
           </div>
