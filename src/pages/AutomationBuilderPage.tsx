@@ -99,8 +99,15 @@ export default function AutomationBuilderPage() {
     setPostsSyncing(true);
     setPostsError(null);
     try {
-      await syncPostsLibrary(accountId);
+      const result = await syncPostsLibrary(accountId);
       setLibraryPosts(await fetchPostsLibrary({ accountId }));
+      // syncPostsLibrary resolves even when Zernio rejected the sync for this
+      // account (expired token, missing scope, wrong account type) — errors
+      // come back as data, not a thrown rejection, so they must be checked
+      // explicitly or a real failure looks identical to "nothing to sync".
+      if (result.errors.length > 0) {
+        setPostsError(result.errors.join(' '));
+      }
     } catch (err) {
       setPostsError(err instanceof Error ? err.message : 'Could not sync your posts.');
     } finally {
