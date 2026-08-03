@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Zap, ArrowRight, Loader2 } from 'lucide-react';
+import { Zap, ArrowRight } from 'lucide-react';
 import { Card } from '@astryxdesign/core/Card';
 import { ClickableCard } from '@astryxdesign/core/ClickableCard';
 import { Button } from '@astryxdesign/core/Button';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Heading } from '@astryxdesign/core/Heading';
 import { Text } from '@astryxdesign/core/Text';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { HStack } from '@astryxdesign/core/HStack';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured, fetchAutomationsSummary, fetchContacts, fetchOpportunities } from '../lib/api';
@@ -19,10 +21,10 @@ interface HomeMetrics {
 }
 
 function StatCard({ value, label, sub, tone }: { value: number; label: string; sub?: string; tone?: 'warning' | 'error' }) {
-  const toneColor = tone === 'error' ? 'text-[#DC2626]' : tone === 'warning' ? 'text-[#D97706]' : 'text-[#111111]';
+  const toneColor = tone === 'error' ? 'var(--color-error)' : tone === 'warning' ? 'var(--color-warning)' : undefined;
   return (
     <Card padding={4}>
-      <p className={`font-geist-mono font-bold text-2xl ${toneColor}`}>{value}</p>
+      <Text size="2xl" weight="bold" className="font-geist-mono" display="block" style={toneColor ? { color: toneColor } : undefined}>{value}</Text>
       <Text type="supporting" display="block" className="mt-1">{label}</Text>
       {sub && <Text type="supporting" display="block" className="mt-0.5" color="disabled">{sub}</Text>}
     </Card>
@@ -91,9 +93,9 @@ export default function HomePage() {
       {!backendConfigured ? (
         <Banner status="warning" title="Populr isn't connected to a backend yet" description="Set VITE_API_URL to see your real metrics here." />
       ) : loading ? (
-        <div className="flex items-center justify-center py-14">
-          <Loader2 size={20} className="animate-spin text-[#6B6B6B]" />
-        </div>
+        <HStack justify="center" style={{ paddingBlock: 56 }}>
+          <Spinner size="lg" />
+        </HStack>
       ) : error ? (
         <Banner status="error" title={error} endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />} />
       ) : !metrics || metrics.summary.totalCount === 0 ? (
@@ -114,13 +116,16 @@ export default function HomePage() {
             <StatCard value={metrics.summary.interactionsHandled} label="Interactions handled" />
             <StatCard value={metrics.summary.repliesSent} label="Replies sent" />
             <ClickableCard label="Contacts captured" onClick={() => navigate('/contacts')} padding={4}>
-              <p className="font-geist-mono font-bold text-2xl text-[#111111]">{metrics.contactsTotal}</p>
+              <Text size="2xl" weight="bold" className="font-geist-mono" display="block">{metrics.contactsTotal}</Text>
               <Text type="supporting" display="block" className="mt-1">Contacts captured</Text>
             </ClickableCard>
             <ClickableCard label="Opportunities needing review" onClick={() => navigate('/opportunities')} padding={4}>
-              <p className={`font-geist-mono font-bold text-2xl ${metrics.opportunitiesNeedingReview > 0 ? 'text-[#D97706]' : 'text-[#111111]'}`}>
+              <Text
+                size="2xl" weight="bold" className="font-geist-mono" display="block"
+                style={metrics.opportunitiesNeedingReview > 0 ? { color: 'var(--color-warning)' } : undefined}
+              >
                 {metrics.opportunitiesNeedingReview}
-              </p>
+              </Text>
               <Text type="supporting" display="block" className="mt-1">Opportunities needing review</Text>
             </ClickableCard>
             <StatCard value={metrics.summary.failedAutomationsCount} label="Automations with a failure" tone={metrics.summary.failedAutomationsCount > 0 ? 'error' : undefined} />
@@ -130,8 +135,8 @@ export default function HomePage() {
             <Text type="supporting" display="block" className="mb-1.5">Best-performing automation</Text>
             {metrics.summary.bestPerforming ? (
               <button onClick={() => navigate('/automations')} className="flex items-center justify-between w-full text-left group">
-                <span className="text-[14px] font-semibold text-[#111111] group-hover:underline">{metrics.summary.bestPerforming.name}</span>
-                <span className="text-[12px] text-[#6B6B6B]">{metrics.summary.bestPerforming.repliesSent} replies sent</span>
+                <Text type="body" weight="semibold" className="group-hover:underline">{metrics.summary.bestPerforming.name}</Text>
+                <Text type="supporting" color="secondary">{metrics.summary.bestPerforming.repliesSent} replies sent</Text>
               </button>
             ) : (
               <Text type="body" color="secondary" display="block">Not enough data yet — this fills in once your automations start replying.</Text>

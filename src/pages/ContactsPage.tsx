@@ -6,18 +6,23 @@ import {
 } from '../lib/api';
 import type { ContactRecord, ContactDetail as ContactDetailData, Opportunity } from '../lib/api';
 import {
-  Search, ArrowLeft, Plus, X, ExternalLink,
+  Search, ArrowLeft, Plus, ExternalLink,
 } from 'lucide-react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Text } from '@astryxdesign/core/Text';
+import { Heading } from '@astryxdesign/core/Heading';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { Avatar } from '@astryxdesign/core/Avatar';
+import { ToggleButton } from '@astryxdesign/core/ToggleButton';
+import { Token } from '@astryxdesign/core/Token';
+import { HStack } from '@astryxdesign/core/HStack';
+import { VStack } from '@astryxdesign/core/VStack';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import PlatformDot from '../components/PlatformDot';
@@ -192,46 +197,50 @@ function ContactDetailView({
     <div className="pop-page max-w-[820px]">
       <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} label="Back to contacts" className="mb-5" onClick={onBack} />
 
-      <div className="flex items-start gap-4 mb-6">
+      <HStack gap={4} align="start" style={{ marginBottom: 24 }}>
         <Avatar src={current.avatar_url ?? undefined} name={current.name ?? current.handle ?? 'Contact'} size="md" tooltip={false} className="flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="pop-section-heading">{current.handle ? `@${current.handle}` : current.name ?? 'Unknown contact'}</h1>
+        <VStack gap={0.5} style={{ flex: 1, minWidth: 0 }}>
+          <HStack gap={2} align="center" wrap="wrap">
+            <Heading level={1} type="display-2">{current.handle ? `@${current.handle}` : current.name ?? 'Unknown contact'}</Heading>
             <StatusPill status={current.stage} />
             {current.needs_reply && <StatusPill status="human-review" />}
-          </div>
-          {current.name && current.handle && <p className="pop-body">{current.name}</p>}
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          </HStack>
+          {current.name && current.handle && <Text type="body" color="secondary">{current.name}</Text>}
+          <HStack gap={1.5} align="center" wrap="wrap" style={{ marginTop: 4 }}>
             <PlatformDot platform={current.platform} size={7} />
-            <span className="text-[12px] text-[#6B6B6B] capitalize">{current.platform}</span>
-            {accountLabel && <span className="text-[12px] text-[#6B6B6B]">· {accountLabel}</span>}
-            <span className="text-[12px] text-[#9B9B8F]">· First seen {relativeTime(current.first_seen)}</span>
-          </div>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <p className="font-geist-mono font-bold text-xl text-[#111111]">{current.lead_score}</p>
-          <p className="text-[10px] text-[#9B9B8F] tracking-wide">LEAD SCORE</p>
-        </div>
-      </div>
+            <Text type="supporting" color="secondary" className="capitalize">{current.platform}</Text>
+            {accountLabel && <Text type="supporting" color="secondary">· {accountLabel}</Text>}
+            <Text type="supporting" color="disabled">· First seen {relativeTime(current.first_seen)}</Text>
+          </HStack>
+        </VStack>
+        <VStack gap={0} align="end" style={{ flexShrink: 0 }}>
+          <Text size="xl" weight="bold" className="font-geist-mono">{current.lead_score}</Text>
+          <Text type="supporting" color="disabled" style={{ letterSpacing: '0.04em' }}>LEAD SCORE</Text>
+        </VStack>
+      </HStack>
 
       <div className="grid sm:grid-cols-2 gap-5 mb-5">
         <Card padding={4}>
-          <p className="pop-meta mb-2">Stage</p>
-          <div className="flex flex-wrap gap-1.5">
+          <Text type="supporting" color="secondary" display="block" style={{ marginBottom: 8 }}>Stage</Text>
+          <HStack wrap="wrap" gap={1.5}>
             {CONTACT_STAGES.map(s => (
-              <button key={s} onClick={() => handleStageChange(s)} disabled={busyStage || current.stage === s}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all disabled:cursor-default ${current.stage === s ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}>
-                {STAGE_LABEL[s] ?? s}
-              </button>
+              <ToggleButton
+                key={s}
+                size="sm"
+                label={STAGE_LABEL[s] ?? s}
+                isPressed={current.stage === s}
+                isDisabled={current.stage === s || busyStage}
+                pressedChangeAction={() => handleStageChange(s)}
+              />
             ))}
-          </div>
+          </HStack>
           {current.stage !== 'converted' && (
             <Button variant="secondary" size="sm" label="Mark converted" isDisabled={busyStage} className="mt-3" onClick={handleConverted} />
           )}
         </Card>
 
         <Card padding={4}>
-          <p className="pop-meta mb-2">Adjust lead score</p>
+          <Text type="supporting" color="secondary" display="block" style={{ marginBottom: 8 }}>Adjust lead score</Text>
           <div className="flex gap-2 items-start">
             <NumberInput label="Score delta" isLabelHidden value={scoreDelta} onChange={setScoreDelta} hasClear placeholder="e.g. 10 or -10" className="flex-1" />
             <Button variant="secondary" size="sm" label="Apply" isLoading={busyScore} isDisabled={busyScore || scoreDelta == null} onClick={handleAdjustScore} />
@@ -240,18 +249,13 @@ function ContactDetailView({
       </div>
 
       <Card padding={4} className="mb-5">
-        <p className="pop-meta mb-2">Tags</p>
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {current.tags.length === 0 && <span className="text-[12px] text-[#9B9B8F]">No tags yet.</span>}
+        <Text type="supporting" color="secondary" display="block" style={{ marginBottom: 8 }}>Tags</Text>
+        <HStack wrap="wrap" gap={1.5} style={{ marginBottom: 8 }}>
+          {current.tags.length === 0 && <Text type="supporting" color="disabled">No tags yet.</Text>}
           {current.tags.map(t => (
-            <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#FAFAF8] text-[#111111]">
-              {t}
-              <button onClick={() => handleRemoveTag(t)} disabled={busyTag} className="hover:text-[#DC2626] disabled:opacity-60">
-                <X size={10} />
-              </button>
-            </span>
+            <Token key={t} label={t} size="sm" isDisabled={busyTag} onRemove={() => handleRemoveTag(t)} />
           ))}
-        </div>
+        </HStack>
         <div className="flex gap-2">
           <TextInput
             label="Add a tag" isLabelHidden value={newTag} onChange={setNewTag}
@@ -263,7 +267,7 @@ function ContactDetailView({
       </Card>
 
       <Card padding={4} className="mb-5">
-        <p className="pop-meta mb-2">Notes</p>
+        <Text type="supporting" color="secondary" display="block" style={{ marginBottom: 8 }}>Notes</Text>
         <TextArea
           label="Notes" isLabelHidden value={notes} onChange={setNotes} rows={3}
           placeholder="Private notes about this contact…"
@@ -277,10 +281,10 @@ function ContactDetailView({
 
       {(detail?.sourceAutomation || detail?.sourcePost || current.source_type) && (
         <Card padding={4} className="mb-5">
-          <p className="pop-meta mb-2">How they found you</p>
-          <p className="text-[13px] text-[#111111]">
+          <Text type="supporting" color="secondary" display="block" style={{ marginBottom: 8 }}>How they found you</Text>
+          <Text type="body">
             {detail?.sourceAutomation ? `Via automation "${detail.sourceAutomation.name}"` : `Source: ${current.source_type}`}
-          </p>
+          </Text>
           {detail?.sourcePost?.url && (
             <a href={detail.sourcePost.url} target="_blank" rel="noreferrer"
               className="text-[12px] text-[#3B82F6] hover:underline inline-flex items-center gap-1 mt-1">
@@ -291,52 +295,52 @@ function ContactDetailView({
       )}
 
       <Card padding={5} className="mb-5">
-        <h2 className="pop-card-title mb-3">Conversation history</h2>
+        <Heading level={5} accessibilityLevel={2} style={{ marginBottom: 12 }}>Conversation history</Heading>
         {loading ? (
-          <div className="flex items-center justify-center py-8 gap-2">
+          <HStack justify="center" align="center" gap={2} style={{ paddingBlock: 32 }}>
             <Spinner size="md" />
             <Text type="body" color="secondary">Loading...</Text>
-          </div>
+          </HStack>
         ) : !detail || detail.messages.length === 0 ? (
-          <p className="text-[12px] text-[#6B6B6B]">No messages yet.</p>
+          <Text type="supporting" color="secondary">No messages yet.</Text>
         ) : (
-          <div className="space-y-2">
+          <VStack gap={2}>
             {detail.messages.slice().reverse().map(m => (
               <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] rounded-xl px-3 py-2 ${m.direction === 'outbound' ? 'bg-chartreuse/20 text-[#111111]' : 'bg-[#FAFAF8] text-[#111111]'}`}>
-                  <p className="text-[12px]">{m.text || <span className="italic text-[#9B9B8F]">(no text)</span>}</p>
-                  <p className="text-[10px] text-[#9B9B8F] mt-1">{m.channel} · {relativeTime(m.created_at)}</p>
+                  <Text type="supporting" color="primary">{m.text || <Text type="inherit" style={{ fontStyle: 'italic' }} color="disabled">(no text)</Text>}</Text>
+                  <Text type="supporting" color="disabled" display="block" style={{ marginTop: 4 }}>{m.channel} · {relativeTime(m.created_at)}</Text>
                 </div>
               </div>
             ))}
-          </div>
+          </VStack>
         )}
       </Card>
 
       <Card padding={5}>
-        <h2 className="pop-card-title mb-3">Related opportunities</h2>
+        <Heading level={5} accessibilityLevel={2} style={{ marginBottom: 12 }}>Related opportunities</Heading>
         {oppsLoading ? (
-          <div className="flex items-center justify-center py-8 gap-2">
+          <HStack justify="center" align="center" gap={2} style={{ paddingBlock: 32 }}>
             <Spinner size="md" />
             <Text type="body" color="secondary">Loading...</Text>
-          </div>
+          </HStack>
         ) : opportunities.length === 0 ? (
-          <p className="text-[12px] text-[#6B6B6B]">No opportunities from this contact yet.</p>
+          <Text type="supporting" color="secondary">No opportunities from this contact yet.</Text>
         ) : (
-          <div className="space-y-2">
+          <VStack gap={2}>
             {opportunities.map(o => (
               <div key={o.id} className="flex items-center justify-between gap-3 py-2 border-b border-[#F0EEEA] last:border-0">
-                <div className="min-w-0">
-                  <p className="text-[12px] text-[#111111] truncate">&ldquo;{o.interaction.text}&rdquo;</p>
-                  <p className="text-[11px] text-[#9B9B8F] mt-0.5">{o.intent.label}</p>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
+                <VStack gap={0.5} style={{ minWidth: 0 }}>
+                  <Text type="supporting" color="primary" className="truncate">&ldquo;{o.interaction.text}&rdquo;</Text>
+                  <Text type="supporting" color="disabled">{o.intent.label}</Text>
+                </VStack>
+                <HStack gap={1.5} align="center" style={{ flexShrink: 0 }}>
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${OPP_STATUS_COLOR[o.status] ?? 'bg-[#9B9B8F]'}`} />
-                  <span className="text-[10px] text-[#9B9B8F] capitalize">{o.status}</span>
-                </div>
+                  <Text type="supporting" color="disabled" className="capitalize">{o.status}</Text>
+                </HStack>
               </div>
             ))}
-          </div>
+          </VStack>
         )}
       </Card>
     </div>
@@ -505,22 +509,22 @@ export default function ContactsPage() {
                     <button key={c.id} onClick={() => setDetailId(c.id)}
                       className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-[#FAFAF8] transition-colors">
                       <Avatar src={c.avatar_url ?? undefined} name={c.name ?? c.handle ?? 'Contact'} size="md" tooltip={false} className="flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-[13px] font-semibold text-[#111111] truncate">{c.handle ? `@${c.handle}` : c.name ?? 'Unknown'}</p>
+                      <VStack gap={0.5} style={{ flex: 1, minWidth: 0 }}>
+                        <HStack gap={2} align="center" wrap="wrap">
+                          <Text type="label" weight="semibold" className="truncate">{c.handle ? `@${c.handle}` : c.name ?? 'Unknown'}</Text>
                           <PlatformDot platform={c.platform} size={6} />
                           {c.needs_reply && <StatusPill status="human-review" className="text-[9px]" />}
-                        </div>
-                        <p className="text-[11px] text-[#9B9B8F] truncate mt-0.5">
+                        </HStack>
+                        <Text type="supporting" color="disabled" className="truncate">
                           {account ? (account.username ? `@${account.username}` : account.display_name) : c.platform}
                           {c.tags.length > 0 && ` · ${c.tags.slice(0, 3).join(', ')}`}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
+                        </Text>
+                      </VStack>
+                      <HStack gap={3} align="center" style={{ flexShrink: 0 }}>
                         <StatusPill status={c.stage} className="text-[10px]" />
-                        <p className="font-geist-mono font-bold text-[12px] text-[#111111] w-8 text-right">{c.lead_score}</p>
-                        <span className="text-[10px] text-[#9B9B8F] w-14 text-right">{relativeTime(c.last_seen)}</span>
-                      </div>
+                        <Text weight="bold" className="font-geist-mono" style={{ width: 32, textAlign: 'right' }}>{c.lead_score}</Text>
+                        <Text type="supporting" color="disabled" style={{ width: 56, textAlign: 'right' }}>{relativeTime(c.last_seen)}</Text>
+                      </HStack>
                     </button>
                   );
                 })}

@@ -227,7 +227,7 @@ export default function ConnectionsPage() {
                   <Icon size={21} style={{ color: p.color }} />
                 </div>
                 <VStack gap={0.5} style={{ flex: 1, minWidth: 0 }}>
-                  <HStack gap={2.5} align="center" wrap="wrap">
+                  <HStack gap={3} align="center" wrap="wrap">
                     <Text type="label" weight="bold">{p.name}</Text>
                     <HStack gap={1.5} align="center">
                       {isLoadingStatus ? <Spinner size="sm" /> : <StatusDot variant={meta.variant} label={meta.label} />}

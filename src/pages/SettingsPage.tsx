@@ -11,21 +11,21 @@ import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Text } from '@astryxdesign/core/Text';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Avatar } from '@astryxdesign/core/Avatar';
+import { Badge } from '@astryxdesign/core/Badge';
 import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { HStack } from '@astryxdesign/core/HStack';
+import { VStack } from '@astryxdesign/core/VStack';
 import PageHeader from '../components/PageHeader';
+import StatusPill from '../components/StatusPill';
 import { isBackendConfigured } from '../lib/api';
-import type { ConnectedAccount, AccountStatus } from '../lib/api';
+import type { ConnectedAccount } from '../lib/api';
 
 const iconMap: Record<string, React.ElementType> = {
   instagram: Instagram, tiktok: Video, linkedin: Linkedin, twitter: Twitter, reddit: MessageCircle,
-};
-
-const statusConfig: Record<AccountStatus, { label: string; color: string; bg: string }> = {
-  connected: { label: 'Connected', color: 'text-[#059669]', bg: 'bg-[#E0F5E9]' },
-  disconnected: { label: 'Disconnected', color: 'text-[#6B6B6B]', bg: 'bg-[#FAFAF8]' },
-  reconnect_required: { label: 'Reconnect required', color: 'text-[#DC2626]', bg: 'bg-[#FEE2E2]' },
 };
 
 function capitalize(s: string): string {
@@ -119,59 +119,57 @@ export default function SettingsPage() {
       {activeTab === 'profile' && (
         <div className="space-y-6">
           <Card padding={6}>
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Account</h2>
-            <div className="flex items-center gap-4 mb-6">
-              {identity.avatarUrl ? (
-                <img src={identity.avatarUrl} alt={identity.name} className="w-16 h-16 rounded-full object-cover" />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-lg font-semibold text-[#6B6B6B]">
-                  {identity.initials}
-                </div>
-              )}
-              <div>
-                <p className="font-geist font-bold text-base text-[#111111]">{identity.name}</p>
-                {identity.email && <p className="text-[13px] text-[#6B6B6B]">{identity.email}</p>}
-                {identity.handle && <p className="text-[13px] text-[#6B6B6B]">{identity.handle}</p>}
-                <p className="text-[11px] text-[#9B9B8F] mt-1">{connectedAccounts.length} platform{connectedAccounts.length === 1 ? '' : 's'} connected</p>
-              </div>
-            </div>
+            <Heading level={5} accessibilityLevel={2} style={{ marginBottom: 20 }}>Account</Heading>
+            <HStack gap={4} align="center" style={{ marginBottom: 24 }}>
+              <Avatar src={identity.avatarUrl ?? undefined} name={identity.name} size={64} tooltip={false} />
+              <VStack gap={0.5}>
+                <Text type="body" weight="bold" display="block">{identity.name}</Text>
+                {identity.email && <Text type="supporting" color="secondary" display="block">{identity.email}</Text>}
+                {identity.handle && <Text type="supporting" color="secondary" display="block">{identity.handle}</Text>}
+                <Text type="supporting" color="disabled" display="block" style={{ marginTop: 4 }}>
+                  {connectedAccounts.length} platform{connectedAccounts.length === 1 ? '' : 's'} connected
+                </Text>
+              </VStack>
+            </HStack>
           </Card>
 
           {/* Connected identities */}
           {connectedAccounts.length > 0 && (
             <Card padding={6}>
-              <h2 className="font-geist font-semibold text-sm text-[#111111] mb-4">Connected social identities</h2>
-              <div className="flex flex-wrap gap-2">
+              <Heading level={5} accessibilityLevel={2} style={{ marginBottom: 16 }}>Connected social identities</Heading>
+              <HStack wrap="wrap" gap={2}>
                 {connectedAccounts.map((acc: ConnectedAccount) => {
                   const Icon = iconMap[acc.platform] || Link2;
                   return (
-                    <div key={acc.id} className="flex items-center gap-2 bg-[#FAFAF8] rounded-lg px-3 py-2">
-                      <Icon size={14} className="text-[#6B6B6B]" />
-                      <span className="text-[12px] text-[#111111]">{acc.username ? `@${acc.username}` : acc.display_name || acc.platform}</span>
-                    </div>
+                    <Badge
+                      key={acc.id}
+                      variant="neutral"
+                      icon={<Icon size={14} />}
+                      label={acc.username ? `@${acc.username}` : acc.display_name || acc.platform}
+                    />
                   );
                 })}
-              </div>
+              </HStack>
             </Card>
           )}
 
           {/* Session */}
           <Card padding={6}>
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Session</h2>
-            <p className="text-[13px] text-[#6B6B6B] mb-4">
+            <Heading level={5} accessibilityLevel={2} style={{ marginBottom: 4 }}>Session</Heading>
+            <Text type="body" color="secondary" display="block" style={{ marginBottom: 16 }}>
               {user?.email
-                ? <>Signed in as <span className="font-medium text-[#111111]">{user.email}</span>.</>
+                ? <>Signed in as <Text type="inherit" weight="medium" color="primary">{user.email}</Text>.</>
                 : 'Signed in.'}
-            </p>
+            </Text>
             <Button
               variant="secondary" icon={<LogOut size={14} />}
               label={signingOut ? 'Signing out…' : 'Sign out'}
               isLoading={signingOut} isDisabled={signingOut}
               onClick={handleSignOut}
             />
-            <p className="text-[11px] text-[#9B9B8F] mt-3">
+            <Text type="supporting" color="disabled" display="block" style={{ marginTop: 12 }}>
               Signing out ends your session on this device. It doesn't disconnect your social accounts.
-            </p>
+            </Text>
           </Card>
         </div>
       )}
@@ -179,15 +177,15 @@ export default function SettingsPage() {
       {/* ─── CONNECTED ACCOUNTS TAB ─── */}
       {activeTab === 'accounts' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="font-geist font-semibold text-sm text-[#111111]">Connected accounts</h2>
-              <p className="text-[12px] text-[#6B6B6B] mt-0.5">View and manage the accounts Populr can review for engagement.</p>
-            </div>
+          <HStack justify="between" align="center" style={{ marginBottom: 8 }}>
+            <VStack gap={0.5}>
+              <Heading level={5} accessibilityLevel={2}>Connected accounts</Heading>
+              <Text type="supporting" color="secondary">View and manage the accounts Populr can review for engagement.</Text>
+            </VStack>
             {accounts.length > 0 && (
               <Text type="supporting" color="disabled">{connectedAccounts.length} of {accounts.length} connected</Text>
             )}
-          </div>
+          </HStack>
 
           {!backendConfigured && (
             <Banner
@@ -214,14 +212,13 @@ export default function SettingsPage() {
 
           {backendConfigured && !accountsLoading && accounts.map((acc: ConnectedAccount) => {
             const Icon = iconMap[acc.platform] || Link2;
-            const status = statusConfig[acc.status];
             const isConnected = acc.status === 'connected';
             const needsReconnect = acc.status === 'reconnect_required';
             const isDisconnected = acc.status === 'disconnected';
 
             return (
               <Card key={acc.id} padding={5} variant={needsReconnect ? 'red' : 'default'}>
-                <div className="flex items-center gap-4 flex-wrap">
+                <HStack gap={4} align="center" wrap="wrap">
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#FAFAF8] overflow-hidden">
                     {acc.avatar_url ? (
                       <img src={acc.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -229,28 +226,28 @@ export default function SettingsPage() {
                       <Icon size={22} className={isConnected ? 'text-[#111111]' : 'text-[#9B9B8F]'} />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-[14px] font-semibold text-[#111111] capitalize">{acc.platform}</p>
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>{status.label}</span>
-                    </div>
-                    <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                  <VStack gap={0.5} style={{ flex: 1, minWidth: 0 }}>
+                    <HStack gap={2} align="center" wrap="wrap">
+                      <Text type="body" weight="semibold" className="capitalize">{acc.platform}</Text>
+                      <StatusPill status={acc.status} className="text-[10px]" />
+                    </HStack>
+                    <Text type="supporting" color="secondary">
                       {acc.username ? `@${acc.username}` : acc.display_name || 'Unknown account'}
-                    </p>
-                    {needsReconnect && <p className="text-[11px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>}
-                    {isDisconnected && <p className="text-[11px] text-[#6B6B6B] mt-0.5">Historical data preserved. New activity will not sync.</p>}
-                  </div>
+                    </Text>
+                    {needsReconnect && <Text type="supporting" style={{ color: 'var(--color-error)' }}>Authorization expired — reconnect to keep this account active.</Text>}
+                    {isDisconnected && <Text type="supporting" color="secondary">Historical data preserved. New activity will not sync.</Text>}
+                  </VStack>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                  <HStack gap={1.5} align="center" style={{ flexShrink: 0, marginLeft: 'auto' }}>
                     {isConnected && (
                       <Button variant="ghost" size="sm" isIconOnly icon={<Trash2 size={16} />} label="Disconnect" onClick={() => setDisconnectModal(acc.id)} />
                     )}
                     {(needsReconnect || isDisconnected) && (
                       <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} label="Reconnect" onClick={() => beginPlatformConnect(acc.platform)} />
                     )}
-                  </div>
-                </div>
+                  </HStack>
+                </HStack>
               </Card>
             );
           })}
