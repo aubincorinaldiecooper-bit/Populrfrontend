@@ -10,6 +10,8 @@ import { Heading } from '@astryxdesign/core/Heading';
 import { Text } from '@astryxdesign/core/Text';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { ProgressBar } from '@astryxdesign/core/ProgressBar';
+import { Divider } from '@astryxdesign/core/Divider';
 import { HStack } from '@astryxdesign/core/HStack';
 import { VStack } from '@astryxdesign/core/VStack';
 import { useApp } from '../context/AppContext';
@@ -24,6 +26,7 @@ import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import PlatformDot from '../components/PlatformDot';
 import EmptyState from '../components/EmptyState';
+import MiniStat from '../components/MiniStat';
 
 type StatusTab = 'all' | 'active' | 'paused';
 
@@ -316,7 +319,7 @@ export default function AutomationsPage() {
     <div className="pop-page">
       <PageHeader
         title="Automations"
-        subtitle={backendConfigured ? `${activeCount} active · ${automationList.length} total` : undefined}
+        subtitle="Reply to comments and DMs automatically, and capture contacts as people engage."
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
             <div className="w-full sm:w-56">
@@ -342,6 +345,26 @@ export default function AutomationsPage() {
             description="Set VITE_API_URL to your Populr backend to see real automations here. This page never shows placeholder data in its place."
           />
         </div>
+      )}
+
+      {backendConfigured && !loading && !error && automationList.length > 0 && (
+        // Summary panel: mirrors the Home/Connections "N of M" pattern —
+        // computed entirely from the real automation list, no invented numbers.
+        <Card padding={5} style={{ marginBottom: 20 }}>
+          <HStack wrap="wrap" gap={5} align="center">
+            <VStack gap={3} style={{ flex: 1, minWidth: 220 }}>
+              <Text type="large" weight="bold">
+                <span className="font-geist-mono">{activeCount}</span> of <span className="font-geist-mono">{automationList.length}</span> automations active
+              </Text>
+              <ProgressBar value={activeCount} max={automationList.length} label="Active automations" isLabelHidden variant="accent" />
+            </VStack>
+            <Divider orientation="vertical" className="hidden sm:block" style={{ alignSelf: 'stretch' }} />
+            <HStack wrap="wrap" gap={6}>
+              <MiniStat value={activeCount} label="Active" />
+              <MiniStat value={pausedCount} label="Paused" />
+            </HStack>
+          </HStack>
+        </Card>
       )}
 
       {backendConfigured && (
