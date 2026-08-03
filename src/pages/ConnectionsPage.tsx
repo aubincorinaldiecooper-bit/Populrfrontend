@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Instagram, Music, Linkedin, Twitter, MessageCircle, Check, ArrowRight, RefreshCw } from 'lucide-react';
+import { Instagram, Music, Linkedin, Twitter, MessageCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import { Spinner } from '@astryxdesign/core/Spinner';
-import { Card } from '@astryxdesign/core/Card';
 import { Banner } from '@astryxdesign/core/Banner';
-import { Text } from '@astryxdesign/core/Text';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { Card } from '@astryxdesign/core/Card';
+import { Text } from '@astryxdesign/core/Text';
+import { Badge } from '@astryxdesign/core/Badge';
+import { StatusDot, type StatusDotVariant } from '@astryxdesign/core/StatusDot';
+import { ProgressBar } from '@astryxdesign/core/ProgressBar';
+import { Divider } from '@astryxdesign/core/Divider';
+import { HStack } from '@astryxdesign/core/HStack';
+import { VStack } from '@astryxdesign/core/VStack';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
@@ -142,8 +148,10 @@ export default function ConnectionsPage() {
   const modalAccount = accounts.find(a => a.platform === disconnectModalPlatform);
   const isDisconnectingModal = !!modalAccount && disconnectingAccountId === modalAccount.id;
 
+  const availableCount = PLATFORMS.length - connectedCount;
+
   return (
-    <div className="pop-page max-w-[720px]">
+    <div className="pop-page">
       <PageHeader
         title="Connections"
         subtitle="Connect the accounts you want Populr to review for meaningful engagement. One is enough to get started."
@@ -158,7 +166,36 @@ export default function ConnectionsPage() {
         />
       )}
 
-      <div className="space-y-3 mb-6">
+      {/* Summary panel: everything here is computed from the real connected-platform
+          list above — no invented numbers. */}
+      <Card padding={5} style={{ marginBottom: 24 }}>
+        <HStack wrap="wrap" gap={5} align="center">
+          <VStack gap={3} style={{ flex: 1, minWidth: 220 }}>
+            <Text type="large" weight="bold">
+              <span className="font-geist-mono">{connectedCount}</span> of <span className="font-geist-mono">{PLATFORMS.length}</span> connected
+            </Text>
+            <ProgressBar value={connectedCount} max={PLATFORMS.length} label="Accounts connected" isLabelHidden variant="accent" />
+            <Text type="supporting" color="secondary">More channels connected means more opportunities Populr can surface for you.</Text>
+          </VStack>
+          <Divider orientation="vertical" className="hidden sm:block" style={{ alignSelf: 'stretch' }} />
+          <HStack gap={6}>
+            <VStack gap={0.5} align="center">
+              <Text size="xl" weight="bold" className="font-geist-mono">{connectedCount}</Text>
+              <Text type="supporting" color="secondary">Connected</Text>
+            </VStack>
+            <VStack gap={0.5} align="center">
+              <Text size="xl" weight="bold" className="font-geist-mono">{availableCount}</Text>
+              <Text type="supporting" color="secondary">Available</Text>
+            </VStack>
+            <VStack gap={0.5} align="center">
+              <Badge variant={connectedCount > 0 ? 'success' : 'neutral'} label={connectedCount > 0 ? 'Unlocked' : 'Locked'} />
+              <Text type="supporting" color="secondary">Opportunities</Text>
+            </VStack>
+          </HStack>
+        </HStack>
+      </Card>
+
+      <VStack gap={3} style={{ marginBottom: 24 }}>
         {PLATFORMS.map(p => {
           const cp = connectedPlatforms.find(c => c.id === p.id);
           const status = cp?.status ?? 'idle';
@@ -171,64 +208,46 @@ export default function ConnectionsPage() {
           // which covers the whole page while open.
           const realAccount = accounts.find(a => a.platform === p.id);
 
+          const statusMeta: Record<string, { label: string; variant: StatusDotVariant }> = {
+            connected: { label: 'Connected', variant: 'success' },
+            connecting: { label: 'Connecting', variant: 'warning' },
+            syncing: { label: 'Finishing connection…', variant: 'warning' },
+            error: { label: 'Connection failed', variant: 'error' },
+            reconnect_required: { label: 'Reconnect required', variant: 'error' },
+            idle: { label: 'Not connected', variant: 'neutral' },
+          };
+          const meta = statusMeta[status] ?? statusMeta.idle;
+          const isLoadingStatus = status === 'connecting' || status === 'syncing';
+          const isAttentionState = status === 'error' || status === 'reconnect_required';
+
           return (
-            <Card key={p.id} padding={4}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
-                  <Icon size={20} style={{ color: p.color }} />
+            <Card key={p.id} padding={4} variant={isAttentionState ? 'red' : 'default'}>
+              <HStack gap={4} align="center" wrap="wrap">
+                <div className="w-11 h-11 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
+                  <Icon size={21} style={{ color: p.color }} />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[14px] font-semibold text-[#111111]">{p.name}</span>
-                    {status === 'connected' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#E0F5E9] text-[#059669]">
-                        <Check size={10} /> Connected
-                      </span>
-                    )}
-                    {status === 'connecting' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
-                        <Spinner size="sm" shade="inherit" /> Connecting
-                      </span>
-                    )}
-                    {status === 'syncing' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706]">
-                        <Spinner size="sm" shade="inherit" /> Finishing connection…
-                      </span>
-                    )}
-                    {status === 'error' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
-                        Connection failed
-                      </span>
-                    )}
-                    {status === 'reconnect_required' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
-                        Reconnect required
-                      </span>
-                    )}
-                    {status === 'idle' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FAFAF8] text-[#9B9B8F]">
-                        Not connected
-                      </span>
-                    )}
-                    {limited && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#EFF6FF] text-[#3B82F6]">
-                        Limited access
-                      </span>
-                    )}
-                  </div>
+                <VStack gap={0.5} style={{ flex: 1, minWidth: 0 }}>
+                  <HStack gap={3} align="center" wrap="wrap">
+                    <Text type="label" weight="bold">{p.name}</Text>
+                    <HStack gap={1.5} align="center">
+                      {isLoadingStatus ? <Spinner size="sm" /> : <StatusDot variant={meta.variant} label={meta.label} />}
+                      <Text type="supporting" color="secondary">{meta.label}</Text>
+                    </HStack>
+                    {limited && <Badge variant="info" label="Limited access" />}
+                  </HStack>
                   {(status === 'connected' || status === 'reconnect_required') && cp?.handle && (
-                    <p className="text-[12px] text-[#6B6B6B] mt-0.5">{cp.handle}</p>
+                    <Text type="supporting" color="secondary" className="font-geist-mono">{cp.handle}</Text>
                   )}
                   {status === 'error' && cp?.errorMessage && (
-                    <p className="text-[12px] text-[#DC2626] mt-0.5">{cp.errorMessage}</p>
+                    <Text type="supporting" style={{ color: 'var(--color-error)' }}>{cp.errorMessage}</Text>
                   )}
                   {status === 'reconnect_required' && (
-                    <p className="text-[12px] text-[#DC2626] mt-0.5">Authorization expired — reconnect to keep this account active.</p>
+                    <Text type="supporting" style={{ color: 'var(--color-error)' }}>Authorization expired — reconnect to keep this account active.</Text>
                   )}
                   {limited && caps?.caveat && (
-                    <p className="text-[11px] text-[#9B9B8F] mt-1 leading-relaxed">{caps.caveat}</p>
+                    <Text type="supporting" color="secondary">{caps.caveat}</Text>
                   )}
-                </div>
+                </VStack>
                 <div className="flex-shrink-0">
                   {status === 'idle' && (
                     <Button label="Connect" variant="primary" size="sm" onClick={() => beginPlatformConnect(p.id)} />
@@ -255,26 +274,21 @@ export default function ConnectionsPage() {
                     <Button label="Reconnect" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={() => beginPlatformConnect(p.id)} />
                   )}
                 </div>
-              </div>
+              </HStack>
             </Card>
           );
         })}
-      </div>
+      </VStack>
 
-      <div className="flex items-center justify-between">
-        <Text type="supporting" color="secondary">
-          {connectedCount > 0
-            ? `${connectedCount} of ${PLATFORMS.length} connected`
-            : 'Connect at least one account to see opportunities.'}
-        </Text>
-        <Button
-          label="Go to Opportunities"
-          variant="primary"
-          endContent={<ArrowRight size={14} />}
-          isDisabled={connectedCount === 0}
-          onClick={() => navigate('/opportunities')}
-        />
-      </div>
+      <Button
+        label="Go to Opportunities"
+        variant="primary"
+        size="lg"
+        width="100%"
+        isDisabled={connectedCount === 0}
+        endContent={<ArrowRight size={15} />}
+        onClick={() => navigate('/opportunities')}
+      />
 
       <AlertDialog
         isOpen={disconnectModalPlatform !== null}

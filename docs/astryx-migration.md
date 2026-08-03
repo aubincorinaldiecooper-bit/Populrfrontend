@@ -4,9 +4,14 @@ Meta's [Astryx](https://github.com/facebook/astryx) design system, being adopted
 incrementally alongside the existing Tailwind/Radix UI. This document tracks what's
 actually done, not the full end-state plan — update it as later phases land.
 
-**Current phase: Phase 1 (foundations) only.** No page has been redesigned. Nothing
-Radix-based has been removed. This is deliberately small and reviewable; see
-"Why only Phase 1" below.
+**Current phase: Phase 3 (core pages) under way.** Phase 1's foundations
+(theme, provider hierarchy, CSS layer order) are unchanged and still accurate
+below. `ConnectionsPage.tsx` is now the first page migrated in full — every
+element that has a real Astryx equivalent (Card, Text, Badge, StatusDot,
+ProgressBar, Divider, HStack/VStack, Button, Spinner, Banner, AlertDialog)
+uses it; hand-rolled `pop-*` Tailwind classes remain only for things Astryx
+has no component for (icon tiles, the page-level max-width wrapper). Nothing
+Radix-based has been removed yet — that's still Phase 5.
 
 ## What's real vs. what's still to do
 
@@ -146,19 +151,36 @@ anything further. Do this again after any theme or layer-order change.
 
 ## Components migrated so far
 
-One page, two primitives, as a deliberately small proof-of-concept — not a
-redesign:
+- **`src/components/PageHeader.tsx`** (shared by every page that uses it) —
+  `Heading` (`level={1} type="display-3"`) + `Text` for the title/subtitle,
+  `HStack`/`VStack` for layout, replacing bare `h1`/`p`/flex-div markup.
 
-- **`src/pages/ConnectionsPage.tsx`** — the six connect/retry/reconnect
-  action buttons now use `@astryxdesign/core/Button` (`variant="primary"` /
-  `"secondary"` / `"ghost"`, `isLoading` for the connecting/syncing states
-  instead of a manually-spun `Loader2` icon), and the status-pill loading
-  indicators use `@astryxdesign/core/Spinner` (`size="sm" shade="inherit"`
-  so it picks up the pill's own text color).
+- **`src/pages/ConnectionsPage.tsx`** — full page, not just primitives:
+  `Card` for the summary panel and each platform row (`variant="red"` for
+  the error/reconnect-required attention state), `ProgressBar` for the
+  connected-accounts progress (`variant="accent"`), `Badge` for the
+  Locked/Unlocked and Limited-access indicators, `StatusDot` paired with
+  `Text` for each connection-status line (`StatusDot`'s `label` is
+  tooltip/a11y-only, not visible text — the visible label is a sibling
+  `Text`), `Divider` (`orientation="vertical"`) to split the summary panel,
+  `HStack`/`VStack` for every layout that was previously a flex/space-y
+  Tailwind div, and `Button` end-to-end including the full-width primary CTA
+  (`width="100%"`, `endContent` for the trailing arrow instead of a raw
+  `<button className="pop-btn-primary">`). Verified by rendering the page in
+  isolation (a throwaway harness bypassing the auth-gated route tree, since
+  this sandbox can't reach the real auth service) and screenshotting both
+  the default and a real error-state (via an actual failed-connect click) —
+  not just `tsc`/`eslint`.
 
-Everything else on that page (cards, status pills, layout) is still plain
-Tailwind. This is intentional — full page migration is Phase 3 per the
-staged plan below.
+  What's intentionally still plain Tailwind: the platform icon tile (a
+  fixed-size rounded square with a brand-colored icon — no matching Astryx
+  primitive) and the outer `pop-page` max-width/padding wrapper (Astryx has
+  no page-level container component; `AppShell` is for a full app frame, not
+  per-page content).
+
+This is now the reference pattern for migrating the remaining pages (Home,
+Automations, Contacts, Settings) per the redesign work in progress — full
+component adoption per page, not scattered primitive swaps.
 
 ## Remaining legacy/Radix dependencies
 

@@ -8,18 +8,25 @@ import { ClickableCard } from '@astryxdesign/core/ClickableCard';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Heading } from '@astryxdesign/core/Heading';
 import { Text } from '@astryxdesign/core/Text';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { ProgressBar } from '@astryxdesign/core/ProgressBar';
+import { Divider } from '@astryxdesign/core/Divider';
+import { HStack } from '@astryxdesign/core/HStack';
+import { VStack } from '@astryxdesign/core/VStack';
 import { useApp } from '../context/AppContext';
 import {
   isBackendConfigured, fetchAutomations, updateAutomation, deleteAutomation, fetchAutomationEvents,
 } from '../lib/api';
 import type { AutomationRecord, AutomationEvent, ConnectedAccount } from '../lib/api';
 import {
-  Search, Play, Pause, Zap, ArrowLeft, Plus, Loader2, Trash2, Pencil,
+  Search, Play, Pause, Zap, ArrowLeft, Plus, Trash2, Pencil,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import PlatformDot from '../components/PlatformDot';
 import EmptyState from '../components/EmptyState';
+import MiniStat from '../components/MiniStat';
 
 type StatusTab = 'all' | 'active' | 'paused';
 
@@ -165,9 +172,10 @@ function AutomationDetail({
       <Card padding={5}>
         <Heading level={2} className="mb-4">Recent activity</Heading>
         {eventsLoading && (
-          <div className="flex items-center justify-center py-8 text-[#6B6B6B]">
-            <Loader2 size={18} className="animate-spin mr-2" /> Loading activity...
-          </div>
+          <HStack justify="center" align="center" gap={2} style={{ paddingBlock: 32 }}>
+            <Spinner size="md" />
+            <Text type="body" color="secondary">Loading activity...</Text>
+          </HStack>
         )}
         {!eventsLoading && eventsError && <Banner status="error" title={eventsError} />}
         {!eventsLoading && !eventsError && events.length === 0 && (
@@ -177,16 +185,16 @@ function AutomationDetail({
           <div className="space-y-2">
             {events.map(e => (
               <div key={e.id} className="flex items-start justify-between gap-3 py-2 border-b border-[#F0EEEA] last:border-0">
-                <div className="min-w-0">
-                  <p className="text-[12px] text-[#111111]">
+                <VStack gap={0.5} style={{ minWidth: 0 }}>
+                  <Text type="supporting" color="primary">
                     {e.contact_name || e.contact_handle ? (e.contact_name || `@${e.contact_handle}`) : 'Someone'} — {e.detail}
-                  </p>
-                  {e.error && <p className="text-[11px] text-[#DC2626] mt-0.5">{e.error}</p>}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                  </Text>
+                  {e.error && <Text type="supporting" style={{ color: 'var(--color-error)' }}>{e.error}</Text>}
+                </VStack>
+                <HStack gap={2} align="center" style={{ flexShrink: 0 }}>
                   <StatusPill status={e.status === 'ok' ? 'sent' : e.status === 'failed' ? 'disconnected' : 'draft'} className="text-[10px]" />
-                  <span className="text-[10px] text-[#9B9B8F]">{relativeTime(e.created_at)}</span>
-                </div>
+                  <Text type="supporting" color="disabled">{relativeTime(e.created_at)}</Text>
+                </HStack>
               </div>
             ))}
           </div>
@@ -208,6 +216,7 @@ export default function AutomationsPage() {
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AutomationRecord | null>(null);
 
   const load = useCallback(() => {
     if (!backendConfigured) { setLoading(false); return; }
@@ -255,14 +264,16 @@ export default function AutomationsPage() {
     }
   };
 
-  const handleDelete = async (a: AutomationRecord) => {
-    if (!window.confirm(`Delete "${a.name}"? This cannot be undone.`)) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const a = deleteTarget;
     setBusyId(a.id);
     try {
       await deleteAutomation(a.id);
       setAutomationList(prev => prev.filter(x => x.id !== a.id));
       showToast('Automation deleted', 'success');
       setDetailId(null);
+      setDeleteTarget(null);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not delete this automation.', 'error');
     } finally {
@@ -272,18 +283,35 @@ export default function AutomationsPage() {
 
   const handleEdit = (a: AutomationRecord) => navigate('/automations/new', { state: { automation: a } });
 
+  const isDeletingTarget = deleteTarget !== null && busyId === deleteTarget.id;
+  const deleteDialog = (
+    <AlertDialog
+      isOpen={deleteTarget !== null}
+      onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+      title={`Delete "${deleteTarget?.name ?? ''}"?`}
+      description="This cannot be undone."
+      actionLabel={isDeletingTarget ? 'Deleting…' : 'Delete automation'}
+      actionVariant="destructive"
+      isActionLoading={isDeletingTarget}
+      onAction={confirmDelete}
+    />
+  );
+
   const detail = detailId ? automationList.find(a => a.id === detailId) ?? null : null;
   if (detail) {
     return (
-      <AutomationDetail
-        automation={detail}
-        account={accountById[detail.account_id]}
-        busy={busyId === detail.id}
-        onBack={() => setDetailId(null)}
-        onEdit={() => handleEdit(detail)}
-        onToggleActive={() => handleToggleActive(detail)}
-        onDelete={() => handleDelete(detail)}
-      />
+      <>
+        <AutomationDetail
+          automation={detail}
+          account={accountById[detail.account_id]}
+          busy={busyId === detail.id}
+          onBack={() => setDetailId(null)}
+          onEdit={() => handleEdit(detail)}
+          onToggleActive={() => handleToggleActive(detail)}
+          onDelete={() => setDeleteTarget(detail)}
+        />
+        {deleteDialog}
+      </>
     );
   }
 
@@ -291,7 +319,7 @@ export default function AutomationsPage() {
     <div className="pop-page">
       <PageHeader
         title="Automations"
-        subtitle={backendConfigured ? `${activeCount} active · ${automationList.length} total` : undefined}
+        subtitle="Reply to comments and DMs automatically, and capture contacts as people engage."
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
             <div className="w-full sm:w-56">
@@ -319,6 +347,26 @@ export default function AutomationsPage() {
         </div>
       )}
 
+      {backendConfigured && !loading && !error && automationList.length > 0 && (
+        // Summary panel: mirrors the Home/Connections "N of M" pattern —
+        // computed entirely from the real automation list, no invented numbers.
+        <Card padding={5} style={{ marginBottom: 20 }}>
+          <HStack wrap="wrap" gap={5} align="center">
+            <VStack gap={3} style={{ flex: 1, minWidth: 220 }}>
+              <Text type="large" weight="bold">
+                <span className="font-geist-mono">{activeCount}</span> of <span className="font-geist-mono">{automationList.length}</span> automations active
+              </Text>
+              <ProgressBar value={activeCount} max={automationList.length} label="Active automations" isLabelHidden variant="accent" />
+            </VStack>
+            <Divider orientation="vertical" className="hidden sm:block" style={{ alignSelf: 'stretch' }} />
+            <HStack wrap="wrap" gap={6}>
+              <MiniStat value={activeCount} label="Active" />
+              <MiniStat value={pausedCount} label="Paused" />
+            </HStack>
+          </HStack>
+        </Card>
+      )}
+
       {backendConfigured && (
         <>
           <TabList value={statusTab} onChange={v => setStatusTab(v as StatusTab)} hasDivider>
@@ -328,9 +376,10 @@ export default function AutomationsPage() {
           </TabList>
 
           {loading && (
-            <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
-              <Loader2 size={20} className="animate-spin mr-2" /> Loading automations...
-            </div>
+            <HStack justify="center" align="center" gap={2} style={{ paddingBlock: 64 }}>
+              <Spinner size="lg" />
+              <Text type="body" color="secondary">Loading automations...</Text>
+            </HStack>
           )}
 
           {!loading && error && (
@@ -375,25 +424,25 @@ export default function AutomationsPage() {
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${a.active ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
                           {a.active ? <Zap size={18} className="text-[#111111]" /> : <Pause size={18} className="text-[#6B6B6B]" />}
                         </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-geist font-semibold text-[13px] text-[#111111] truncate">{a.name}</h3>
+                        <VStack gap={0.5} style={{ minWidth: 0 }}>
+                          <HStack gap={2} align="center" wrap="wrap">
+                            <Text type="label" weight="semibold" className="truncate">{a.name}</Text>
                             <StatusPill status={a.active ? 'active' : 'paused'} className="text-[10px]" />
                             {reviewFirst && <StatusPill status="reply recommended" className="text-[10px]" />}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                          </HStack>
+                          <HStack gap={1.5} align="center">
                             <PlatformDot platform={a.platform} size={7} />
-                            <span className="text-[11px] text-[#9B9B8F] capitalize">{a.platform}</span>
+                            <Text type="supporting" color="disabled" className="capitalize">{a.platform}</Text>
                             {account && (
-                              <span className="text-[11px] text-[#9B9B8F]">
+                              <Text type="supporting" color="disabled">
                                 · {account.username ? `@${account.username}` : account.display_name ?? account.id}
-                              </span>
+                              </Text>
                             )}
-                          </div>
-                          <p className="text-[11px] text-[#6B6B6B] mt-1">
+                          </HStack>
+                          <Text type="supporting" color="secondary" style={{ marginTop: 4 }}>
                             When a comment {MATCH_MODE_LABEL[a.match_mode] ?? a.match_mode} &ldquo;{a.keywords.slice(0, 3).join(', ')}{a.keywords.length > 3 ? '…' : ''}&rdquo; → {REPLY_CHANNEL_LABEL[a.reply_channel] ?? a.reply_channel}
-                          </p>
-                        </div>
+                          </Text>
+                        </VStack>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <Button label="Edit" variant="ghost" size="sm" icon={<Pencil size={14} />} isIconOnly isDisabled={busy} onClick={() => handleEdit(a)} />
@@ -401,12 +450,12 @@ export default function AutomationsPage() {
                           label={a.active ? 'Pause' : 'Resume'}
                           variant="ghost"
                           size="sm"
-                          icon={busy ? <Loader2 size={14} className="animate-spin" /> : a.active ? <Pause size={14} /> : <Play size={14} />}
+                          icon={a.active ? <Pause size={14} /> : <Play size={14} />}
                           isIconOnly
-                          isDisabled={busy}
+                          isLoading={busy}
                           onClick={() => handleToggleActive(a)}
                         />
-                        <Button label="Delete" variant="ghost" size="sm" icon={<Trash2 size={14} className="text-[#DC2626]" />} isIconOnly isDisabled={busy} onClick={() => handleDelete(a)} />
+                        <Button label="Delete" variant="ghost" size="sm" icon={<Trash2 size={14} className="text-[#DC2626]" />} isIconOnly isDisabled={busy} onClick={() => setDeleteTarget(a)} />
                       </div>
                     </div>
                   </ClickableCard>
@@ -416,6 +465,8 @@ export default function AutomationsPage() {
           )}
         </>
       )}
+
+      {deleteDialog}
     </div>
   );
 }

@@ -1,11 +1,20 @@
+import { Heading } from '@astryxdesign/core/Heading';
+import { Text } from '@astryxdesign/core/Text';
+import { HStack } from '@astryxdesign/core/HStack';
+import { VStack } from '@astryxdesign/core/VStack';
+
 export default function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-      <div className="min-w-0">
-        <h1 className="font-geist font-bold text-2xl lg:text-[30px] text-[#111111] tracking-tight leading-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-[#6B6B6B] mt-1.5">{subtitle}</p>}
-      </div>
-      {action && <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">{action}</div>}
-    </div>
+    <HStack wrap="wrap" justify="between" align="center" gap={4} style={{ marginBottom: 32 }}>
+      <VStack gap={0.5} style={{ minWidth: 0 }}>
+        <Heading level={1} type="display-3">{title}</Heading>
+        {subtitle && <Text type="body" color="secondary">{subtitle}</Text>}
+      </VStack>
+      {action && (
+        <HStack wrap="wrap" gap={3}>
+          {action}
+        </HStack>
+      )}
+    </HStack>
   );
 }

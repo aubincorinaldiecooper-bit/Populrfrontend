@@ -228,6 +228,27 @@
  * Heading/Text render as h1-h6/p too, styled via @layer astryx-base /
  * astryx-theme, which both outrank tw-preflight in the declared order
  * above and must keep winning once pages actually adopt them. */
+/* ─── ProgressBar/StatusDot "accent" variant color fix ───
+ * theme-neutral (which populrTheme extends) hardcodes a fixed informational
+ * blue for these two components' `variant="accent"` — `.astryx-progressbar
+ * .accent { --color-accent: #0074e2 }` / `.astryx-statusdot.accent { ... }`
+ * — rather than inheriting the theme's actual --color-accent token. Verified
+ * via computed-style inspection: populrTheme's root-level --color-accent
+ * (#C5FF3D, correct) is present everywhere except inside these two
+ * component-variant selectors, which set their own value at equal
+ * specificity within the same runtime-injected astryx-theme layer, so a
+ * same-layer override can't reliably win (source order favors whichever
+ * loads last, which is the runtime injection). Deliberately unlayered:
+ * per the CSS cascade, any unlayered rule outranks every layered rule
+ * regardless of specificity or order, so this wins without fighting layer
+ * timing. Revisit if a future @astryxdesign/theme-neutral version fixes
+ * this upstream (checked against 0.2.0).
+ */
+.astryx-progressbar.accent,
+.astryx-statusdot.accent {
+  --color-accent: #C5FF3D;
+}
+
 @layer tw-preflight {
   :where(h1, h2, h3, h4, h5, h6, p) {
     color: inherit;
