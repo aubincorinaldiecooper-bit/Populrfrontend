@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import ConnectionsPage from '../pages/ConnectionsPage';
 import type { ConnectedAccount } from '../lib/api';
@@ -123,5 +124,48 @@ describe('ConnectionsPage — status-to-action mapping', () => {
     expect(screen.getByText('Try again')).toBeInTheDocument();
     expect(screen.queryByText('Disconnect')).not.toBeInTheDocument();
     expect(screen.queryByText('Reconnect')).not.toBeInTheDocument();
+  });
+});
+
+/* Regression coverage for the Astryx pass: the hand-rolled disconnect
+ * confirm modal was swapped for Astryx's AlertDialog. This proves the
+ * swap didn't just typecheck — clicking "Disconnect" actually opens a
+ * dialog with the right copy, and confirming the destructive action
+ * calls disconnectAccount with the real account id (never the platform
+ * name), matching ConnectionsPage.tsx's handleDisconnect contract. */
+describe('ConnectionsPage — disconnect confirmation dialog', () => {
+  it('opens on "Disconnect", confirms with the account id, and closes', async () => {
+    const disconnectAccount = vi.fn().mockResolvedValue(undefined);
+    const refreshConnectedAccounts = vi.fn().mockResolvedValue(undefined);
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({
+      connectedPlatforms: [connectedPlatform],
+      accounts: [realAccount],
+      beginPlatformConnect: vi.fn(),
+      completeOAuthReturn: vi.fn().mockResolvedValue(undefined),
+      failOAuthReturn: vi.fn(),
+      openSubscriptionModal: vi.fn(),
+      refreshConnectedAccounts,
+      disconnectAccount,
+      showToast,
+    });
+
+    const user = userEvent.setup();
+    renderConnectionsPage();
+
+    // Closed by default — AlertDialog stays mounted for its native <dialog>
+    // element to own open/close, so its content exists in the DOM either
+    // way; only the accessibility role is conditional on being open.
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    await user.click(await screen.findByText('Disconnect'));
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByText('Disconnect Instagram?')).toBeInTheDocument();
+
+    await user.click(screen.getByText('Disconnect account'));
+
+    expect(disconnectAccount).toHaveBeenCalledWith(realAccount.id);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 });
