@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { resolveIdentity } from '../lib/identity';
 import {
-  Shield, Lock, Monitor, ChevronDown, CreditCard, ShieldCheck, AlertCircle,
+  Shield, Lock, Monitor, ChevronDown, CreditCard, ShieldCheck, AlertCircle, LogOut,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 
@@ -15,6 +18,8 @@ type NotificationKey = 'push' | 'email' | 'weeklySummary';
 
 export default function SettingsPage() {
   const { showToast, accounts } = useApp();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [notificationSettings, setNotificationSettings] = useState<Record<NotificationKey, boolean>>({
     push: true, email: true, weeklySummary: false,
   });
@@ -23,12 +28,33 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [mobileTabsOpen, setMobileTabsOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
-  // Creator identity comes from the connected account the backend returned —
-  // this app has no separate user/profile endpoint.
-  const primaryAccount = accounts.find(a => a.is_connected) ?? accounts[0] ?? null;
+  // Who's signed in comes from Better Auth (name/email), never from a
+  // connected social platform row — a connected account can be any
+  // platform the creator happens to manage and says nothing about which
+  // account they logged into Populr with. Same helper the Sidebar footer
+  // already uses, so both surfaces agree.
+  const identity = resolveIdentity(user, accounts);
 
   const comingSoon = (label: string) => showToast(`${label} isn't available yet`, 'info');
+
+  // Ends the Better Auth session and returns to /login. Deliberately does
+  // not touch onboardingComplete or any connected social account — signing
+  // out of Populr isn't the same as disconnecting Instagram/TikTok/etc.,
+  // which live server-side and belong to the user across sessions.
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Sign out failed.', 'error');
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
@@ -75,31 +101,38 @@ export default function SettingsPage() {
       {activeTab === 'profile' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
-            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Creator identity</h2>
-            {primaryAccount ? (
-              <div className="flex items-center gap-4">
-                {primaryAccount.avatar_url ? (
-                  <img src={primaryAccount.avatar_url} alt="" className="w-16 h-16 rounded-full object-cover" />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-[20px] font-semibold text-[#9B9B8F]">
-                    {(primaryAccount.display_name || primaryAccount.username || '?').charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div>
-                  <p className="font-geist font-bold text-base text-[#111111]">{primaryAccount.display_name || primaryAccount.username}</p>
-                  {primaryAccount.username && <p className="text-[13px] text-[#6B6B6B]">@{primaryAccount.username}</p>}
-                  <p className="text-[11px] text-[#9B9B8F] mt-1 capitalize">{primaryAccount.platform}</p>
+            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Account</h2>
+            <div className="flex items-center gap-4">
+              {identity.avatarUrl ? (
+                <img src={identity.avatarUrl} alt="" className="w-16 h-16 rounded-full object-cover" />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-[20px] font-semibold text-[#9B9B8F]">
+                  {identity.initials}
                 </div>
+              )}
+              <div>
+                <p className="font-geist font-bold text-base text-[#111111]">{identity.name}</p>
+                {identity.email && <p className="text-[13px] text-[#6B6B6B]">{identity.email}</p>}
+                {identity.handle && <p className="text-[11px] text-[#9B9B8F] mt-1">{identity.handle}</p>}
               </div>
-            ) : (
-              <div className="bg-[#FAFAF8] rounded-xl p-4 flex items-start gap-3">
-                <AlertCircle size={16} className="text-[#D97706] flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-[13px] font-semibold text-[#111111]">No account connected yet</p>
-                  <p className="text-[12px] text-[#6B6B6B] mt-1">Connect an account from Channels to see your creator identity here.</p>
-                </div>
-              </div>
-            )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-[#E8E4DF]">
+            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Session</h2>
+            <p className="text-[12px] text-[#6B6B6B] mb-4">
+              {identity.email ? <>Signed in as <span className="font-medium text-[#111111]">{identity.email}</span>.</> : 'Signed in.'}
+            </p>
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="pop-btn-secondary text-[13px] flex items-center gap-2 disabled:opacity-50"
+            >
+              <LogOut size={14} />{signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+            <p className="text-[11px] text-[#9B9B8F] mt-3">
+              Signing out ends your session on this device. It doesn&apos;t disconnect your social accounts.
+            </p>
           </div>
         </div>
       )}
