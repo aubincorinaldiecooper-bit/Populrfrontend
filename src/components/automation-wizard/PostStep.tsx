@@ -24,6 +24,14 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
   const [findingMissing, setFindingMissing] = useState(false);
   const [missingError, setMissingError] = useState<string | null>(null);
 
+  // syncPostsLibrary can 200 with zero posts stored AND a real reason why
+  // (Zernio auth/rate-limit/scope failure) in its `errors` array — that's
+  // not an exception, so the try/catch in handleSync never sees it. Without
+  // surfacing it, a real "Zernio couldn't read this account's posts"
+  // failure looks identical to "this account genuinely has no posts,"
+  // which is the whole ambiguity this field exists to remove.
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+
   // Auto-sync once per account per session when the library comes back
   // empty. Guarded so a genuinely-empty account (no Instagram posts at
   // all) doesn't loop forever.
@@ -31,11 +39,15 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
 
   const load = useCallback(async (): Promise<Post[]> => {
     if (!state.accountId) return [];
+    // Any note belongs to whichever fetch produced it — a fresh attempt
+    // (retry, account switch, or the initial load) starts clean.
+    setSyncNote(null);
     setLoading(true);
     setError(null);
     try {
       const list = await fetchPostsLibrary({ accountId: state.accountId });
       setPosts(list);
+      if (list.length > 0) setSyncNote(null);
       // Hydrate the selected post when editing an automation whose post
       // isn't yet in wizard state.
       if (!state.post && pendingSourcePostId) {
@@ -56,9 +68,17 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
     if (!state.accountId) return;
     setSyncing(true);
     setError(null);
+    setSyncNote(null);
     try {
-      await syncPostsLibrary(state.accountId);
-      await load();
+      const result = await syncPostsLibrary(state.accountId);
+      const list = await load();
+      // Zernio reported a real failure for this account (auth, rate limit,
+      // scope, etc.) rather than "there's simply nothing to import" — worth
+      // saying so explicitly, especially since the empty-list copy below
+      // would otherwise read as "you have no posts," which may be false.
+      if (list.length === 0 && result.errors.length > 0) {
+        setSyncNote(result.errors[0]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not sync your posts from Instagram.');
     } finally {
@@ -163,6 +183,16 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
         </div>
       )}
 
+      {!busy && !error && syncNote && (
+        <div className="bg-[#FEF3C7] text-[#92400E] px-3.5 py-2.5 rounded-xl text-[12px] flex items-start gap-2">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Instagram sync didn&apos;t fully succeed</p>
+            <p className="mt-0.5">{syncNote}</p>
+          </div>
+        </div>
+      )}
+
       {!busy && !error && !state.post && (
         <div className="pop-card p-8 flex flex-col items-center text-center gap-3">
           <Instagram size={22} className="text-[#9B9B8F]" />
@@ -172,7 +202,9 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
             </p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
               {posts.length === 0
-                ? "We synced your account and didn't find any posts. Try Sync my posts again, or paste a post URL below."
+                ? syncNote
+                  ? 'See the sync issue above — you can retry, or paste a post URL below in the meantime.'
+                  : "We synced your account and didn't find any posts. Try Sync my posts again, or paste a post URL below."
                 : 'Pick the post you want this automation to watch.'}
             </p>
           </div>

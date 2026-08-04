@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { createAutomation, updateAutomation } from '../../lib/api';
@@ -53,13 +53,15 @@ export interface WizardState {
   dirty: boolean;
 }
 
+function blankState(): WizardState {
+  return {
+    automationId: null, name: '', type: null, accountId: null, post: null,
+    triggerKeywords: [], aiEnabled: true, aiInstructions: '', active: false, dirty: false,
+  };
+}
+
 function initialStateFor(editAutomation: Automation | null): WizardState {
-  if (!editAutomation) {
-    return {
-      automationId: null, name: '', type: null, accountId: null, post: null,
-      triggerKeywords: [], aiEnabled: true, aiInstructions: '', active: false, dirty: false,
-    };
-  }
+  if (!editAutomation) return blankState();
   return {
     automationId: editAutomation.id,
     name: editAutomation.name,
@@ -74,16 +76,92 @@ function initialStateFor(editAutomation: Automation | null): WizardState {
   };
 }
 
+// ============================================================
+// Local draft persistence for NEW automations only. Editing an existing
+// automation always hydrates from the real backend record (above) — mixing
+// in a stray local draft there would risk bleeding one automation's
+// half-typed fields into a different one.
+//
+// The backend can't hold an in-progress draft until it has a name,
+// accountId, and at least one keyword (POST /api/automations 400s without
+// them — see populrbackend/src/routes/automations.ts), which rules out
+// autosaving to the server from step 1. So this is deliberately a
+// browser-local, single-slot stash: it exists purely so that navigating
+// away mid-wizard (sidebar click, back button, closed tab) and returning
+// to /automations/new resumes exactly where the creator left off, instead
+// of silently discarding everything they'd typed.
+// ============================================================
+const DRAFT_STORAGE_KEY = 'populr.automationWizardDraft.v1';
+
+interface StoredDraft {
+  state: WizardState;
+  stepIndex: number;
+}
+
+function readDraft(): StoredDraft | null {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredDraft>;
+    if (!parsed || typeof parsed !== 'object' || !parsed.state) return null;
+    return { state: parsed.state, stepIndex: typeof parsed.stepIndex === 'number' ? parsed.stepIndex : 0 };
+  } catch {
+    // Corrupt JSON, storage disabled (private browsing), or a shape from a
+    // future version of this draft format — treat as "no draft" rather
+    // than crash the wizard on load.
+    return null;
+  }
+}
+
+function writeDraft(draft: StoredDraft): void {
+  try {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // Storage full or disabled — the wizard still works this session, it
+    // just won't survive a navigation. Not worth surfacing to the user.
+  }
+}
+
+function clearDraft(): void {
+  try {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // Nothing to do if storage is unavailable.
+  }
+}
+
 export function useAutomationWizard() {
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast, accounts } = useApp();
   const editAutomation = (location.state as { automation?: Automation } | null)?.automation ?? null;
 
-  const [state, setState] = useState<WizardState>(() => initialStateFor(editAutomation));
-  const [stepIndex, setStepIndex] = useState(0);
+  // Each of these lazy initializers runs exactly once, on mount, and never
+  // again — so calling the same pure localStorage read from three of them
+  // is equivalent to (and simpler than) reading it once into a ref.
+  const [state, setState] = useState<WizardState>(
+    () => (editAutomation ? null : readDraft())?.state ?? initialStateFor(editAutomation)
+  );
+  const [stepIndex, setStepIndex] = useState(
+    () => (editAutomation ? null : readDraft())?.stepIndex ?? 0
+  );
+  const [didRestoreDraft] = useState(() => !editAutomation && !!readDraft());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (didRestoreDraft) showToast('Resumed your draft automation', 'info');
+    // Fires once on mount only — showToast identity isn't relevant here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist on every change, but only for brand-new automations (never
+  // while editing an existing one — see the comment on readDraft/writeDraft
+  // above) and only once there's something worth resuming.
+  useEffect(() => {
+    if (editAutomation || !state.dirty) return;
+    writeDraft({ state, stepIndex });
+  }, [editAutomation, state, stepIndex]);
 
   const pendingSourcePostId = editAutomation?.source_post_id ?? null;
 
@@ -143,6 +221,9 @@ export function useAutomationWizard() {
         ? await updateAutomation(state.automationId, input)
         : await createAutomation(input);
       setState(prev => ({ ...prev, automationId: automation.id, active: automation.active, dirty: false }));
+      // Now durably on the backend — the local stash's only job was
+      // bridging the gap until this point, so it's redundant from here on.
+      if (!editAutomation) clearDraft();
       showToast(activate ? 'Automation activated' : 'Draft saved', 'success');
       navigate('/automations');
       return automation;
@@ -154,7 +235,7 @@ export function useAutomationWizard() {
     } finally {
       setSaving(false);
     }
-  }, [buildInput, navigate, showToast, state.automationId]);
+  }, [buildInput, editAutomation, navigate, showToast, state.automationId]);
 
   const confirmDiscard = useCallback(() => {
     if (!state.dirty) return true;
@@ -163,8 +244,11 @@ export function useAutomationWizard() {
 
   const cancel = useCallback(() => {
     if (!confirmDiscard()) return;
+    // An explicit, confirmed discard means "forget this" — don't resurrect
+    // it as a restored draft the next time /automations/new is opened.
+    if (!editAutomation) clearDraft();
     navigate('/automations');
-  }, [confirmDiscard, navigate]);
+  }, [confirmDiscard, editAutomation, navigate]);
 
   return {
     state, update, isEditing: !!editAutomation, pendingSourcePostId,
