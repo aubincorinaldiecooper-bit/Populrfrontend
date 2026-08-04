@@ -549,6 +549,45 @@ export async function createAutomation(input: AutomationInput): Promise<Automati
   return data.automation;
 }
 
+/** The AI's dry-run verdict on a sample comment/DM — the exact decision the
+ *  live engine would reach, minus anything sent or persisted. */
+export interface TestReplyDecision {
+  intent: string;
+  confidence: number;
+  replyType: string;
+  replyText: string | null;
+  linkToSend: string | null;
+  needsHuman: boolean;
+  shouldAutoReply: boolean;
+  reason: string;
+}
+
+/** POST /api/automations/test-reply's response. When the AI test can't run
+ *  (Smart Replies not configured, brand AI switched off, or a model/transport
+ *  failure), the backend returns `available: false` with an honest reason so
+ *  the wizard falls back to previewing the fixed reply rather than inventing
+ *  an AI answer — never a 500. */
+export type TestReplyResult =
+  | { available: true; decision: TestReplyDecision }
+  | { available: false; reason: 'not_configured' | 'ai_disabled' | 'error' };
+
+export interface TestReplyInput {
+  platform: string;
+  channel: 'comment' | 'dm';
+  messageText: string;
+  postCaption?: string | null;
+}
+
+/** POST /api/automations/test-reply — dry-run the real smart-reply model on a
+ *  sample message for the builder's live test chat. Runs the SAME
+ *  classifyAndDraft used in production; nothing is sent or stored. */
+export async function fetchTestReply(input: TestReplyInput): Promise<TestReplyResult> {
+  return apiFetch<TestReplyResult>('/api/automations/test-reply', {
+    method: 'POST',
+    body: input,
+  });
+}
+
 /** PATCH /api/automations/:id — partial update (e.g. { active: false } to pause). */
 export async function updateAutomation(id: string, patch: Partial<AutomationInput>): Promise<AutomationRecord> {
   const data = await apiFetch<{ automation: AutomationRecord }>(`/api/automations/${id}`, {
