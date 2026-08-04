@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { RefreshCw, Inbox as InboxIcon, AlertCircle, ExternalLink, Copy, Check } from 'lucide-react';
-import { Card } from '@astryxdesign/core/Card';
-import { ClickableCard } from '@astryxdesign/core/ClickableCard';
-import { Button } from '@astryxdesign/core/Button';
-import { Banner } from '@astryxdesign/core/Banner';
-import { Text } from '@astryxdesign/core/Text';
-import { Link } from '@astryxdesign/core/Link';
-import { Spinner } from '@astryxdesign/core/Spinner';
+import { AnimatePresence } from 'framer-motion';
+import {
+  RefreshCw, Inbox as InboxIcon, AlertCircle, ExternalLink, Copy, Check, Loader2, Send,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
 import OpportunityDetailDrawer from '../components/OpportunityDetailDrawer';
 import {
@@ -19,9 +14,7 @@ import type { Opportunity, OpportunitySummary, OpportunityStatus, PlatformCapabi
 
 // No explicit backend "initial sync status" exists for opportunities, so
 // recency-of-connection is the most honest available proxy for "Populr
-// hasn't plausibly had time to review this account's engagement yet" —
-// avoids claiming "no opportunities yet" moments after a user's first
-// connect, before anything could realistically have synced.
+// hasn't plausibly had time to review this account's engagement yet".
 const INITIAL_SYNC_WINDOW_MS = 10 * 60 * 1000;
 
 const PLATFORM_OPTIONS: { value: string; label: string }[] = [
@@ -44,8 +37,7 @@ const INTENT_OPTIONS: { value: string; label: string }[] = [
 ];
 
 // 'active' is a server-side pseudo-status meaning "not dismissed", so the
-// working queue stays calm without the client hiding rows the server counted
-// — which would desync the summary and pagination from what's on screen.
+// working queue stays calm without the client hiding rows the server counted.
 type StatusFilter = 'active' | OpportunityStatus;
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -68,17 +60,25 @@ const INTENT_SUMMARY_LABEL: Record<string, { one: string; many: string }> = {
 };
 
 const STATUS_DOT: Record<OpportunityStatus, string> = {
-  new: 'bg-chartreuse',
-  reviewed: 'bg-[#3B82F6]',
-  responded: 'bg-[#059669]',
-  dismissed: 'bg-[#9B9B8F]',
+  new: 'bg-secondary-fixed-dim',
+  reviewed: 'bg-[#3b82f6]',
+  responded: 'bg-[#0d9f6e]',
+  dismissed: 'bg-outline',
 };
+
+const card = 'bg-surface-container-lowest border border-outline-variant rounded-xl';
+const chipBase = 'px-3 py-1.5 rounded-full font-label text-label-sm uppercase transition-colors';
+const primaryBtn =
+  'inline-flex items-center justify-center gap-1.5 rounded-full bg-primary text-on-primary px-4 py-2 text-body-md font-semibold hover:opacity-90 transition-opacity disabled:opacity-50';
+const secondaryBtn =
+  'inline-flex items-center justify-center gap-1.5 rounded-full border border-outline-variant text-primary px-4 py-2 text-body-md font-medium hover:bg-surface-container-high transition-colors disabled:opacity-50';
+const ghostBtn =
+  'inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-body-md font-medium text-on-surface-variant hover:bg-surface-container-high transition-colors';
 
 function relativeTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.round(diffMs / 60000);
+  const mins = Math.round((Date.now() - date.getTime()) / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.round(mins / 60);
@@ -88,14 +88,25 @@ function relativeTime(iso: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function FilterChip({ active, accent, onClick, children }: {
+  active: boolean; accent?: boolean; onClick: () => void; children: React.ReactNode;
+}) {
+  const on = accent ? 'bg-secondary-container text-on-secondary-container' : 'bg-primary text-on-primary';
+  return (
+    <button
+      onClick={onClick}
+      className={`${chipBase} ${active ? on : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function CopyResponseButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Button
-      variant="secondary"
-      size="sm"
-      label={copied ? 'Copied' : 'Copy response'}
-      icon={copied ? <Check size={13} /> : <Copy size={13} />}
+    <button
+      className={secondaryBtn}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -105,67 +116,89 @@ function CopyResponseButton({ text }: { text: string }) {
           // Clipboard access denied — not worth a hard error here.
         }
       }}
-    />
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy response'}
+    </button>
   );
 }
 
-function OpportunityRow({
-  opportunity, onOpen, onDismiss,
-}: {
-  opportunity: Opportunity;
-  onOpen: () => void;
-  onDismiss: () => void;
+function EmptyState({ icon, title, body, children }: {
+  icon: React.ReactNode; title: string; body: string; children?: React.ReactNode;
+}) {
+  return (
+    <div className={`${card} p-10 text-center`}>
+      <div className="w-12 h-12 rounded-full bg-surface-container-high mx-auto flex items-center justify-center mb-3">{icon}</div>
+      <h3 className="font-display text-headline-md text-on-surface">{title}</h3>
+      <p className="text-body-md text-on-surface-variant mt-1.5 max-w-sm mx-auto">{body}</p>
+      {children && <div className="mt-5 flex justify-center">{children}</div>}
+    </div>
+  );
+}
+
+function OpportunityRow({ opportunity, onOpen, onDismiss }: {
+  opportunity: Opportunity; onOpen: () => void; onDismiss: () => void;
 }) {
   const canRespond = opportunity.availableActions.includes('reply') || opportunity.availableActions.includes('message');
   const canOpenOnPlatform = opportunity.availableActions.includes('open_on_platform');
-  const canCopy = opportunity.availableActions.includes('copy_response') && opportunity.suggestedResponse;
+  const canCopy = opportunity.availableActions.includes('copy_response') && !!opportunity.suggestedResponse;
   const openUrl = opportunity.interaction.externalUrl ?? opportunity.source?.externalUrl ?? null;
   const personLabel = opportunity.person.username ? `@${opportunity.person.username}` : opportunity.person.displayName || 'Unknown person';
+  const confidence = opportunity.intent.confidence;
 
   return (
-    <ClickableCard label={`Opportunity from ${personLabel}`} padding={4} className="pop-card-hover" onClick={onOpen}>
-      <div className="flex items-start gap-3">
+    <div className={`${card} p-4 hover:border-outline transition-colors`}>
+      <button onClick={onOpen} className="w-full text-left flex items-start gap-3">
         {opportunity.person.avatarUrl ? (
           <img src={opportunity.person.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
         ) : (
-          <div className="w-9 h-9 rounded-full bg-[#FAFAF8] flex-shrink-0" />
+          <div className="w-9 h-9 rounded-full bg-surface-container-high flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-semibold text-[#111111]">{personLabel}</span>
+            <span className="text-body-md font-semibold text-on-surface">{personLabel}</span>
             <PlatformDot platform={opportunity.platform} size={7} />
-            <span className="text-[11px] text-[#9B9B8F] capitalize">{opportunity.platform}</span>
-            <span className="text-[11px] text-[#9B9B8F]">· {relativeTime(opportunity.interaction.occurredAt)}</span>
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ml-auto flex-shrink-0 ${STATUS_DOT[opportunity.status]}`} title={opportunity.status} />
+            <span className="font-label text-label-sm text-on-surface-variant capitalize">{opportunity.platform}</span>
+            <span className="font-label text-label-sm text-on-surface-variant">· {relativeTime(opportunity.interaction.occurredAt)}</span>
+            <span className={`inline-block w-2 h-2 rounded-full ml-auto flex-shrink-0 ${STATUS_DOT[opportunity.status]}`} title={opportunity.status} />
           </div>
-          <p className="text-[13px] text-[#111111] mt-1.5 line-clamp-2">&ldquo;{opportunity.interaction.text}&rdquo;</p>
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FAFAF8] text-[#111111]">
+          <p className="text-body-md text-on-surface mt-1.5 line-clamp-2">&ldquo;{opportunity.interaction.text}&rdquo;</p>
+          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full font-label text-label-sm uppercase bg-surface-container-high text-on-surface">
               {opportunity.intent.label}
             </span>
-            <span className="text-[11px] text-[#6B6B6B]">{opportunity.intent.reason}</span>
+            {confidence !== null && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-12 h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+                  <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(confidence * 100)}%` }} />
+                </span>
+                <span className="font-label text-label-sm text-on-surface-variant">{Math.round(confidence * 100)}%</span>
+              </span>
+            )}
           </div>
+          <p className="text-[13px] text-on-surface-variant mt-1.5">{opportunity.intent.reason}</p>
         </div>
-      </div>
+      </button>
 
       <div className="flex items-center gap-2 mt-3 ml-12 flex-wrap">
         {canRespond && (
-          <Button variant="primary" size="sm" label="Reply" onClick={onOpen} />
+          <button onClick={onOpen} className={primaryBtn}><Send size={13} /> Reply</button>
         )}
         {!canRespond && canOpenOnPlatform && openUrl && (
-          <Button variant="primary" size="sm" label="Open on platform" icon={<ExternalLink size={13} />} href={openUrl} target="_blank" rel="noreferrer" />
+          <a href={openUrl} target="_blank" rel="noreferrer" className={primaryBtn}>
+            <ExternalLink size={13} /> Open on platform
+          </a>
         )}
         {!canRespond && canCopy && opportunity.suggestedResponse && (
           <CopyResponseButton text={opportunity.suggestedResponse} />
         )}
         {!canRespond && !canOpenOnPlatform && !canCopy && (
-          <Button variant="secondary" size="sm" label="Review" onClick={onOpen} />
+          <button onClick={onOpen} className={secondaryBtn}>Review</button>
         )}
         {opportunity.status !== 'dismissed' && (
-          <Button variant="ghost" size="sm" label="Dismiss" onClick={onDismiss} />
+          <button onClick={onDismiss} className={ghostBtn}>Dismiss</button>
         )}
       </div>
-    </ClickableCard>
+    </div>
   );
 }
 
@@ -201,8 +234,7 @@ export default function OpportunitiesPage() {
   }, [backendConfigured]);
 
   // `Date.now()` can't be called directly in the render body (React purity
-  // rule) — captured once at mount and refreshed periodically instead, which
-  // is more than enough precision for a 10-minute window.
+  // rule) — captured once at mount and refreshed periodically instead.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 30_000);
@@ -217,16 +249,13 @@ export default function OpportunitiesPage() {
     return Number.isFinite(connectedAt) && now - connectedAt < INITIAL_SYNC_WINDOW_MS;
   });
   // A connected account whose platform can't supply what opportunities need
-  // (comment replies + DMs) is still connected — never treated as "not
-  // connected" — just flagged with an explanatory note.
+  // (comment replies + DMs) is still connected — just flagged.
   const limitedAccount = connectedAccounts.find(a => {
     const caps = capabilities[a.platform];
     return caps && (!caps.supportsCommentReplies || !caps.supportsDMs);
   });
 
-  // Monotonic request id: only the newest in-flight fetch may write state, so
-  // a slow earlier request can't overwrite results for filters the user has
-  // already moved on from.
+  // Monotonic request id: only the newest in-flight fetch may write state.
   const requestSeq = useRef(0);
 
   const runFetch = useCallback(
@@ -293,8 +322,7 @@ export default function OpportunitiesPage() {
   );
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state — the setState calls
-    // inside `load` are the effect synchronizing with an external system.
+    // Data fetch from the backend, not derived state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
@@ -329,23 +357,32 @@ export default function OpportunitiesPage() {
         .filter((s): s is string => !!s)
     : [];
 
+  const filtersActive = !!platformFilter || !!intentFilter || statusFilter !== 'active';
+
   return (
-    <div className="pop-page">
-      <PageHeader
-        title="Opportunities"
-        subtitle="Populr reviews engagement across your connected accounts and surfaces the people showing real intent."
-        action={
-          <Button variant="ghost" size="sm" label="Refresh" icon={<RefreshCw size={14} />} isLoading={loading} isDisabled={loading} onClick={load} />
-        }
-      />
+    <div className="px-container-padding-mobile md:px-container-padding-desktop py-8 md:py-10 max-w-[1100px] mx-auto pb-24">
+      <div className="flex items-start justify-between gap-4 mb-7">
+        <div>
+          <h1 className="font-display text-headline-md md:text-display-lg-mobile text-on-surface">Opportunities</h1>
+          <p className="font-body text-body-md text-on-surface-variant mt-1.5 max-w-2xl">
+            Populr reviews engagement across your connected accounts and surfaces the people showing real intent.
+          </p>
+        </div>
+        <button onClick={load} disabled={loading} className={`${secondaryBtn} flex-shrink-0`}>
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </div>
 
       {!backendConfigured && (
-        <Banner
-          status="warning"
-          title="Populr isn't connected to a backend yet"
-          description="Set VITE_API_URL to your Populr backend to see real opportunities here. This page never shows placeholder data in its place."
-          className="mb-6"
-        />
+        <div className={`${card} p-4 mb-6 flex items-start gap-2.5`}>
+          <AlertCircle size={16} className="text-on-surface-variant flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-body-md font-semibold text-on-surface">Populr isn’t connected to a backend yet</p>
+            <p className="text-[13px] text-on-surface-variant mt-0.5">
+              Set VITE_API_URL to your Populr backend to see real opportunities here. This page never shows placeholder data in its place.
+            </p>
+          </div>
+        </div>
       )}
 
       {backendConfigured && (
@@ -353,166 +390,117 @@ export default function OpportunitiesPage() {
           {/* Summary */}
           {summary && summary.total > 0 && (
             <div className="mb-5">
-              <Text type="body" weight="bold" display="block">
+              <p className="text-body-lg font-semibold text-on-surface">
                 {newCount > 0 ? `${newCount} new opportunit${newCount === 1 ? 'y' : 'ies'}` : 'No new opportunities since your last visit'}
-              </Text>
+              </p>
               {intentBreakdown.length > 0 && (
-                <Text type="supporting" color="secondary" display="block" className="mt-0.5">{intentBreakdown.join(' · ')}</Text>
+                <p className="text-body-md text-on-surface-variant mt-0.5">{intentBreakdown.join(' · ')}</p>
               )}
             </div>
           )}
 
           {limitedAccount && (
-            <Card padding={4} className="mb-5">
-              <div className="flex items-start gap-3">
-                <AlertCircle size={16} className="text-[#3B82F6] flex-shrink-0 mt-0.5" />
-                <Text type="supporting" color="secondary">
-                  <span className="capitalize font-medium text-[#111111]">{limitedAccount.platform}</span> is connected with limited access.
-                  Opportunity coverage depends on the permissions available for this account.
-                </Text>
-              </div>
-            </Card>
+            <div className={`${card} p-4 mb-5 flex items-start gap-2.5`}>
+              <AlertCircle size={16} className="text-on-surface-variant flex-shrink-0 mt-0.5" />
+              <p className="text-body-md text-on-surface-variant">
+                <span className="capitalize font-medium text-on-surface">{limitedAccount.platform}</span> is connected with limited access.
+                Opportunity coverage depends on the permissions available for this account.
+              </p>
+            </div>
           )}
 
           {/* Filters */}
-          <div className="flex flex-wrap items-center gap-4 mb-5">
-            {/* Platform and intent stay as wrapping pill clouds (5-8 options
-                each) — TabList doesn't wrap to multiple lines, and no other
-                Astryx primitive reproduces this compact multi-select-look
-                filter chip pattern without a real redesign. */}
+          <div className="space-y-2.5 mb-6">
             <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setPlatformFilter(undefined)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${!platformFilter ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}
-              >
-                All platforms
-              </button>
+              <FilterChip active={!platformFilter} onClick={() => setPlatformFilter(undefined)}>All platforms</FilterChip>
               {PLATFORM_OPTIONS.map(p => (
-                <button
-                  key={p.value}
-                  onClick={() => setPlatformFilter(p.value)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${platformFilter === p.value ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}
-                >
-                  {p.label}
-                </button>
+                <FilterChip key={p.value} active={platformFilter === p.value} onClick={() => setPlatformFilter(p.value)}>{p.label}</FilterChip>
               ))}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {STATUS_OPTIONS.map(s => (
-                <button
-                  key={s.value}
-                  onClick={() => setStatusFilter(s.value)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${statusFilter === s.value ? 'bg-[#111111] text-white' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}
-                >
-                  {s.label}
-                </button>
+                <FilterChip key={s.value} active={statusFilter === s.value} onClick={() => setStatusFilter(s.value)}>{s.label}</FilterChip>
               ))}
             </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5 mb-6">
-            <button
-              onClick={() => setIntentFilter(undefined)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${!intentFilter ? 'bg-[rgba(200,255,61,0.15)] text-[#5C6B00]' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}
-            >
-              All intents
-            </button>
-            {INTENT_OPTIONS.map(i => (
-              <button
-                key={i.value}
-                onClick={() => setIntentFilter(i.value)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${intentFilter === i.value ? 'bg-[rgba(200,255,61,0.15)] text-[#5C6B00]' : 'bg-[#FAFAF8] text-[#6B6B6B] hover:bg-[#F0EFEA]'}`}
-              >
-                {i.label}
-              </button>
-            ))}
+            <div className="flex flex-wrap gap-1.5">
+              <FilterChip active={!intentFilter} accent onClick={() => setIntentFilter(undefined)}>All intents</FilterChip>
+              {INTENT_OPTIONS.map(i => (
+                <FilterChip key={i.value} active={intentFilter === i.value} accent onClick={() => setIntentFilter(i.value)}>{i.label}</FilterChip>
+              ))}
+            </div>
           </div>
 
           {/* Loading */}
           {loading && (
-            <div className="flex items-center justify-center py-16 text-[#6B6B6B] gap-2">
-              <Spinner size="lg" />
-              <Text type="body" color="secondary">Looking for meaningful audience activity...</Text>
+            <div className="flex items-center justify-center py-16 text-on-surface-variant gap-2">
+              <Loader2 size={20} className="animate-spin" />
+              <span className="text-body-md">Looking for meaningful audience activity…</span>
             </div>
           )}
 
           {/* Error */}
           {!loading && error && (
-            <Banner
-              status="error"
-              title="Couldn't load opportunities"
-              description={error}
-              endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />}
+            <div className="rounded-xl border border-error/40 bg-error-container/40 p-5">
+              <p className="flex items-center gap-2 text-body-md font-semibold text-on-error-container">
+                <AlertCircle size={16} /> Couldn’t load opportunities
+              </p>
+              <p className="text-[14px] text-on-error-container mt-1">{error}</p>
+              <button onClick={load} className={`${secondaryBtn} mt-3`}>Try again</button>
+            </div>
+          )}
+
+          {/* Empty states — an account-list load failure is distinct from a
+              genuine zero-accounts. This takes priority over the three states
+              below, all of which assume the account list itself loaded. */}
+          {!loading && !error && !accountsLoading && total === 0 && accountsError && !filtersActive && (
+            <EmptyState
+              icon={<AlertCircle size={22} className="text-error" />}
+              title="Couldn’t check your connected accounts"
+              body="Populr couldn’t confirm which accounts are connected, so it can’t tell whether there’s anything to show here yet."
+            >
+              <button onClick={refreshAccounts} className={secondaryBtn}><RefreshCw size={13} /> Try again</button>
+            </EmptyState>
+          )}
+
+          {!loading && !error && !accountsLoading && !accountsError && total === 0 && !hasConnectedAccounts && !filtersActive && (
+            <EmptyState
+              icon={<InboxIcon size={22} className="text-on-surface-variant" />}
+              title="Connect your first account"
+              body="Connect a social account so Populr can begin reviewing engagement for meaningful opportunities."
+            >
+              <button onClick={() => navigate('/connections')} className={primaryBtn}>Connect an account</button>
+            </EmptyState>
+          )}
+
+          {!loading && !error && !accountsLoading && !accountsError && total === 0 && hasConnectedAccounts && recentlyConnected && !filtersActive && (
+            <EmptyState
+              icon={<InboxIcon size={22} className="text-on-surface-variant" />}
+              title="Reviewing your engagement"
+              body="Populr is reviewing recent activity from your connected accounts. Opportunities will appear here when meaningful intent is found."
+            >
+              <button onClick={load} className={secondaryBtn}><RefreshCw size={13} /> Refresh</button>
+            </EmptyState>
+          )}
+
+          {!loading && !error && !accountsLoading && !accountsError && total === 0 && hasConnectedAccounts && !recentlyConnected && !filtersActive && (
+            <EmptyState
+              icon={<InboxIcon size={22} className="text-on-surface-variant" />}
+              title="No opportunities yet"
+              body="Your accounts are connected. New high-intent engagement will appear here when Populr finds something worth your attention."
+            >
+              <div className="flex flex-col items-center gap-3">
+                <button onClick={load} className={secondaryBtn}><RefreshCw size={13} /> Refresh</button>
+                <button onClick={() => navigate('/connections')} className="text-[13px] text-on-surface-variant underline hover:text-primary">View connected accounts</button>
+              </div>
+            </EmptyState>
+          )}
+
+          {!loading && !error && total === 0 && filtersActive && (
+            <EmptyState
+              icon={<InboxIcon size={22} className="text-on-surface-variant" />}
+              title="Nothing matches these filters"
+              body="Try a different platform, intent, or status."
             />
-          )}
-
-          {/* Empty states */}
-          {/* An account-list load failure is distinct from a genuine zero
-              accounts — conflating them told an already-connected user
-              whose GET /api/accounts happened to fail to "connect your
-              first account", which is both wrong and not actionable. This
-              takes priority over the three states below, all of which
-              assume the account list itself loaded successfully. */}
-          {!loading && !error && !accountsLoading && total === 0 && accountsError && !platformFilter && !intentFilter && statusFilter === 'active' && (
-            <Card padding={8} className="text-center">
-              <AlertCircle size={24} className="text-[#D97706] mx-auto mb-3" />
-              <Text type="body" weight="bold" display="block">Couldn&apos;t check your connected accounts</Text>
-              <Text type="supporting" color="secondary" display="block" className="mt-1.5 max-w-sm mx-auto">
-                Populr couldn&apos;t confirm which accounts are connected, so it can&apos;t tell whether there&apos;s anything to show here yet.
-              </Text>
-              <div className="mt-4 inline-flex">
-                <Button label="Try again" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={refreshAccounts} />
-              </div>
-            </Card>
-          )}
-
-          {!loading && !error && !accountsLoading && !accountsError && total === 0 && !hasConnectedAccounts && !platformFilter && !intentFilter && statusFilter === 'active' && (
-            <Card padding={8} className="text-center">
-              <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-              <Text type="body" weight="bold" display="block">Connect your first account</Text>
-              <Text type="supporting" color="secondary" display="block" className="mt-1.5 max-w-sm mx-auto">
-                Connect a social account so Populr can begin reviewing engagement for meaningful opportunities.
-              </Text>
-              <div className="mt-4 inline-flex">
-                <Button label="Connect an account" variant="primary" onClick={() => navigate('/connections')} />
-              </div>
-            </Card>
-          )}
-
-          {!loading && !error && !accountsLoading && !accountsError && total === 0 && hasConnectedAccounts && recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
-            <Card padding={8} className="text-center">
-              <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-              <Text type="body" weight="bold" display="block">Reviewing your engagement</Text>
-              <Text type="supporting" color="secondary" display="block" className="mt-1.5 max-w-sm mx-auto">
-                Populr is reviewing recent activity from your connected accounts. Opportunities will appear here when meaningful intent is found.
-              </Text>
-              <div className="mt-4 inline-flex">
-                <Button label="Refresh" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={load} />
-              </div>
-            </Card>
-          )}
-
-          {!loading && !error && !accountsLoading && !accountsError && total === 0 && hasConnectedAccounts && !recentlyConnected && !platformFilter && !intentFilter && statusFilter === 'active' && (
-            <Card padding={8} className="text-center">
-              <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-              <Text type="body" weight="bold" display="block">No opportunities yet</Text>
-              <Text type="supporting" color="secondary" display="block" className="mt-1.5 max-w-sm mx-auto">
-                Your accounts are connected. New high-intent engagement will appear here when Populr finds something worth your attention.
-              </Text>
-              <div className="mt-4 inline-flex">
-                <Button label="Refresh" variant="secondary" size="sm" icon={<RefreshCw size={13} />} onClick={load} />
-              </div>
-              <div className="mt-3">
-                <Link hasUnderline type="supporting" onClick={() => navigate('/connections')}>View connected accounts</Link>
-              </div>
-            </Card>
-          )}
-
-          {!loading && !error && total === 0 && (platformFilter || intentFilter || statusFilter !== 'active') && (
-            <Card padding={8} className="text-center">
-              <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-              <Text type="body" weight="bold" display="block">Nothing matches these filters</Text>
-              <Text type="supporting" color="secondary" display="block" className="mt-1.5">Try a different platform, intent, or status.</Text>
-            </Card>
           )}
 
           {/* Rows */}
@@ -530,15 +518,11 @@ export default function OpportunitiesPage() {
               </div>
               {opportunities.length < total && (
                 <div className="flex flex-col items-center gap-2 mt-5">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    label={loadingMore ? 'Loading...' : 'Load more'}
-                    isLoading={loadingMore}
-                    isDisabled={loadingMore}
-                    onClick={loadMore}
-                  />
-                  <Text type="supporting" color="disabled">Showing {opportunities.length} of {total}</Text>
+                  <button onClick={loadMore} disabled={loadingMore} className={secondaryBtn}>
+                    {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
+                    {loadingMore ? 'Loading…' : 'Load more'}
+                  </button>
+                  <span className="font-label text-label-sm text-on-surface-variant">Showing {opportunities.length} of {total}</span>
                 </div>
               )}
             </>
@@ -546,14 +530,17 @@ export default function OpportunitiesPage() {
         </>
       )}
 
-      {selected && (
-        <OpportunityDetailDrawer
-          opportunity={selected}
-          onClose={() => setSelected(null)}
-          onStatusChange={(status) => handleStatusChange(selected.id, status)}
-          onReplySent={(result) => handleReplySent(selected.id, result)}
-        />
-      )}
+      <AnimatePresence>
+        {selected && (
+          <OpportunityDetailDrawer
+            key={selected.id}
+            opportunity={selected}
+            onClose={() => setSelected(null)}
+            onStatusChange={(status) => handleStatusChange(selected.id, status)}
+            onReplySent={(result) => handleReplySent(selected.id, result)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
