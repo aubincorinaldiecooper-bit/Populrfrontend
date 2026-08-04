@@ -1,472 +1,247 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Button } from '@astryxdesign/core/Button';
-import { TextInput } from '@astryxdesign/core/TextInput';
-import { TabList, Tab } from '@astryxdesign/core/TabList';
-import { Card } from '@astryxdesign/core/Card';
-import { ClickableCard } from '@astryxdesign/core/ClickableCard';
-import { Banner } from '@astryxdesign/core/Banner';
-import { Heading } from '@astryxdesign/core/Heading';
-import { Text } from '@astryxdesign/core/Text';
-import { Spinner } from '@astryxdesign/core/Spinner';
-import { AlertDialog } from '@astryxdesign/core/AlertDialog';
-import { ProgressBar } from '@astryxdesign/core/ProgressBar';
-import { Divider } from '@astryxdesign/core/Divider';
-import { HStack } from '@astryxdesign/core/HStack';
-import { VStack } from '@astryxdesign/core/VStack';
 import { useApp } from '../context/AppContext';
 import {
-  isBackendConfigured, fetchAutomations, updateAutomation, deleteAutomation, fetchAutomationEvents,
-} from '../lib/api';
-import type { AutomationRecord, AutomationEvent, ConnectedAccount } from '../lib/api';
-import {
-  Search, Play, Pause, Zap, ArrowLeft, Plus, Trash2, Pencil,
+  Search, Play, Pause, Zap, ArrowLeft, Plus, Loader2, AlertCircle, MessageCircle,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
-import PlatformDot from '../components/PlatformDot';
 import EmptyState from '../components/EmptyState';
-import MiniStat from '../components/MiniStat';
+import {
+  isBackendConfigured, fetchAutomations, updateAutomation, fetchAutomationEvents,
+} from '../lib/api';
+import type { Automation, AutomationEvent } from '../lib/api';
+import { AUTOMATION_TYPES, automationToTypeCard } from '../components/automation-wizard/useAutomationWizard';
 
 type StatusTab = 'all' | 'active' | 'paused';
 
-const MATCH_MODE_LABEL: Record<string, string> = {
-  contains: 'contains',
-  exact: 'exactly matches',
-  starts_with: 'starts with',
-};
-
-const REPLY_CHANNEL_LABEL: Record<string, string> = {
-  comment: 'Public reply',
-  dm: 'DM',
-  both: 'Public reply + DM',
-};
-
-function relativeTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function AutomationDetail({
-  automation, account, busy, onBack, onEdit, onToggleActive, onDelete,
-}: {
-  automation: AutomationRecord;
-  account?: ConnectedAccount;
-  busy: boolean;
-  onBack: () => void;
-  onEdit: () => void;
-  onToggleActive: () => void;
-  onDelete: () => void;
-}) {
-  const [events, setEvents] = useState<AutomationEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
-  const [eventsError, setEventsError] = useState<string | null>(null);
-  const reviewFirst = automation.ai_enabled && automation.ai_mode === 'suggest';
-
-  useEffect(() => {
-    let cancelled = false;
-    // Data fetch from the backend, not derived state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEventsLoading(true);
-    setEventsError(null);
-    fetchAutomationEvents(automation.id, 25)
-      .then(list => { if (!cancelled) setEvents(list); })
-      .catch(err => { if (!cancelled) setEventsError(err instanceof Error ? err.message : 'Could not load activity.'); })
-      .finally(() => { if (!cancelled) setEventsLoading(false); });
-    return () => { cancelled = true; };
-  }, [automation.id]);
-
-  return (
-    <div className="pop-page max-w-[900px]">
-      <Button label="Back to automations" variant="ghost" size="sm" icon={<ArrowLeft size={16} />} onClick={onBack} />
-
-      <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mt-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <StatusPill status={automation.active ? 'active' : 'paused'} />
-            {reviewFirst && <StatusPill status="reply recommended" />}
-          </div>
-          <Heading level={1}>{automation.name}</Heading>
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <PlatformDot platform={automation.platform} size={8} />
-            <Text type="body" color="secondary">{automation.platform}</Text>
-            {account && (
-              <Text type="body" color="secondary">
-                · {account.username ? `@${account.username}` : account.display_name ?? account.id}
-              </Text>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Button label="Edit" variant="primary" size="sm" icon={<Pencil size={14} />} onClick={onEdit} />
-          <Button
-            label={automation.active ? 'Pause' : 'Resume'}
-            variant="secondary"
-            size="sm"
-            icon={automation.active ? <Pause size={14} /> : <Play size={14} />}
-            clickAction={onToggleActive}
-            isLoading={busy}
-          />
-          <Button label="Delete" variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={onDelete} isDisabled={busy} />
-        </div>
-      </div>
-
-      <Card padding={5} className="mb-5">
-        <Heading level={2} className="mb-4">Configuration</Heading>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <Text type="supporting" display="block">Trigger</Text>
-            <Text type="body" display="block" className="mt-0.5">
-              {automation.all_posts ? 'Any post' : `Post ${automation.source_post_id}`} · comment {MATCH_MODE_LABEL[automation.match_mode] ?? automation.match_mode}
-            </Text>
-            <Text type="supporting" display="block" className="mt-0.5">{automation.keywords.join(', ')}</Text>
-          </div>
-          <div>
-            <Text type="supporting" display="block">Reply channel</Text>
-            <Text type="body" display="block" className="mt-0.5">{REPLY_CHANNEL_LABEL[automation.reply_channel] ?? automation.reply_channel}</Text>
-          </div>
-          {automation.comment_reply_body && (
-            <div>
-              <Text type="supporting" display="block">Public reply text</Text>
-              <Text type="body" display="block" className="mt-0.5">{automation.comment_reply_body}</Text>
-            </div>
-          )}
-          {automation.message_body && (
-            <div>
-              <Text type="supporting" display="block">DM text</Text>
-              <Text type="body" display="block" className="mt-0.5">{automation.message_body}</Text>
-            </div>
-          )}
-          {automation.link_url && (
-            <div>
-              <Text type="supporting" display="block">Link</Text>
-              <Text type="body" display="block" className="mt-0.5 truncate">{automation.link_url}</Text>
-            </div>
-          )}
-          {automation.tags.length > 0 && (
-            <div>
-              <Text type="supporting" display="block">Tags</Text>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {automation.tags.map(t => <StatusPill key={t} status={t} className="text-[10px]" />)}
-              </div>
-            </div>
-          )}
-          {automation.score_delta !== 0 && (
-            <div>
-              <Text type="supporting" display="block">Lead score</Text>
-              <Text type="body" display="block" className="mt-0.5">+{automation.score_delta} per match</Text>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <Card padding={5}>
-        <Heading level={2} className="mb-4">Recent activity</Heading>
-        {eventsLoading && (
-          <HStack justify="center" align="center" gap={2} style={{ paddingBlock: 32 }}>
-            <Spinner size="md" />
-            <Text type="body" color="secondary">Loading activity...</Text>
-          </HStack>
-        )}
-        {!eventsLoading && eventsError && <Banner status="error" title={eventsError} />}
-        {!eventsLoading && !eventsError && events.length === 0 && (
-          <Text type="body" color="secondary" display="block">No activity yet. This fills in as people engage with your keywords.</Text>
-        )}
-        {!eventsLoading && !eventsError && events.length > 0 && (
-          <div className="space-y-2">
-            {events.map(e => (
-              <div key={e.id} className="flex items-start justify-between gap-3 py-2 border-b border-[#F0EEEA] last:border-0">
-                <VStack gap={0.5} style={{ minWidth: 0 }}>
-                  <Text type="supporting" color="primary">
-                    {e.contact_name || e.contact_handle ? (e.contact_name || `@${e.contact_handle}`) : 'Someone'} — {e.detail}
-                  </Text>
-                  {e.error && <Text type="supporting" style={{ color: 'var(--color-error)' }}>{e.error}</Text>}
-                </VStack>
-                <HStack gap={2} align="center" style={{ flexShrink: 0 }}>
-                  <StatusPill status={e.status === 'ok' ? 'sent' : e.status === 'failed' ? 'disconnected' : 'draft'} className="text-[10px]" />
-                  <Text type="supporting" color="disabled">{relativeTime(e.created_at)}</Text>
-                </HStack>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
+function automationTypeLabel(a: Pick<Automation, 'trigger_type' | 'reply_channel'>): string {
+  return AUTOMATION_TYPES[automationToTypeCard(a)].title;
 }
 
 export default function AutomationsPage() {
   const navigate = useNavigate();
-  const { showToast, accounts, accountsLoading } = useApp();
+  const { showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
-  const [automationList, setAutomationList] = useState<AutomationRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [events, setEvents] = useState<AutomationEvent[] | null>(null);
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<AutomationRecord | null>(null);
 
   const load = useCallback(() => {
-    if (!backendConfigured) { setLoading(false); return; }
+    if (!backendConfigured) return;
     setLoading(true);
     setError(null);
     fetchAutomations()
-      .then(setAutomationList)
-      .catch(err => setError(err instanceof Error ? err.message : 'Could not load automations right now.'))
+      .then(setAutomations)
+      .catch(err => setError(err instanceof Error ? err.message : 'Could not load automations.'))
       .finally(() => setLoading(false));
   }, [backendConfigured]);
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state.
+    // Data fetch from the backend, not derived state — see OpportunitiesPage.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
-  const connectedAccounts = useMemo(() => accounts.filter(a => a.status === 'connected'), [accounts]);
-  const accountById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts]);
+  useEffect(() => {
+    if (!detailId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEvents(null);
+      return;
+    }
+    fetchAutomationEvents(detailId).then(setEvents).catch(() => setEvents([]));
+  }, [detailId]);
 
-  const activeCount = automationList.filter(a => a.active).length;
-  const pausedCount = automationList.filter(a => !a.active).length;
+  const active = automations.filter(a => a.active);
+  const paused = automations.filter(a => !a.active);
 
   const filtered = useMemo(() => {
-    let result = automationList;
+    let result = [...automations];
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(a => a.name.toLowerCase().includes(q) || a.keywords.some(k => k.includes(q)));
+    }
     if (statusTab === 'active') result = result.filter(a => a.active);
     if (statusTab === 'paused') result = result.filter(a => !a.active);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      result = result.filter(a => a.name.toLowerCase().includes(q) || a.keywords.some(k => k.toLowerCase().includes(q)));
-    }
     return result;
-  }, [automationList, statusTab, search]);
+  }, [automations, search, statusTab]);
 
-  const handleToggleActive = async (a: AutomationRecord) => {
-    setBusyId(a.id);
+  const toggleStatus = async (a: Automation) => {
     try {
       const updated = await updateAutomation(a.id, { active: !a.active });
-      setAutomationList(prev => prev.map(x => x.id === a.id ? updated : x));
-      showToast(updated.active ? 'Automation resumed' : 'Automation paused', 'success');
+      setAutomations(prev => prev.map(x => x.id === a.id ? updated : x));
+      showToast(updated.active ? 'Automation activated' : 'Automation paused', 'success');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not update this automation.', 'error');
-    } finally {
-      setBusyId(null);
+      showToast(err instanceof Error ? err.message : 'Could not update automation.', 'error');
     }
   };
 
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    const a = deleteTarget;
-    setBusyId(a.id);
-    try {
-      await deleteAutomation(a.id);
-      setAutomationList(prev => prev.filter(x => x.id !== a.id));
-      showToast('Automation deleted', 'success');
-      setDetailId(null);
-      setDeleteTarget(null);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not delete this automation.', 'error');
-    } finally {
-      setBusyId(null);
-    }
-  };
+  const handleEdit = (a: Automation) => navigate('/automations/new', { state: { automation: a } });
 
-  const handleEdit = (a: AutomationRecord) => navigate('/automations/new', { state: { automation: a } });
-
-  const isDeletingTarget = deleteTarget !== null && busyId === deleteTarget.id;
-  const deleteDialog = (
-    <AlertDialog
-      isOpen={deleteTarget !== null}
-      onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-      title={`Delete "${deleteTarget?.name ?? ''}"?`}
-      description="This cannot be undone."
-      actionLabel={isDeletingTarget ? 'Deleting…' : 'Delete automation'}
-      actionVariant="destructive"
-      isActionLoading={isDeletingTarget}
-      onAction={confirmDelete}
-    />
-  );
-
-  const detail = detailId ? automationList.find(a => a.id === detailId) ?? null : null;
-  if (detail) {
+  if (!backendConfigured) {
     return (
-      <>
-        <AutomationDetail
-          automation={detail}
-          account={accountById[detail.account_id]}
-          busy={busyId === detail.id}
-          onBack={() => setDetailId(null)}
-          onEdit={() => handleEdit(detail)}
-          onToggleActive={() => handleToggleActive(detail)}
-          onDelete={() => setDeleteTarget(detail)}
-        />
-        {deleteDialog}
-      </>
+      <div className="pop-page">
+        <PageHeader title="Automations" subtitle="Turn creator engagement into autopilot conversations." />
+        <div className="pop-card p-6 flex items-start gap-3">
+          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">
+              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to manage real automations here.
+            </p>
+          </div>
+        </div>
+      </div>
     );
   }
 
+  // Detail view
+  const detail = detailId ? automations.find(a => a.id === detailId) : null;
+  if (detail) {
+    return (
+      <div className="pop-page max-w-[900px]">
+        <button onClick={() => setDetailId(null)} className="pop-btn-ghost mb-5">
+          <ArrowLeft size={16} />Back to automations
+        </button>
+
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <StatusPill status={detail.active ? 'active' : 'paused'} />
+            </div>
+            <h1 className="pop-section-heading">{detail.name}</h1>
+            <p className="pop-body mt-1">{automationTypeLabel(detail)} · {detail.keywords.join(', ') || 'no keywords'}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => handleEdit(detail)} className="pop-btn-primary">
+              <Zap size={14} />Edit
+            </button>
+            <button onClick={() => toggleStatus(detail)}
+              className={detail.active ? 'pop-btn-tertiary' : 'pop-btn-primary'}>
+              {detail.active ? <><Pause size={14} />Pause</> : <><Play size={14} />Activate</>}
+            </button>
+          </div>
+        </div>
+
+        <div className="pop-card p-5 mb-5">
+          <h2 className="pop-card-title mb-3 flex items-center gap-2"><MessageCircle size={15} />Activity</h2>
+          {events === null ? (
+            <div className="flex items-center gap-2 text-[#6B6B6B] text-[13px] py-4"><Loader2 size={16} className="animate-spin" />Loading activity...</div>
+          ) : events.length === 0 ? (
+            <p className="text-[13px] text-[#9B9B8F] py-2">No activity yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {events.map(e => (
+                <div key={e.id} className="flex items-start gap-3 py-2 border-b border-[#F0EEEA] last:border-0">
+                  <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${e.status === 'failed' ? 'bg-[#DC2626]' : e.status === 'skipped' ? 'bg-[#9B9B8F]' : 'bg-[#10B981]'}`} />
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-[#111111]">{e.detail}</p>
+                    <p className="text-[10px] text-[#9B9B8F] mt-0.5">{new Date(e.created_at).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // List view
   return (
     <div className="pop-page">
       <PageHeader
         title="Automations"
-        subtitle="Reply to comments and DMs automatically, and capture contacts as people engage."
+        subtitle={loading ? 'Loading...' : `${active.length} active · ${automations.length} total`}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-            <div className="w-full sm:w-56">
-              <TextInput
-                label="Search automations"
-                isLabelHidden
-                value={search}
-                onChange={setSearch}
-                placeholder="Search automations..."
-                startIcon={<Search size={16} />}
-              />
+            <div className="relative w-full sm:w-auto">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search automations..."
+                className="pop-search w-full sm:w-56" />
             </div>
-            <Button label="Create automation" variant="primary" icon={<Plus size={14} strokeWidth={2.5} />} width="100%" onClick={() => navigate('/automations/new')} />
+            <button onClick={() => navigate('/automations/new')} className="pop-btn-primary w-full sm:w-auto justify-center">
+              <Plus size={14} strokeWidth={2.5} />Create automation
+            </button>
           </div>
         }
       />
 
-      {!backendConfigured && (
-        <div className="mb-6">
-          <Banner
-            status="warning"
-            title="Populr isn't connected to a backend yet"
-            description="Set VITE_API_URL to your Populr backend to see real automations here. This page never shows placeholder data in its place."
-          />
+      {error && (
+        <div className="pop-card p-4 mb-5 flex items-center gap-3">
+          <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
+          <p className="text-[13px] text-[#111111] flex-1">{error}</p>
+          <button onClick={load} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Retry</button>
         </div>
       )}
 
-      {backendConfigured && !loading && !error && automationList.length > 0 && (
-        // Summary panel: mirrors the Home/Connections "N of M" pattern —
-        // computed entirely from the real automation list, no invented numbers.
-        <Card padding={5} style={{ marginBottom: 20 }}>
-          <HStack wrap="wrap" gap={5} align="center">
-            <VStack gap={3} style={{ flex: 1, minWidth: 220 }}>
-              <Text type="large" weight="bold">
-                <span className="font-geist-mono">{activeCount}</span> of <span className="font-geist-mono">{automationList.length}</span> automations active
-              </Text>
-              <ProgressBar value={activeCount} max={automationList.length} label="Active automations" isLabelHidden variant="accent" />
-            </VStack>
-            <Divider orientation="vertical" className="hidden sm:block" style={{ alignSelf: 'stretch' }} />
-            <HStack wrap="wrap" gap={6}>
-              <MiniStat value={activeCount} label="Active" />
-              <MiniStat value={pausedCount} label="Paused" />
-            </HStack>
-          </HStack>
-        </Card>
+      {!error && (
+        <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
+          {[
+            { key: 'all' as StatusTab, label: 'All', count: automations.length },
+            { key: 'active' as StatusTab, label: 'Active', count: active.length },
+            { key: 'paused' as StatusTab, label: 'Paused', count: paused.length },
+          ].map(t => (
+            <button key={t.key} onClick={() => setStatusTab(t.key)}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${statusTab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
+              {t.label} <span className="text-[10px] opacity-60">({t.count})</span>
+            </button>
+          ))}
+        </div>
       )}
 
-      {backendConfigured && (
-        <>
-          <TabList value={statusTab} onChange={v => setStatusTab(v as StatusTab)} hasDivider>
-            <Tab value="all" label="All" endContent={<span className="text-[10px] opacity-60">{automationList.length}</span>} />
-            <Tab value="active" label="Active" endContent={<span className="text-[10px] opacity-60">{activeCount}</span>} />
-            <Tab value="paused" label="Paused" endContent={<span className="text-[10px] opacity-60">{pausedCount}</span>} />
-          </TabList>
-
-          {loading && (
-            <HStack justify="center" align="center" gap={2} style={{ paddingBlock: 64 }}>
-              <Spinner size="lg" />
-              <Text type="body" color="secondary">Loading automations...</Text>
-            </HStack>
-          )}
-
-          {!loading && error && (
-            <div className="mt-5">
-              <Banner status="error" title="Couldn't load automations" description={error}
-                endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />} />
-            </div>
-          )}
-
-          {!loading && !error && automationList.length === 0 && !accountsLoading && connectedAccounts.length === 0 && (
-            <div className="mt-5">
-              <EmptyState icon="automations" title="Connect an account first"
-                description="Automations reply to comments and DMs on your connected accounts. Connect one to get started."
-                action={<Button label="Connect an account" variant="primary" onClick={() => navigate('/connections')} />} />
-            </div>
-          )}
-
-          {!loading && !error && automationList.length === 0 && (accountsLoading || connectedAccounts.length > 0) && (
-            <div className="mt-5">
-              <EmptyState icon="automations" title="No automations yet"
-                description="Create an automation to reply to comments and DMs automatically, and start capturing contacts."
-                action={<Button label="Create automation" variant="primary" onClick={() => navigate('/automations/new')} />} />
-            </div>
-          )}
-
-          {!loading && !error && automationList.length > 0 && filtered.length === 0 && (
-            <div className="mt-5">
-              <EmptyState icon="search" title="Nothing matches" description="Try a different search or status filter." />
-            </div>
-          )}
-
-          {!loading && !error && filtered.length > 0 && (
-            <div className="space-y-3 mt-5">
-              {filtered.map(a => {
-                const account = accountById[a.account_id];
-                const reviewFirst = a.ai_enabled && a.ai_mode === 'suggest';
-                const busy = busyId === a.id;
-                return (
-                  <ClickableCard key={a.id} label={`${a.name} automation`} padding={4} className="pop-card-hover" onClick={() => setDetailId(a.id)}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${a.active ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
-                          {a.active ? <Zap size={18} className="text-[#111111]" /> : <Pause size={18} className="text-[#6B6B6B]" />}
-                        </div>
-                        <VStack gap={0.5} style={{ minWidth: 0 }}>
-                          <HStack gap={2} align="center" wrap="wrap">
-                            <Text type="label" weight="semibold" className="truncate">{a.name}</Text>
-                            <StatusPill status={a.active ? 'active' : 'paused'} className="text-[10px]" />
-                            {reviewFirst && <StatusPill status="reply recommended" className="text-[10px]" />}
-                          </HStack>
-                          <HStack gap={1.5} align="center">
-                            <PlatformDot platform={a.platform} size={7} />
-                            <Text type="supporting" color="disabled" className="capitalize">{a.platform}</Text>
-                            {account && (
-                              <Text type="supporting" color="disabled">
-                                · {account.username ? `@${account.username}` : account.display_name ?? account.id}
-                              </Text>
-                            )}
-                          </HStack>
-                          <Text type="supporting" color="secondary" style={{ marginTop: 4 }}>
-                            When a comment {MATCH_MODE_LABEL[a.match_mode] ?? a.match_mode} &ldquo;{a.keywords.slice(0, 3).join(', ')}{a.keywords.length > 3 ? '…' : ''}&rdquo; → {REPLY_CHANNEL_LABEL[a.reply_channel] ?? a.reply_channel}
-                          </Text>
-                        </VStack>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <Button label="Edit" variant="ghost" size="sm" icon={<Pencil size={14} />} isIconOnly isDisabled={busy} onClick={() => handleEdit(a)} />
-                        <Button
-                          label={a.active ? 'Pause' : 'Resume'}
-                          variant="ghost"
-                          size="sm"
-                          icon={a.active ? <Pause size={14} /> : <Play size={14} />}
-                          isIconOnly
-                          isLoading={busy}
-                          onClick={() => handleToggleActive(a)}
-                        />
-                        <Button label="Delete" variant="ghost" size="sm" icon={<Trash2 size={14} className="text-[#DC2626]" />} isIconOnly isDisabled={busy} onClick={() => setDeleteTarget(a)} />
-                      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
+          <Loader2 size={20} className="animate-spin mr-2" /> Loading automations...
+        </div>
+      ) : !error && filtered.length === 0 ? (
+        <EmptyState icon="automations" title="No automations found" description="Create automations to respond to engagement automatically." action={<button onClick={() => navigate('/automations/new')} className="pop-btn-primary">Create automation</button>} />
+      ) : !error && (
+        <div className="space-y-3">
+          {filtered.map(a => (
+            <div key={a.id} className="pop-card p-4 pop-card-hover cursor-pointer" onClick={() => setDetailId(a.id)}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${a.active ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
+                    {a.active ? <Zap size={18} className="text-[#111111]" /> : <Pause size={18} className="text-[#6B6B6B]" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-geist font-semibold text-[13px] text-[#111111] truncate">{a.name}</h3>
+                      <StatusPill status={a.active ? 'active' : 'paused'} className="text-[10px]" />
                     </div>
-                  </ClickableCard>
-                );
-              })}
+                    <p className="text-[11px] text-[#6B6B6B] mt-0.5">{automationTypeLabel(a)}</p>
+                    {a.keywords.length > 0 && (
+                      <div className="flex gap-1 flex-wrap mt-1.5">
+                        {a.keywords.map(k => (
+                          <span key={k} className="bg-[#FAFAF8] text-[#6B6B6B] text-[10px] px-2 py-0.5 rounded-full">{k}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={e => { e.stopPropagation(); handleEdit(a); }} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all" title="Edit">
+                    <Zap size={14} className="text-[#6B6B6B]" />
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); toggleStatus(a); }} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all">
+                    {a.active ? <Pause size={14} className="text-[#6B6B6B]" /> : <Play size={14} className="text-[#10B981]" />}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-[#F0EEEA] flex items-center justify-between">
+                <p className="text-[11px] text-[#9B9B8F] capitalize">{a.platform}</p>
+                <span className="text-[10px] text-[#9B9B8F]">Updated {new Date(a.updated_at).toLocaleDateString()}</span>
+              </div>
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
-
-      {deleteDialog}
     </div>
   );
 }

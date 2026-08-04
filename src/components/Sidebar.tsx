@@ -17,7 +17,7 @@ const navItems = [
   { path: '/automations', label: 'Automations', icon: Zap },
   { path: '/opportunities', label: 'Opportunities', icon: Compass },
   { path: '/contacts', label: 'Contacts', icon: Users },
-  { path: '/connections', label: 'Channels', icon: Waypoints },
+  { path: '/channels', label: 'Channels', icon: Waypoints },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 

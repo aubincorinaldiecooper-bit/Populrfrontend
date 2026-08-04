@@ -487,6 +487,9 @@ export interface AutomationRecord {
   ai_enabled: boolean;
   ai_mode: AutomationAiMode;
   ai_confidence_threshold: string | number;
+  // Creator-authored per-automation guidance. Added by populrbackend PR #24 —
+  // absent on older responses, hence nullable on both storage sides.
+  ai_instructions: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -515,6 +518,15 @@ export interface AutomationInput {
    *  than inventing a separate review gate the engine doesn't have. */
   aiEnabled?: boolean;
   aiMode?: AutomationAiMode;
+  /** How the automation is triggered — mirrors automations.trigger_type in
+   *  populrbackend/src/db/schema.sql. The wizard sends this explicitly per
+   *  the "type of automation" the creator picked. */
+  triggerType?: TriggerType;
+  /** Creator-authored per-automation guidance (populrbackend PR #24). Send
+   *  null to explicitly clear a previously-saved value; omit to leave it
+   *  unchanged (the backend distinguishes the two via a "was provided"
+   *  boolean, see src/routes/automations.ts:120). */
+  aiInstructions?: string | null;
 }
 
 /** GET /api/automations — the caller's own automations. Filters: accountId, platform, active. */
@@ -810,4 +822,149 @@ export async function syncPostsLibrary(accountId?: string): Promise<{ accounts: 
 /** POST /api/posts/find-missing — "Can't find a post? Paste the URL." */
 export async function findMissingPost(accountId: string, url: string): Promise<{ post: PostLibraryItem; source: 'zernio' | 'url_only' }> {
   return apiFetch('/api/posts/find-missing', { method: 'POST', body: { accountId, url } });
+}
+
+// ============================================================
+// Compatibility shims for the restored redesigned frontend.
+//
+// The rebuild in 856751c was authored against an earlier api.ts naming
+// (Automation / Post / Contact / TriggerType / ReplyChannel / LeadStage)
+// and a `POST /api/automations/test` endpoint that was superseded by
+// `/test-reply` in populrbackend #23. Rather than rename every field on
+// every page, we alias the old names to main's current shapes and adapt
+// the wizard's test-chat call. Where the underlying object simply is the
+// same thing (Automation ↔ AutomationRecord, Post ↔ PostLibraryItem), the
+// alias is safe and the wizard/pages read main's real fields verbatim.
+// ============================================================
+
+export type Automation = AutomationRecord;
+export type Post = PostLibraryItem;
+export type Contact = ContactRecord;
+export type ReplyChannel = AutomationReplyChannel;
+
+// Trigger-type surface the wizard offers. Matches the values documented on
+// automations.trigger_type in populrbackend/src/db/schema.sql:221.
+export type TriggerType = 'comment' | 'dm' | 'keyword' | 'post_comment' | 'any_post_comment';
+
+// Lead stages the CRM assigns (mirrors populrbackend/src/config/leadscoring.ts)
+// plus 'needs_reply', which is a UI-only bucket the Contacts page uses to
+// group inbox items that don't have a stage of their own yet.
+export type LeadStage = 'cold' | 'engaged' | 'warm' | 'interested' | 'hot' | 'converted' | 'needs_reply';
+
+/** Shape the wizard's test chat renders. Populated from `/test-reply` plus
+ *  client-side keyword matching, so the wizard can preview both "would
+ *  this fire?" and "what would AI draft?" without a dedicated dry-run
+ *  endpoint (dropped in populrbackend #24 in favour of /test-reply). */
+export interface AutomationTestResult {
+  matched: boolean;
+  keyword?: string | null;
+  needsHuman?: boolean;
+  intent?: string;
+  confidence?: number;
+  reason?: string;
+  publicReply?: string | null;
+  dm?: string | null;
+}
+
+export interface AutomationTestInput {
+  platform: string;
+  accountId?: string;
+  triggerType: TriggerType;
+  keywords: string[];
+  replyChannel: AutomationReplyChannel;
+  channel: 'comment' | 'dm';
+  postId?: string;
+  sampleText: string;
+  aiEnabled: boolean;
+  aiInstructions?: string;
+}
+
+/** Very small keyword matcher — mirrors populrbackend/src/services/
+ *  automationMatch.ts's `keywordMatches` for the wizard's client-side
+ *  preview only. The real engine runs the same logic server-side; this
+ *  is not the source of truth for production replies. */
+function localKeywordMatch(text: string, keywords: string[], mode: 'contains' | 'exact' | 'starts_with' = 'contains'): string | null {
+  const haystack = text.toLowerCase();
+  for (const raw of keywords) {
+    const k = raw.toLowerCase().trim();
+    if (!k) continue;
+    if (mode === 'exact' && haystack === k) return raw;
+    if (mode === 'contains' && haystack.includes(k)) return raw;
+    if (mode === 'starts_with' && haystack.startsWith(k)) return raw;
+  }
+  return null;
+}
+
+/** Test-chat wrapper. Does keyword matching locally, then (when AI is on)
+ *  fetches an AI draft from `/api/automations/test-reply`. Non-mutating —
+ *  same guarantees as the underlying endpoint. */
+export async function testAutomation(input: AutomationTestInput): Promise<AutomationTestResult> {
+  const keyword = localKeywordMatch(input.sampleText, input.keywords);
+  if (input.triggerType === 'keyword' && !keyword) {
+    return { matched: false, reason: 'No trigger keyword found in the sample text.' };
+  }
+  if (!input.aiEnabled) {
+    return {
+      matched: true, keyword, needsHuman: true,
+      reason: 'AI is off for this automation — enable it to preview a generated reply.',
+    };
+  }
+  const resp = await apiFetch<
+    | { available: false; reason: string }
+    | {
+        available: true;
+        decision: {
+          intent: string; confidence: number; replyType: 'dm' | 'comment';
+          replyText: string | null; linkToSend: { key: string; url: string } | null;
+          needsHuman: boolean; shouldAutoReply: boolean; reason: string;
+        };
+      }
+  >('/api/automations/test-reply', {
+    method: 'POST',
+    body: {
+      platform: input.platform,
+      channel: input.channel,
+      messageText: input.sampleText,
+    },
+  });
+  if (!resp.available) {
+    return {
+      matched: true, keyword, needsHuman: true,
+      reason: resp.reason === 'not_configured'
+        ? "Smart Replies isn't configured on this server yet."
+        : resp.reason === 'ai_disabled'
+        ? 'AI is turned off in Brand Settings.'
+        : 'The AI preview is temporarily unavailable.',
+    };
+  }
+  const d = resp.decision;
+  const wantsComment = input.replyChannel === 'comment' || input.replyChannel === 'both';
+  const wantsDM = input.replyChannel === 'dm' || input.replyChannel === 'both';
+  return {
+    matched: true,
+    keyword,
+    intent: d.intent,
+    confidence: d.confidence,
+    needsHuman: d.needsHuman,
+    reason: d.reason,
+    // Public reply is the automation's static text in production (see the
+    // engineService leak fix); AI text is only ever previewed for the DM.
+    publicReply: wantsComment ? '(uses the automation\'s configured comment reply)' : null,
+    dm: wantsDM && d.replyType === 'dm' ? d.replyText : null,
+  };
+}
+
+/* Note: main's `fetchPosts(tab, limit)` returns draft posts for the Content
+ * page and is unrelated to the wizard's "which of my synced Zernio posts
+ * should this automation watch?" query. The wizard uses `fetchPostsLibrary`
+ * directly (adapted at its call site) rather than a shadowing overload here. */
+
+/** ContactsPage's tag toggle. Main's `updateContact` accepts a full patch;
+ *  this is the narrow, existing call it was written against. */
+export async function updateContactTag(id: string, tag: string, remove = false): Promise<string[]> {
+  const patch: { addTag?: string; removeTag?: string } = remove ? { removeTag: tag } : { addTag: tag };
+  const updated = await apiFetch<{ contact: { tags: string[] } }>(`/api/contacts/${id}/tags`, {
+    method: 'POST', body: patch,
+  });
+  return updated.contact.tags;
 }

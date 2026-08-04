@@ -4,11 +4,13 @@ import userEvent from '@testing-library/user-event';
 import ContactsPage from '../pages/ContactsPage';
 import type { ContactRecord } from '../lib/api';
 
-/* Regression coverage for PR review: fetchContacts was called with a fixed
- * limit:50 and no pagination, so any workspace with more than 50 contacts
- * permanently lost access to the rest even though `total` was displayed.
- * ContactsPage now mirrors OpportunitiesPage's Load more pattern — this
- * proves a second page is actually fetchable and renders. */
+/* Regression coverage for the earlier PR review: fetchContacts was called
+ * with a fixed limit:50 and no pagination, so any workspace with more than
+ * 50 contacts permanently lost access to the rest even though `total` was
+ * displayed. ContactsPage (the restored redesigned version, 856751c) uses a
+ * Prev/Next pager with a smaller page size — a different UX from main's
+ * Load-more, but the underlying invariant is the same: page 2 is actually
+ * fetchable, and clicking through advances the offset. */
 
 function makeContact(i: number): ContactRecord {
   return {
@@ -39,12 +41,13 @@ function makeContact(i: number): ContactRecord {
   };
 }
 
-// 60 total — one more page than the page size, so "Load more" must appear.
+// 60 total — three pages at the redesigned page size (20). Enough to prove
+// pagination advances past the first page.
 const allContacts: ContactRecord[] = Array.from({ length: 60 }, (_, i) => makeContact(i));
 
 const mockFetchContacts = vi.fn(async (filter: { limit?: number; offset?: number } = {}) => {
   const offset = filter.offset ?? 0;
-  const limit = filter.limit ?? 50;
+  const limit = filter.limit ?? 20;
   return { contacts: allContacts.slice(offset, offset + limit), total: allContacts.length, stages: [] };
 });
 
@@ -64,26 +67,31 @@ vi.mock('../lib/api', async () => {
 });
 
 describe('ContactsPage — pagination beyond the first page', () => {
-  it('fetches and renders the remaining contacts via Load more', async () => {
+  it('advances via Next to fetch and render the remaining contacts', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
 
     render(<ContactsPage />);
 
-    await waitFor(() => expect(screen.getByText('Showing 50 of 60')).toBeInTheDocument());
-    expect(screen.getByText('@user0')).toBeInTheDocument();
+    // First page: contacts 0-19 of 60 shown, later contacts absent.
+    await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
+    expect(screen.getByText('Showing 1-20 of 60')).toBeInTheDocument();
     expect(screen.queryByText('@user59')).not.toBeInTheDocument();
 
-    await user.click(screen.getByText('Load more'));
+    // Clicking Next issues a second fetch with a non-zero offset — this is
+    // the invariant the original bug violated.
+    await user.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByText('@user20')).toBeInTheDocument());
+    expect(mockFetchContacts).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 20, limit: 20 })
+    );
 
-    // Once everything is loaded (50 + 10 = total 60), the Load more footer
-    // is expected to disappear entirely — there's nothing left to page in.
+    // And once more, to prove Next keeps working past page 2 (the bug
+    // manifested as "there is no next page", not "next page is empty").
+    await user.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('@user59')).toBeInTheDocument());
-    expect(screen.queryByText('Load more')).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Showing \d+ of \d+$/)).not.toBeInTheDocument();
-
-    expect(mockFetchContacts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 50, limit: 50 })
+    expect(mockFetchContacts).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 40, limit: 20 })
     );
   });
 });

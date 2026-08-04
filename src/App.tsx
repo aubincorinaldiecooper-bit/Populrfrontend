@@ -14,7 +14,7 @@ import SubscriptionModal from './components/SubscriptionModal';
 
 // MVP pages
 import OpportunitiesPage from './pages/OpportunitiesPage';
-import ConnectionsPage from './pages/ConnectionsPage';
+import ChannelsPage from './pages/ChannelsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import InboxPage from './pages/InboxPage';
@@ -22,7 +22,7 @@ import SettingsPage from './pages/SettingsPage';
 
 // Hidden pages (contextual, not in main nav)
 import SegmentsPage from './pages/SegmentsPage';
-import AutomationBuilderPage from './pages/AutomationBuilderPage';
+import AutomationWizard from './components/automation-wizard/AutomationWizard';
 
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const ContentPage = lazy(() => import('./pages/ContentPage'));
@@ -104,15 +104,16 @@ function AppContent() {
       <Route element={<Layout />}>
         <Route path="/" element={<Suspense fallback={<LoadingState />}><HomePage /></Suspense>} />
         <Route path="/opportunities" element={<OpportunitiesPage />} />
-        <Route path="/connect" element={<Navigate to={`/connections${location.search}`} replace />} />
-        <Route path="/connections" element={<ConnectionsPage />} />
+        <Route path="/connect" element={<Navigate to={`/channels${location.search}`} replace />} />
+        <Route path="/channels" element={<ChannelsPage />} />
+        <Route path="/connections" element={<Navigate to={`/channels${location.search}`} replace />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
         <Route path="/campaigns/new" element={<CampaignBuilderPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/segments" element={<SegmentsPage />} />
         <Route path="/automations" element={<Suspense fallback={<LoadingState />}><AutomationsPage /></Suspense>} />
-        <Route path="/automations/new" element={<AutomationBuilderPage />} />
+        <Route path="/automations/new" element={<AutomationWizard />} />
         <Route path="/contacts" element={<Suspense fallback={<LoadingState />}><ContactsPage /></Suspense>} />
         <Route path="/create" element={<Suspense fallback={<LoadingState />}><CreatePostPage /></Suspense>} />
         <Route path="/content" element={<Suspense fallback={<LoadingState />}><ContentPage /></Suspense>} />

@@ -1,192 +1,141 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { Zap, ArrowRight, Users, Sparkles, Trophy } from 'lucide-react';
-import { Card } from '@astryxdesign/core/Card';
-import { ClickableCard } from '@astryxdesign/core/ClickableCard';
-import { Button } from '@astryxdesign/core/Button';
-import { Banner } from '@astryxdesign/core/Banner';
-import { Heading } from '@astryxdesign/core/Heading';
-import { Text } from '@astryxdesign/core/Text';
-import { Spinner } from '@astryxdesign/core/Spinner';
-import { Badge } from '@astryxdesign/core/Badge';
-import { ProgressBar } from '@astryxdesign/core/ProgressBar';
-import { Divider } from '@astryxdesign/core/Divider';
-import { HStack } from '@astryxdesign/core/HStack';
-import { VStack } from '@astryxdesign/core/VStack';
-import { useAuth } from '../context/AuthContext';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
+import { Zap, Sparkles, Users, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
-import MiniStat from '../components/MiniStat';
-import { isBackendConfigured, fetchAutomationsSummary, fetchContacts, fetchOpportunities } from '../lib/api';
-import type { AutomationsSummary } from '../lib/api';
+import { isBackendConfigured, fetchAutomations, fetchOpportunities, fetchContacts } from '../lib/api';
 
-interface HomeMetrics {
-  summary: AutomationsSummary;
+interface HomeStats {
+  activeAutomations: number;
+  opportunitiesNeedingAttention: number;
   contactsTotal: number;
-  opportunitiesNeedingReview: number;
-}
-
-function ExploreCard({ icon, value, label, tone, onClick }: {
-  icon: React.ReactNode; value: number; label: string; tone?: 'warning'; onClick: () => void;
-}) {
-  return (
-    <ClickableCard label={label} onClick={onClick} padding={4}>
-      <HStack gap={3} align="center">
-        <span
-          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: tone === 'warning' ? '#FFF3E0' : '#FAFAF8' }}
-        >
-          {icon}
-        </span>
-        <VStack gap={0}>
-          <Text size="xl" weight="bold" className="font-geist-mono" style={tone === 'warning' ? { color: 'var(--color-warning)' } : undefined}>{value}</Text>
-          <Text type="supporting" color="secondary">{label}</Text>
-        </VStack>
-      </HStack>
-    </ClickableCard>
-  );
 }
 
 export default function HomePage() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const backendConfigured = isBackendConfigured();
-  const firstName = user?.name?.split(' ')[0];
-
-  const [metrics, setMetrics] = useState<HomeMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<HomeStats | null>(null);
+  const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    if (!backendConfigured) { setLoading(false); return; }
+  useEffect(() => {
+    if (!backendConfigured) return;
+    let cancelled = false;
+    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     Promise.all([
-      fetchAutomationsSummary(),
-      fetchContacts({ limit: 1 }),
+      fetchAutomations({ active: true }),
       fetchOpportunities({ status: 'new', limit: 1 }),
+      fetchContacts({ limit: 1 }),
     ])
-      .then(([summary, contacts, opportunities]) => {
-        setMetrics({ summary, contactsTotal: contacts.total, opportunitiesNeedingReview: opportunities.total });
+      .then(([automations, opportunities, contacts]) => {
+        if (cancelled) return;
+        setStats({
+          activeAutomations: automations.length,
+          opportunitiesNeedingAttention: opportunities.summary.new,
+          contactsTotal: contacts.total,
+        });
       })
       .catch(err => {
-        console.error('[home] failed to load automation metrics:', err);
-        setError(err instanceof Error && err.message ? err.message : 'Could not load your metrics right now.');
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Could not load your dashboard.');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [backendConfigured]);
 
-  useEffect(() => {
-    // Data fetch from the backend, not derived state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
-
   return (
-    <div className="pop-page">
-      <PageHeader
-        title={firstName ? `Welcome back, ${firstName}` : 'Welcome back'}
-        subtitle="Here's what Populr has been handling for you."
-      />
+    <div className="pop-page max-w-[900px]">
+      <PageHeader title="Home" subtitle="Your automations, at a glance." />
 
-      <ClickableCard label="Create an automation" onClick={() => navigate('/automations/new')} padding={6} className="mb-10 border-chartreuse hover:bg-[#FAFAF8] transition-all">
-        <div className="flex items-center gap-4">
-          <span className="w-12 h-12 rounded-2xl bg-chartreuse flex items-center justify-center flex-shrink-0">
-            <Zap size={22} className="text-[#111111]" />
-          </span>
-          <div className="min-w-0">
-            <Text type="body" weight="bold" display="block">Create an automation</Text>
-            <Text type="supporting" color="secondary" display="block" className="mt-0.5">
-              Reply to comments and DMs automatically when someone uses a keyword, and start capturing contacts.
-            </Text>
+      {!backendConfigured && (
+        <div className="pop-card p-6 mb-6 flex items-start gap-3">
+          <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">
+              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see your live stats here.
+            </p>
           </div>
-          <ArrowRight size={18} className="ml-auto flex-shrink-0 text-[#9B9B8F]" />
         </div>
-      </ClickableCard>
-
-      <Heading level={2} className="mb-4">Your automations at a glance</Heading>
-
-      {!backendConfigured ? (
-        <Banner status="warning" title="Populr isn't connected to a backend yet" description="Set VITE_API_URL to see your real metrics here." />
-      ) : loading ? (
-        <HStack justify="center" style={{ paddingBlock: 56 }}>
-          <Spinner size="lg" />
-        </HStack>
-      ) : error ? (
-        <Banner status="error" title={error} endContent={<Button label="Try again" variant="secondary" size="sm" onClick={load} />} />
-      ) : !metrics || metrics.summary.totalCount === 0 ? (
-        <Card padding={8} className="text-center">
-          <Zap size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-          <Text type="body" weight="bold" display="block">No automations yet</Text>
-          <Text type="supporting" color="secondary" display="block" className="mt-1.5 max-w-sm mx-auto">
-            Create your first automation to start replying to comments and DMs automatically.
-          </Text>
-          <div className="mt-4 inline-flex">
-            <Button label="Create automation" variant="primary" onClick={() => navigate('/automations/new')} />
-          </div>
-        </Card>
-      ) : (
-        <>
-          {/* Summary panel: mirrors the Connections page's "N of M" pattern —
-              everything here is computed from the real automations summary,
-              no invented numbers. */}
-          <Card padding={5} style={{ marginBottom: 20 }}>
-            <HStack wrap="wrap" gap={5} align="center">
-              <VStack gap={3} style={{ flex: 1, minWidth: 220 }}>
-                <Text type="large" weight="bold">
-                  <span className="font-geist-mono">{metrics.summary.activeCount}</span> of <span className="font-geist-mono">{metrics.summary.totalCount}</span> automations active
-                </Text>
-                <ProgressBar value={metrics.summary.activeCount} max={metrics.summary.totalCount} label="Active automations" isLabelHidden variant="accent" />
-                <Text type="supporting" color="secondary">Populr watches for these triggers across your connected accounts.</Text>
-              </VStack>
-              <Divider orientation="vertical" className="hidden sm:block" style={{ alignSelf: 'stretch' }} />
-              <HStack wrap="wrap" gap={6}>
-                <MiniStat value={metrics.summary.interactionsHandled} label="Interactions" />
-                <MiniStat value={metrics.summary.repliesSent} label="Replies sent" />
-                <MiniStat
-                  value={metrics.summary.failedAutomationsCount}
-                  label="Failing"
-                  tone={metrics.summary.failedAutomationsCount > 0 ? 'error' : undefined}
-                />
-              </HStack>
-            </HStack>
-          </Card>
-
-          <HStack wrap="wrap" gap={3} style={{ marginBottom: 20 }}>
-            <div style={{ flex: '1 1 200px' }}>
-              <ExploreCard
-                icon={<Users size={18} className="text-[#111111]" />}
-                value={metrics.contactsTotal}
-                label="Contacts captured"
-                onClick={() => navigate('/contacts')}
-              />
-            </div>
-            <div style={{ flex: '1 1 200px' }}>
-              <ExploreCard
-                icon={<Sparkles size={18} className={metrics.opportunitiesNeedingReview > 0 ? '' : 'text-[#111111]'} style={metrics.opportunitiesNeedingReview > 0 ? { color: 'var(--color-warning)' } : undefined} />}
-                value={metrics.opportunitiesNeedingReview}
-                label="Opportunities needing review"
-                tone={metrics.opportunitiesNeedingReview > 0 ? 'warning' : undefined}
-                onClick={() => navigate('/opportunities')}
-              />
-            </div>
-          </HStack>
-
-          <Card padding={5}>
-            <HStack gap={2} align="center" style={{ marginBottom: 12 }}>
-              <Trophy size={15} className="text-[#9B9B8F]" />
-              <Text type="supporting" color="secondary">Best-performing automation</Text>
-            </HStack>
-            {metrics.summary.bestPerforming ? (
-              <button onClick={() => navigate('/automations')} className="flex items-center justify-between w-full text-left group">
-                <Text type="body" weight="semibold" className="group-hover:underline">{metrics.summary.bestPerforming.name}</Text>
-                <Badge variant="success" label={`${metrics.summary.bestPerforming.repliesSent} replies sent`} />
-              </button>
-            ) : (
-              <Text type="body" color="secondary" display="block">Not enough data yet — this fills in once your automations start replying.</Text>
-            )}
-          </Card>
-        </>
       )}
+
+      {backendConfigured && loading && (
+        <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
+          <Loader2 size={20} className="animate-spin mr-2" /> Loading your dashboard...
+        </div>
+      )}
+
+      {backendConfigured && !loading && error && (
+        <div className="pop-card p-6 mb-6 flex items-start gap-3">
+          <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load your dashboard</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {backendConfigured && !loading && !error && stats && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <div className="pop-card p-5">
+            <div className="w-9 h-9 rounded-xl bg-chartreuse/20 flex items-center justify-center mb-3">
+              <Zap size={16} className="text-[#111111]" />
+            </div>
+            <p className="font-geist-mono font-bold text-2xl text-[#111111]">{stats.activeAutomations}</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">Active automations</p>
+          </div>
+          <div className="pop-card p-5">
+            <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] flex items-center justify-center mb-3">
+              <Sparkles size={16} className="text-[#3B82F6]" />
+            </div>
+            <p className="font-geist-mono font-bold text-2xl text-[#111111]">{stats.opportunitiesNeedingAttention}</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">Opportunities need attention</p>
+          </div>
+          <div className="pop-card p-5">
+            <div className="w-9 h-9 rounded-xl bg-[#FAFAF8] flex items-center justify-center mb-3">
+              <Users size={16} className="text-[#6B6B6B]" />
+            </div>
+            <p className="font-geist-mono font-bold text-2xl text-[#111111]">{stats.contactsTotal}</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1">Contacts</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <Link to="/automations/new" className="pop-card p-4 pop-card-hover flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-chartreuse flex items-center justify-center flex-shrink-0">
+            <Zap size={16} className="text-[#111111]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#111111]">Create an automation</p>
+            <p className="text-[12px] text-[#6B6B6B]">Turn a comment or DM into an autopilot conversation.</p>
+          </div>
+          <ArrowRight size={16} className="text-[#9B9B8F] flex-shrink-0" />
+        </Link>
+        <Link to="/opportunities" className="pop-card p-4 pop-card-hover flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
+            <Sparkles size={16} className="text-[#6B6B6B]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#111111]">Review opportunities</p>
+            <p className="text-[12px] text-[#6B6B6B]">See who's engaging and needs a reply.</p>
+          </div>
+          <ArrowRight size={16} className="text-[#9B9B8F] flex-shrink-0" />
+        </Link>
+        <Link to="/contacts" className="pop-card p-4 pop-card-hover flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
+            <Users size={16} className="text-[#6B6B6B]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#111111]">View contacts</p>
+            <p className="text-[12px] text-[#6B6B6B]">Your community, scored and organized.</p>
+          </div>
+          <ArrowRight size={16} className="text-[#9B9B8F] flex-shrink-0" />
+        </Link>
+      </div>
     </div>
   );
 }
