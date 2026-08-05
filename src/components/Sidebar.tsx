@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   Home, Zap, Compass, Users, Waypoints, Settings, Menu, X, Plus,
 } from 'lucide-react';
@@ -74,28 +74,91 @@ function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate: ()
 export default function Sidebar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
 
   // The drawer closes via each nav link's onNavigate handler below, so a
   // route-change effect would be redundant.
   const closeMobileNav = () => setMobileOpen(false);
 
+  // The drawer is a modal surface: it covers the page behind a scrim, so it
+  // has to behave like one. Without this it was reachable only by sighted
+  // pointer users — Escape did nothing, Tab walked out of the drawer into the
+  // page underneath it, and the body kept scrolling behind the overlay (on
+  // iOS that means the page visibly slides under a "fixed" drawer).
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // Captured now rather than read in cleanup: by the time cleanup runs the
+    // ref may point elsewhere, and this is the element focus must return to.
+    const toggle = toggleRef.current;
+
+    // Move focus into the drawer so the first Tab lands inside it.
+    drawerRef.current?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled])'
+    )?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // Cycle focus within the drawer.
+      const focusables = drawerRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusables || focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !drawerRef.current?.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      // Return focus to the control that opened it, so closing doesn't drop
+      // the user back at the top of the document.
+      toggle?.focus();
+    };
+  }, [mobileOpen]);
+
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface/90 backdrop-blur-md border-b border-surface-variant z-[55] flex items-center px-4 gap-3">
+      {/* Mobile top bar. pt safe-area keeps the control clear of a notch /
+          Dynamic Island in standalone (installed) mode. */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface/90 backdrop-blur-md border-b border-surface-variant z-[55] flex items-center px-4 gap-3 pt-[env(safe-area-inset-top)]">
         <button
+          ref={toggleRef}
           onClick={() => setMobileOpen(v => !v)}
           aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-          className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav"
+          className="w-11 h-11 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"
         >
           {mobileOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
         <span className="font-display text-[22px] font-bold text-on-surface">Populr</span>
       </div>
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar. The entrance runs once per mount; it's suppressed
+          outright when the user prefers reduced motion (Framer drives this
+          through the Web Animations API, so the CSS override can't reach
+          it — hence useReducedMotion here). */}
       <motion.aside
-        initial={{ x: -24, opacity: 0 }}
+        initial={reduceMotion ? false : { x: -24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.4, ease: [0.24, 1, 0.4, 1] }}
         className="hidden md:flex fixed left-0 top-0 h-screen w-[280px] bg-transparent border-r border-surface-variant z-50 flex-col p-6 gap-7"
@@ -115,11 +178,16 @@ export default function Sidebar() {
               onClick={closeMobileNav}
             />
             <motion.aside
-              initial={{ x: '-100%' }}
+              id="mobile-nav"
+              ref={drawerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Main menu"
+              initial={reduceMotion ? false : { x: '-100%' }}
               animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'tween', duration: 0.28, ease: [0.24, 1, 0.4, 1] }}
-              className="md:hidden fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-surface-variant z-[50] flex flex-col p-6 gap-7"
+              exit={reduceMotion ? { opacity: 0 } : { x: '-100%' }}
+              transition={{ type: 'tween', duration: reduceMotion ? 0 : 0.28, ease: [0.24, 1, 0.4, 1] }}
+              className="md:hidden fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-surface-variant z-[50] flex flex-col p-6 gap-7 overflow-y-auto"
             >
               <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
             </motion.aside>

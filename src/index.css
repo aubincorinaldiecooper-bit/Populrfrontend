@@ -186,6 +186,30 @@
     @apply inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium;
   }
 
+  /* ─── Loading placeholders ───
+   * A background sweep rather than an opacity pulse: at list density a
+   * pulse makes the whole page throb, while a sweep stays quiet and still
+   * reads as "working". Colors are the warm neutrals the surfaces are
+   * already built from — not shadcn's `bg-accent`, which is Populr lime.
+   * The motion is disabled wholesale further down under
+   * prefers-reduced-motion, leaving a flat tint that still holds layout. */
+  .pop-skeleton {
+    @apply relative overflow-hidden bg-[#F0EEEA];
+  }
+  .pop-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    animation: pop-shimmer 1.6s ease-in-out infinite;
+  }
+
   /* ─── Semantic colors (applied via badges) ─── */
 
   /* Intent: strongest signal */
@@ -255,5 +279,38 @@
 @layer tw-preflight {
   :where(h1, h2, h3, h4, h5, h6, p) {
     color: inherit;
+  }
+}
+
+@keyframes pop-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* ─── Reduced motion ───
+ * Populr animates in several independent systems — Tailwind utilities,
+ * tailwindcss-animate, Framer Motion, and the shimmer above — so honoring
+ * the preference component-by-component would inevitably miss some. This
+ * neutralizes all of them at once for users who ask for it.
+ *
+ * Not `animation: none`: several UI primitives (Radix accordions, the
+ * mobile drawer) rely on an animation/transition completing to fire
+ * onAnimationEnd or an exit callback, and removing the animation outright
+ * can strand them mid-state. Collapsing the duration to ~0 keeps those
+ * completion events firing while removing the perceived movement.
+ *
+ * Framer Motion reads the same media query natively wherever a component
+ * opts in via useReducedMotion (see Sidebar), which covers transform
+ * animations it drives through the Web Animations API rather than CSS.
+ *
+ * Deliberately unlayered so it outranks every layered rule regardless of
+ * specificity — the same reasoning as the Astryx override above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
