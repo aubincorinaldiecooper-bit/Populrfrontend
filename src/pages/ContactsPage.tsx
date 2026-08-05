@@ -7,6 +7,7 @@ import PlatformDot from '../components/PlatformDot';
 import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
+import { TableSkeleton } from '../components/Skeleton';
 import {
   isBackendConfigured, fetchContacts, fetchContact, updateContact, updateContactTag,
 } from '../lib/api';
@@ -152,9 +153,7 @@ export default function ContactsPage() {
 
       <div className="pop-card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
-            <Loader2 size={20} className="animate-spin mr-2" />Loading contacts...
-          </div>
+          <TableSkeleton count={6} label="Loading contacts" />
         ) : !error && contacts.length === 0 ? (
           search || stageTab !== 'all' ? (
             <EmptyState

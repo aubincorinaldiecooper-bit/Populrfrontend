@@ -7,7 +7,6 @@ import { lazy, Suspense } from 'react';
 import Onboarding from './components/Onboarding';
 import Layout from './components/Layout';
 import LoadingState from './components/LoadingState';
-import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import AuthCompletePage from './pages/AuthCompletePage';
 import ToastContainer from './components/ToastContainer';
@@ -56,11 +55,12 @@ function AppContent() {
   // wait" moments); orthogonal to auth. Kept for backward compatibility.
   if (isLoading) return <LoadingState />;
 
-  // Public marketing landing page: always accessible to unauthenticated
-  // visitors. Authenticated users get routed into the product below,
-  // where `/` renders Home rather than the marketing page.
+  // Signed-out visitors go straight to sign-in. There is no marketing
+  // landing page: Populr's entry point is the Google login screen, so `/`
+  // without a session is just the front door, not a page to read. `/`
+  // renders Home once authenticated (below).
   if (location.pathname === '/' && !session && !authLoading) {
-    return <LandingPage />;
+    return <Navigate to="/login" replace />;
   }
 
   // Public auth routes: /login and /auth/complete render for everyone.

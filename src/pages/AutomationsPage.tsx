@@ -12,6 +12,7 @@ import {
 } from '../lib/api';
 import type { Automation, AutomationEvent } from '../lib/api';
 import { AUTOMATION_TYPES, automationToTypeCard } from '../components/automation-wizard/useAutomationWizard';
+import { ListSkeleton } from '../components/Skeleton';
 import { listWizardDrafts, deleteWizardDraft, type WizardDraft } from '../components/automation-wizard/wizardDrafts';
 
 type StatusTab = 'all' | 'active' | 'paused' | 'drafts';
@@ -305,9 +306,7 @@ export default function AutomationsPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
-          <Loader2 size={20} className="animate-spin mr-2" /> Loading automations...
-        </div>
+        <ListSkeleton count={3} label="Loading automations" />
       ) : !error && statusTab === 'drafts' ? (
         visibleDrafts.length === 0 && (
           <EmptyState icon="automations" title="No drafts found" description="Automations you start but don't finish are saved here automatically." action={<button onClick={() => navigate('/automations/new')} className="pop-btn-primary">Create automation</button>} />

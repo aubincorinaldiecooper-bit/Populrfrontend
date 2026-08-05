@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Zap, Sparkles, Users, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Zap, Sparkles, Users, ArrowRight, AlertCircle } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import { StatGridSkeleton } from '../components/Skeleton';
 import { isBackendConfigured, fetchAutomations, fetchOpportunities, fetchContacts } from '../lib/api';
 
 interface HomeStats {
@@ -63,9 +64,7 @@ export default function HomePage() {
       )}
 
       {backendConfigured && loading && (
-        <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
-          <Loader2 size={20} className="animate-spin mr-2" /> Loading your dashboard...
-        </div>
+        <StatGridSkeleton count={3} label="Loading your dashboard" />
       )}
 
       {backendConfigured && !loading && error && (

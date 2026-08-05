@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { authClient } from "../lib/authClient";
 import { useAuth } from "../context/AuthContext";
@@ -374,11 +374,6 @@ export default function LoginPage() {
               </section>
             )}
 
-            <div className="mt-10 text-sm">
-              <Link to="/" className="inline-flex items-center gap-1 opacity-75 hover:opacity-100">
-                ← Back to Populr
-              </Link>
-            </div>
           </div>
         </div>
       </div>

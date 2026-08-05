@@ -4,6 +4,7 @@ import { fetchPostsLibrary, syncPostsLibrary } from '../../lib/api';
 import type { Post } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import SelectedPostCard from './SelectedPostCard';
+import { PostGridSkeleton } from '../Skeleton';
 import PostPicker from './PostPicker';
 import type { AutomationWizardApi } from './useAutomationWizard';
 
@@ -139,8 +140,14 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
       </div>
 
       {busy && (
-        <div className="flex items-center justify-center py-12 text-[#6B6B6B]">
-          <Loader2 size={20} className="animate-spin mr-2" />{busyLabel}
+        <div className="space-y-3">
+          {/* The label still matters here: syncing from Instagram is a
+              noticeably longer wait than a local library read, and the grid
+              shape alone doesn't say which one is happening. */}
+          <p className="text-[12px] text-[#6B6B6B] flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin" />{busyLabel}
+          </p>
+          <PostGridSkeleton count={6} label={busyLabel} />
         </div>
       )}
 
