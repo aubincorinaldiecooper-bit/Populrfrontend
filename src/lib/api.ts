@@ -950,6 +950,11 @@ export interface AutomationTestInput {
   sampleText: string;
   aiEnabled: boolean;
   aiInstructions?: string;
+  /** The wizard's configured replies, so the preview shows the actual text
+   *  that will be sent rather than a placeholder. */
+  commentReplyBody?: string;
+  dmBody?: string;
+  linkUrl?: string;
 }
 
 /** Very small keyword matcher — mirrors populrbackend/src/services/
@@ -966,6 +971,15 @@ function localKeywordMatch(text: string, keywords: string[], mode: 'contains' | 
     if (mode === 'starts_with' && haystack.startsWith(k)) return raw;
   }
   return null;
+}
+
+/** Mirrors populrbackend's engineService.renderTemplate for preview only:
+ *  {{name}} falls back to "there" exactly like the engine does for an
+ *  unnamed contact, and {{link}} becomes the configured destination. */
+function renderPreviewTemplate(text: string, link: string | null): string {
+  return text
+    .replace(/\{\{\s*name\s*\}\}/gi, 'there')
+    .replace(/\{\{\s*link\s*\}\}/gi, link ?? '');
 }
 
 /** Test-chat wrapper. Does keyword matching locally, then (when AI is on)
@@ -993,10 +1007,23 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
   // populrbackend's engine: e2e passes with zero AI calls). A missing AI
   // preview is therefore a note on a successful match, never a warning that
   // something is broken or needs a human.
+  const wantsComment = input.replyChannel === 'comment' || input.replyChannel === 'both';
+  const wantsDM = input.replyChannel === 'dm' || input.replyChannel === 'both';
+  const previewLink = input.linkUrl?.trim() || null;
+  // The engine's own fallback when no comment reply is configured.
+  const commentPreview = wantsComment
+    ? renderPreviewTemplate(input.commentReplyBody?.trim() || 'Just sent you a DM! 📩', previewLink)
+    : null;
+  const dmPreview = wantsDM && input.dmBody?.trim()
+    ? renderPreviewTemplate(input.dmBody.trim(), previewLink)
+    : null;
+
   const matchedWithoutPreview = (note: string): AutomationTestResult => ({
     matched: true, keyword, needsHuman: false,
     reason: 'Populr will reply automatically.',
     note,
+    publicReply: commentPreview,
+    dm: dmPreview,
   });
 
   if (!input.aiEnabled) {
@@ -1042,19 +1069,35 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     );
   }
   const d = resp.decision;
-  const wantsComment = input.replyChannel === 'comment' || input.replyChannel === 'both';
-  const wantsDM = input.replyChannel === 'dm' || input.replyChannel === 'both';
+  // An escalation decision means NOTHING is sent — the conversation queues
+  // for a human. Reply previews must vanish in that case: with them present
+  // the renderer shows send bubbles instead of the escalation notice, and
+  // the preview claims an auto-reply production would never make.
+  if (d.needsHuman) {
+    return {
+      matched: true,
+      keyword,
+      intent: d.intent,
+      confidence: d.confidence,
+      needsHuman: true,
+      reason: d.reason,
+      publicReply: null,
+      dm: null,
+    };
+  }
   return {
     matched: true,
     keyword,
     intent: d.intent,
     confidence: d.confidence,
-    needsHuman: d.needsHuman,
+    needsHuman: false,
     reason: d.reason,
     // Public reply is the automation's static text in production (see the
-    // engineService leak fix); AI text is only ever previewed for the DM.
-    publicReply: wantsComment ? '(uses the automation\'s configured comment reply)' : null,
-    dm: wantsDM && d.replyType === 'dm' ? d.replyText : null,
+    // engineService leak fix) — previewed as the real configured text, not
+    // a placeholder. AI text is only ever previewed for the DM, with the
+    // configured DM as its fallback.
+    publicReply: commentPreview,
+    dm: wantsDM ? (d.replyType === 'dm' && d.replyText ? d.replyText : dmPreview) : null,
   };
 }
 

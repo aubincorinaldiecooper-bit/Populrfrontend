@@ -62,6 +62,11 @@ function sanitizeState(value: unknown): WizardState | null {
     triggerKeywords: Array.isArray(s.triggerKeywords)
       ? s.triggerKeywords.filter((k): k is string => typeof k === 'string')
       : [],
+    // Reply fields arrived after v2 drafts existed — older entries degrade
+    // to blanks, same as every other missing field here.
+    commentReplyBody: typeof s.commentReplyBody === 'string' ? s.commentReplyBody : '',
+    dmBody: typeof s.dmBody === 'string' ? s.dmBody : '',
+    linkUrl: typeof s.linkUrl === 'string' ? s.linkUrl : '',
     aiEnabled: typeof s.aiEnabled === 'boolean' ? s.aiEnabled : true,
     aiInstructions: typeof s.aiInstructions === 'string' ? s.aiInstructions : '',
     active: s.active === true,

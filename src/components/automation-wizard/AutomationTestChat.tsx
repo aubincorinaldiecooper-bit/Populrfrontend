@@ -46,6 +46,9 @@ export default function AutomationTestChat({ wizard }: { wizard: AutomationWizar
         sampleText,
         aiEnabled: state.aiEnabled,
         aiInstructions: state.aiInstructions,
+        commentReplyBody: state.commentReplyBody,
+        dmBody: state.dmBody,
+        linkUrl: state.linkUrl,
       });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'done', result } : e));
     } catch (err) {

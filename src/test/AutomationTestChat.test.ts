@@ -61,6 +61,25 @@ describe('testAutomation — matching mirrors the engine', () => {
   });
 });
 
+describe('testAutomation — previews the configured replies, not placeholders', () => {
+  it('renders the configured comment reply and DM with {{name}}/{{link}} resolved', async () => {
+    const result = await testAutomation(input({
+      sampleText: 'guide please',
+      aiEnabled: false,
+      commentReplyBody: 'Check your DMs, {{name}}!',
+      dmBody: 'Hey {{name}} — grab it here: {{link}}',
+      linkUrl: 'https://creator.example/guide',
+    }));
+    expect(result.publicReply).toBe('Check your DMs, there!');
+    expect(result.dm).toBe('Hey there — grab it here: https://creator.example/guide');
+  });
+
+  it("falls back to the engine's own default comment reply when none is configured", async () => {
+    const result = await testAutomation(input({ sampleText: 'guide', aiEnabled: false }));
+    expect(result.publicReply).toBe('Just sent you a DM! 📩');
+  });
+});
+
 describe('testAutomation — missing AI preview is not a failure', () => {
   it('AI off: matched, will auto-reply, with an informational note — not needsHuman', async () => {
     const result = await testAutomation(input({ sampleText: 'link please', aiEnabled: false }));
@@ -80,6 +99,35 @@ describe('testAutomation — missing AI preview is not a failure', () => {
     // The old copy must be gone in every branch.
     expect(result.reason).not.toMatch(/temporarily unavailable/i);
     expect(result.note).not.toMatch(/temporarily unavailable/i);
+  });
+
+  it('an AI escalation decision suppresses reply previews — nothing sends, so nothing renders as sending', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        available: true,
+        decision: {
+          intent: 'support_issue', confidence: 0.9, replyType: 'dm',
+          replyText: null, linkToSend: null,
+          needsHuman: true, shouldAutoReply: false,
+          reason: 'Sounds like a complaint — best handled personally.',
+        },
+      }),
+    })));
+    try {
+      const result = await testAutomation(input({
+        sampleText: 'guide is broken, refund please',
+        commentReplyBody: 'Check your DMs!',
+        dmBody: 'Hey {{name}}, here you go: {{link}}',
+      }));
+      expect(result.needsHuman).toBe(true);
+      // The configured texts must NOT appear as previews: an escalation
+      // sends nothing, and bubbles would claim otherwise.
+      expect(result.publicReply).toBeNull();
+      expect(result.dm).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('Smart Replies unconfigured on the server: note says so without claiming breakage', async () => {
