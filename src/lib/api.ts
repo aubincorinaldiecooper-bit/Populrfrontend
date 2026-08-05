@@ -533,6 +533,11 @@ export interface AutomationInput {
   messageBody?: string | null;
   linkUrl?: string | null;
   linkKind?: string | null;
+  /** Media attached to the DM (Zernio sendDM mediaUrl) — the engine sends it
+   *  capability-gated per platform. responseType tells the backend which
+   *  capability to validate ('image' | 'video' | 'text'). */
+  mediaUrl?: string | null;
+  responseType?: string;
   tags?: string[];
   scoreDelta?: number;
   stageUpdate?: string | null;
@@ -937,6 +942,9 @@ export interface AutomationTestResult {
   note?: string | null;
   publicReply?: string | null;
   dm?: string | null;
+  /** Media the DM will carry (the automation's attachment) — the engine
+   *  attaches it to every DM send, AI-drafted or not. */
+  dmMediaUrl?: string | null;
 }
 
 export interface AutomationTestInput {
@@ -955,6 +963,7 @@ export interface AutomationTestInput {
   commentReplyBody?: string;
   dmBody?: string;
   linkUrl?: string;
+  mediaUrl?: string;
 }
 
 /** Very small keyword matcher — mirrors populrbackend/src/services/
@@ -1017,6 +1026,9 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
   const dmPreview = wantsDM && input.dmBody?.trim()
     ? renderPreviewTemplate(input.dmBody.trim(), previewLink)
     : null;
+  // The engine attaches the automation's media to every DM it sends,
+  // AI-drafted or deterministic alike.
+  const dmMedia = wantsDM && input.mediaUrl?.trim() ? input.mediaUrl.trim() : null;
 
   const matchedWithoutPreview = (note: string): AutomationTestResult => ({
     matched: true, keyword, needsHuman: false,
@@ -1024,6 +1036,7 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     note,
     publicReply: commentPreview,
     dm: dmPreview,
+    dmMediaUrl: dmPreview ? dmMedia : null,
   });
 
   if (!input.aiEnabled) {
@@ -1088,6 +1101,7 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
         note: 'After this reply, the conversation is queued for you to follow up personally.',
         publicReply: postsPublicly ? d.replyText : null,
         dm: postsPublicly ? null : d.replyText,
+        dmMediaUrl: postsPublicly ? null : dmMedia,
       };
     }
     // Pure escalation: NOTHING is sent. Previews must vanish — with them
@@ -1117,6 +1131,7 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     // configured DM as its fallback.
     publicReply: commentPreview,
     dm: wantsDM ? (d.replyType === 'dm' && d.replyText ? d.replyText : dmPreview) : null,
+    dmMediaUrl: wantsDM ? dmMedia : null,
   };
 }
 

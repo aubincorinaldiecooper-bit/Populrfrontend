@@ -30,6 +30,7 @@ function wizardState(overrides: Partial<WizardState> = {}): WizardState {
     commentReplyBody: '',
     dmBody: '',
     linkUrl: '',
+    mediaUrl: '',
     aiEnabled: true,
     aiInstructions: '',
     active: false,

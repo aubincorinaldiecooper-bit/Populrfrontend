@@ -74,6 +74,26 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
                 </div>
               )}
 
+              {wantsDM && (
+                <div>
+                  <label htmlFor="wizard-media-url" className="block text-[12px] font-semibold text-[#111111] mb-1">
+                    Media in the DM <span className="font-normal text-[#9B9B8F]">(optional)</span>
+                  </label>
+                  <input
+                    id="wizard-media-url"
+                    type="url"
+                    value={state.mediaUrl}
+                    onChange={e => update('mediaUrl', e.target.value)}
+                    placeholder="https://your-site.com/photo.jpg or …/clip.mp4"
+                    className="w-full bg-white border border-[#E8E4DF] rounded-xl px-3.5 py-2.5 text-[13px] placeholder:text-[#9B9B8F] outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/40"
+                  />
+                  <p className="text-[11px] text-[#9B9B8F] mt-1">
+                    An image or video sent inside the DM (hosted URL). Platforms that don&apos;t
+                    support it get the text on its own.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="wizard-link-url" className="block text-[12px] font-semibold text-[#111111] mb-1">
                   Link to send <span className="font-normal text-[#9B9B8F]">(optional)</span>

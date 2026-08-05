@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Send, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
+import { Send, RotateCcw, Loader2, AlertCircle, ArrowDown } from 'lucide-react';
 import { testAutomation, isBackendConfigured } from '../../lib/api';
 import type { AutomationTestResult } from '../../lib/api';
 import { AUTOMATION_TYPES, type AutomationWizardApi } from './useAutomationWizard';
@@ -49,6 +49,7 @@ export default function AutomationTestChat({ wizard }: { wizard: AutomationWizar
         commentReplyBody: state.commentReplyBody,
         dmBody: state.dmBody,
         linkUrl: state.linkUrl,
+        mediaUrl: state.mediaUrl,
       });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'done', result } : e));
     } catch (err) {
@@ -174,25 +175,54 @@ function TestResultBubbles({ result }: { result: AutomationTestResult }) {
     );
   }
 
+  // The full journey, in the order a fan experiences it: the public reply
+  // posted under their comment first, then the private DM (with its media
+  // attachment when the automation has one). Distinct bubble styles keep
+  // "everyone sees this" visually separate from "only they see this".
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {result.publicReply && (
         <div>
-          <div className="max-w-[85%] bg-[#F5F0EB] text-[#111111] px-3.5 py-2.5 rounded-2xl rounded-tl-sm text-[12px] leading-relaxed">
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#9B9B8F] pl-1 mb-1">
+            {result.dm ? 'Step 1 — public reply, under their comment' : 'Public reply, under their comment'}
+          </p>
+          <div className="max-w-[85%] bg-white border border-[#E8E4DF] text-[#111111] px-3.5 py-2.5 rounded-2xl rounded-tl-sm text-[12px] leading-relaxed">
             {result.publicReply}
           </div>
-          <p className="text-[9px] text-[#9B9B8F] pl-1 mt-0.5">Public reply</p>
         </div>
+      )}
+      {result.publicReply && result.dm && (
+        <p className="text-[10px] text-[#9B9B8F] pl-1 flex items-center gap-1">
+          <ArrowDown size={10} /> then, in their DMs…
+        </p>
       )}
       {result.dm && (
         <div>
-          <div className="max-w-[85%] bg-[#F5F0EB] text-[#111111] px-3.5 py-2.5 rounded-2xl rounded-tl-sm text-[12px] leading-relaxed">
-            {result.dm}
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#9B9B8F] pl-1 mb-1">
+            {result.publicReply ? 'Step 2 — private DM' : 'Private DM'}
+          </p>
+          <div className="max-w-[85%] bg-[#F5F0EB] text-[#111111] rounded-2xl rounded-tl-sm overflow-hidden">
+            {result.dmMediaUrl && <DmMediaPreview url={result.dmMediaUrl} />}
+            <p className="px-3.5 py-2.5 text-[12px] leading-relaxed">{result.dm}</p>
           </div>
-          <p className="text-[9px] text-[#9B9B8F] pl-1 mt-0.5">DM</p>
         </div>
       )}
       {result.note && <p className="text-[10px] text-[#9B9B8F] pl-1 leading-relaxed">{result.note}</p>}
     </div>
   );
+}
+
+/** The DM's media attachment. Videos and unloadable URLs degrade to a
+ *  labeled placeholder rather than a broken image. */
+function DmMediaPreview({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false);
+  const isVideo = /\.(mp4|mov|webm)(\?|$)/i.test(url);
+  if (isVideo || failed) {
+    return (
+      <div className="px-3.5 pt-2.5 text-[11px] text-[#6B6B6B]">
+        {isVideo ? '🎬 Video attachment' : '🖼️ Media attachment'}
+      </div>
+    );
+  }
+  return <img src={url} alt="DM media attachment preview" className="w-full max-h-40 object-cover" onError={() => setFailed(true)} />;
 }
