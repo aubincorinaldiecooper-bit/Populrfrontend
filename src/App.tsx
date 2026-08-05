@@ -4,7 +4,6 @@ import { rememberReturnTo } from './lib/returnTo';
 import { useAuth } from './context/AuthContext';
 import { lazy, Suspense } from 'react';
 
-import Onboarding from './components/Onboarding';
 import Layout from './components/Layout';
 import LoadingState from './components/LoadingState';
 import LoginPage from './pages/LoginPage';
@@ -31,13 +30,14 @@ const AutomationsPage = lazy(() => import('./pages/AutomationsPage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 /**
- * Central route gate. Every routing decision reads:
- *   - Better Auth's session state (`useAuth`) — the source of truth for
- *     "is this user authenticated?"; never localStorage.
- *   - AppContext's `onboardingComplete` — persistence around the social
- *     OAuth round-trip. This is separate from auth: it only tells us
- *     whether the user has finished connecting at least one social
- *     account, which is a product step, not an authentication one.
+ * Central route gate. Every routing decision reads Better Auth's session
+ * state (`useAuth`) — the source of truth for "is this user
+ * authenticated?"; never localStorage. There is no separate onboarding
+ * gate: signing in lands on Home, whose first-run state walks a new
+ * creator toward their first automation (connecting an account happens
+ * along the way, or any time on /channels). The old gate lived in
+ * per-device localStorage, so every new browser — every phone — re-ran
+ * "connect your channel" even for fully set-up accounts.
  *
  * The single most important invariant is that /login and /auth/complete
  * always render, regardless of auth state — they own their own
@@ -45,7 +45,7 @@ const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
  * would cause infinite loops during callback processing.
  */
 function AppContent() {
-  const { isLoading, onboardingComplete } = useApp();
+  const { isLoading } = useApp();
   const { session, loading: authLoading } = useAuth();
   const location = useLocation();
 
@@ -86,16 +86,7 @@ function AppContent() {
 
   // From here: authenticated user.
 
-  // Not-yet-onboarded users only see /connect; everything else routes
-  // them there. This is the same "one route until onboarding is done"
-  // rule the previous gate enforced, just now scoped to authenticated
-  // users rather than every visitor.
-  if (!onboardingComplete) {
-    if (location.pathname === '/connect') return <Onboarding />;
-    return <Navigate to="/connect" replace />;
-  }
-
-  // Onboarded, authenticated: the full product surface. `/` renders Home;
+  // Authenticated: the full product surface. `/` renders Home;
   // the retired `/opportunities` and `/segments` routes land on Contacts,
   // where fans are classified now (filters + tags). `/connect` is
   // aliased to `/connections` for onboarded users, preserving the
@@ -140,8 +131,8 @@ export default function App() {
     <>
       <AppContent />
       {/* Rendered unconditionally: connect errors (including a subscription
-          requirement) can happen before onboardingComplete is true, and
-          Layout (which normally owns drawers) isn't mounted yet.
+          requirement) can arrive on routes where Layout (which normally
+          owns drawers) isn't mounted.
           The last-resort ErrorBoundary lives in main.tsx above every
           provider — see there for why placing it here isn't enough. */}
       <ToastContainer />
