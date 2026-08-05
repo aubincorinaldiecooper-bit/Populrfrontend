@@ -137,9 +137,12 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar. pt safe-area keeps the control clear of a notch /
-          Dynamic Island in standalone (installed) mode. */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface/90 backdrop-blur-md border-b border-surface-variant z-[55] flex items-center px-4 gap-3 pt-[env(safe-area-inset-top)]">
+      {/* Mobile top bar. The safe-area inset is added to the bar's HEIGHT,
+          not just as inner padding: padding alone would push the control
+          down inside a still-64px-tall bar, so on a notched device the
+          button drops past the bar's own background onto the page. Layout's
+          main offset uses the identical expression — keep the two in sync. */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-surface/90 backdrop-blur-md border-b border-surface-variant z-[55] flex items-center px-4 gap-3">
         <button
           ref={toggleRef}
           onClick={() => setMobileOpen(v => !v)}
@@ -187,7 +190,10 @@ export default function Sidebar() {
               animate={{ x: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { x: '-100%' }}
               transition={{ type: 'tween', duration: reduceMotion ? 0 : 0.28, ease: [0.24, 1, 0.4, 1] }}
-              className="md:hidden fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-surface-variant z-[50] flex flex-col p-6 gap-7 overflow-y-auto"
+              // Same inset treatment as the bar: the drawer starts at top-0,
+              // so its own 24px padding would put the brand block under a
+              // notch without this.
+              className="md:hidden fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-surface-variant z-[50] flex flex-col p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] gap-7 overflow-y-auto"
             >
               <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
             </motion.aside>

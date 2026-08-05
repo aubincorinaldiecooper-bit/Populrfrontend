@@ -9,7 +9,10 @@ export default function Layout({ children }: { children?: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="md:ml-[280px] min-h-screen pt-16 md:pt-0">
+      {/* Top offset must match the mobile bar's full height, safe-area inset
+          included (see Sidebar) — otherwise the first rows of content sit
+          under the bar on notched devices. */}
+      <main className="md:ml-[280px] min-h-screen pt-[calc(4rem+env(safe-area-inset-top))] md:pt-0">
         {/* Scoped to the content area and keyed on the route, so a crash on
             one page (e.g. a lazy chunk failing to load after a redeploy)
             shows a recoverable message here instead of blanking the whole
