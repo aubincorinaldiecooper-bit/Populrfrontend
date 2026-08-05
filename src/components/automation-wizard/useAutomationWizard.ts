@@ -58,6 +58,10 @@ export interface WizardState {
   /** Optional image/video URL attached to the DM — Zernio's sendDM carries
    *  it, and the engine sends it capability-gated per platform. */
   mediaUrl: string;
+  /** Label for a tappable DM button that opens the tracked link. Empty = no
+   *  button. Requires linkUrl — the button's url IS the automation's link,
+   *  which the engine swaps for the per-contact tracked URL at send time. */
+  buttonLabel: string;
   aiEnabled: boolean;
   aiInstructions: string;
   active: boolean;
@@ -67,7 +71,7 @@ export interface WizardState {
 function blankState(): WizardState {
   return {
     automationId: null, name: '', type: null, accountId: null, post: null,
-    triggerKeywords: [], commentReplyBody: '', dmBody: '', linkUrl: '', mediaUrl: '',
+    triggerKeywords: [], commentReplyBody: '', dmBody: '', linkUrl: '', mediaUrl: '', buttonLabel: '',
     aiEnabled: true, aiInstructions: '', active: false, dirty: false,
   };
 }
@@ -85,6 +89,10 @@ function initialStateFor(editAutomation: Automation | null): WizardState {
     dmBody: editAutomation.message_body ?? '',
     linkUrl: editAutomation.link_url ?? '',
     mediaUrl: editAutomation.media_url ?? '',
+    // The wizard models one button: the tracked-link button. Hydrate its
+    // label from the first stored button whose url is the automation's link.
+    buttonLabel: editAutomation.buttons?.find(b => b.url === editAutomation.link_url)?.label
+      ?? editAutomation.buttons?.[0]?.label ?? '',
     aiEnabled: editAutomation.ai_enabled,
     aiInstructions: editAutomation.ai_instructions ?? '',
     active: editAutomation.active,
@@ -214,6 +222,11 @@ export function useAutomationWizard() {
       responseType: state.mediaUrl.trim()
         ? (/\.(mp4|mov|webm)(\?|$)/i.test(state.mediaUrl.trim()) ? 'video' : 'image')
         : 'text',
+      // One button, carrying the automation's link — the engine substitutes
+      // the per-contact tracked URL because the urls match.
+      buttons: state.buttonLabel.trim() && state.linkUrl.trim()
+        ? [{ label: state.buttonLabel.trim(), url: state.linkUrl.trim() }]
+        : null,
       aiEnabled: state.aiEnabled,
       aiInstructions: state.aiInstructions.trim() ? state.aiInstructions.trim() : null,
       active: activate,

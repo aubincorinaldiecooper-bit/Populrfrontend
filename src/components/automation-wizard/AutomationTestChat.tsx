@@ -50,6 +50,7 @@ export default function AutomationTestChat({ wizard }: { wizard: AutomationWizar
         dmBody: state.dmBody,
         linkUrl: state.linkUrl,
         mediaUrl: state.mediaUrl,
+        buttonLabel: state.buttonLabel,
       });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'done', result } : e));
     } catch (err) {
@@ -204,6 +205,14 @@ function TestResultBubbles({ result }: { result: AutomationTestResult }) {
           <div className="max-w-[85%] bg-[#F5F0EB] text-[#111111] rounded-2xl rounded-tl-sm overflow-hidden">
             {result.dmMediaUrl && <DmMediaPreview url={result.dmMediaUrl} />}
             <p className="px-3.5 py-2.5 text-[12px] leading-relaxed">{result.dm}</p>
+            {result.dmButtonLabel && (
+              <div className="px-3.5 pb-3">
+                <span className="flex items-center justify-center w-full bg-chartreuse text-[#111111] text-[12px] font-semibold rounded-xl py-2">
+                  {result.dmButtonLabel}
+                </span>
+                <p className="text-[9px] text-[#9B9B8F] text-center mt-1">Opens your tracked link</p>
+              </div>
+            )}
           </div>
         </div>
       )}
