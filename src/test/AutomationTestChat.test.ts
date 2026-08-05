@@ -120,6 +120,14 @@ describe('testAutomation — missing AI preview is not a failure', () => {
       expect(result.needsHuman).toBe(true);
       expect(result.dm).toBe('Great question — let me check and get back to you!');
       expect(result.note).toMatch(/queued for you/i);
+
+      // Comment-only automations post the holding reply publicly — their DM
+      // branch never runs in production, and the preview must not claim one.
+      const commentOnly = await testAutomation(input({
+        sampleText: 'guide — do you ship to Canada?', replyChannel: 'comment',
+      }));
+      expect(commentOnly.publicReply).toBe('Great question — let me check and get back to you!');
+      expect(commentOnly.dm).toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }
