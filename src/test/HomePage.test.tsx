@@ -199,6 +199,16 @@ describe('HomePage — purpose-driven dashboard', () => {
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
   });
 
+  it('a backend without the engagement block still renders the dashboard, not a crash', async () => {
+    const legacy = dashboard();
+    delete (legacy as { engagement?: unknown }).engagement;
+    mockFetchDashboard.mockResolvedValue(legacy);
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    expect(screen.queryByText('How fans respond')).not.toBeInTheDocument();
+  });
+
   it('a failed load offers Retry, and Retry actually refetches', async () => {
     mockFetchDashboard
       .mockRejectedValueOnce(new Error('Server unreachable'))

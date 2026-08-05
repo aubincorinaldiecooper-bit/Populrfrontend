@@ -601,8 +601,9 @@ export interface DashboardData {
   /** How fans respond to what automations send — raw counts from platform
    *  receipts (messages sent → delivered → read), the engine's user_replied
    *  events, and tracked-link counters. The UI derives rates from these so
-   *  denominators stay visible. */
-  engagement: {
+   *  denominators stay visible. Optional because a backend deployed before
+   *  this block existed simply omits it — the UI must render without it. */
+  engagement?: {
     dmsSent: number;
     dmsDelivered: number;
     dmsRead: number;

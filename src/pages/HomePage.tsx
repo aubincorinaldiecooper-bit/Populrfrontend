@@ -249,8 +249,10 @@ export default function HomePage() {
               {/* How fans respond to what automations send: real platform
                   activity — link taps, replies, read receipts — as rates
                   with their denominators in view. Hidden until something
-                  has actually been sent; empty analytics teach nothing. */}
-              {(data.engagement.dmsSent > 0 || data.engagement.linkSends > 0) && (
+                  has actually been sent; empty analytics teach nothing.
+                  The optional check also covers a backend that predates the
+                  engagement block — Home must render without it, not crash. */}
+              {data.engagement && (data.engagement.dmsSent > 0 || data.engagement.linkSends > 0) && (
                 <section className="pop-card p-5">
                   <h2 className="pop-card-title mb-1">How fans respond</h2>
                   <p className="text-[12px] text-[#6B6B6B] mb-4">
