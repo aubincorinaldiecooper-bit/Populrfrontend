@@ -6,8 +6,6 @@ import {
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
 } from '../lib/api';
 import type { ConnectedAccount } from '../lib/api';
-import { isOnboardingComplete, markOnboardingComplete, adoptLegacyOnboardingFlag } from '../lib/onboarding';
-import { useAuth } from './AuthContext';
 
 export interface Toast {
   id: string;
@@ -37,9 +35,6 @@ interface AppState {
 }
 
 interface AppContextType extends AppState {
-  /** Derived from the signed-in user, not stored — see AppProvider. */
-  onboardingComplete: boolean;
-  completeOnboarding: () => void;
   // Onboarding platform connection
   beginPlatformConnect: (id: string) => void;
   refreshConnectedAccounts: () => Promise<void>;
@@ -87,16 +82,6 @@ function delay(ms: number): Promise<void> {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  // AuthProvider wraps AppProvider (see main.tsx), so the signed-in user is
-  // available here — which is what lets the onboarding flag be per-account
-  // rather than per-browser.
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
-
-  // Completed during *this* session, before any storage read would reflect
-  // it. Merged with the persisted flag below.
-  const [justOnboarded, setJustOnboarded] = useState(false);
-
   const [state, setState] = useState<AppState>({
     connectedPlatforms: defaultOnboardingPlatforms.map(p => ({ ...p })),
     accounts: [],
@@ -106,28 +91,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isLoading: false,
     subscriptionModal: null,
   });
-
-  // Derived during render, not stored: the route gate reads this while
-  // deciding where to send the user, so a tick where the session has
-  // resolved but the flag hasn't would redirect an onboarded creator to
-  // /connect and throw away the route they actually opened.
-  const onboardingComplete = justOnboarded || isOnboardingComplete(userId);
-
-  // Storage tidy-up only (see adoptLegacyOnboardingFlag) — the read above
-  // already honors the legacy key, so this changes nothing on screen.
-  useEffect(() => { adoptLegacyOnboardingFlag(userId); }, [userId]);
-
-  // A different account signing in on the same browser must not inherit the
-  // previous one's in-session completion.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setJustOnboarded(false);
-  }, [userId]);
-
-  const completeOnboarding = useCallback(() => {
-    markOnboardingComplete(userId);
-    setJustOnboarded(true);
-  }, [userId]);
 
 
 
@@ -413,8 +376,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       ...state,
-      onboardingComplete,
-      completeOnboarding,
       beginPlatformConnect,
       refreshConnectedAccounts,
       completeOAuthReturn,

@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { isOnboardingComplete } from "../lib/onboarding";
 import { consumeReturnTo } from "../lib/returnTo";
 
 const CREAM = "#F3F0EC";
@@ -18,11 +17,10 @@ const BLACK = "#111111";
  *   2. Route accordingly.
  *
  * We deliberately do NOT trust localStorage as evidence of a session —
- * the server's getSession() is the sole source of truth, so a stale
- * onboardingComplete flag can never accidentally sign someone in.
+ * the server's getSession() is the sole source of truth.
  */
 export default function AuthCompletePage() {
-  const { session, user, loading, refresh } = useAuth();
+  const { session, loading, refresh } = useAuth();
   const navigate = useNavigate();
   const refreshedOnce = useRef(false);
 
@@ -51,10 +49,6 @@ export default function AuthCompletePage() {
   useEffect(() => {
     if (loading) return;
     if (session) {
-      if (!isOnboardingComplete(user?.id)) {
-        navigate("/connect", { replace: true });
-        return;
-      }
       // Land where the user was actually headed before the auth bounce.
       navigate(consumeReturnTo() ?? "/", { replace: true });
     } else {
@@ -63,7 +57,7 @@ export default function AuthCompletePage() {
       // The LoginPage renders human copy for this code.
       navigate("/login?error=session_failed", { replace: true });
     }
-  }, [loading, session, user?.id, navigate]);
+  }, [loading, session, navigate]);
 
   return (
     <div
