@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle, RefreshCw, Inbox as InboxIcon, Send, Check, Loader2, Sparkles, PenLine,
 } from 'lucide-react';
@@ -56,7 +56,17 @@ export default function InboxPage() {
   const [tab, setTab] = useState<Tab>('needs_you');
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(backendConfigured);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // The API returns no total, so "is there more?" is inferred: a full page
+  // implies there may be another one behind it.
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Monotonic request id: only the newest in-flight fetch may write state.
+  // Without it, switching tabs while a slow request is in flight lets the
+  // older response land last and show the previous tab's queue under the
+  // newly selected one. Same pattern as OpportunitiesPage.
+  const requestSeq = useRef(0);
 
   // Which item has its composer open, and its draft text. One at a time —
   // replying is a focused act, not a spreadsheet.
@@ -65,15 +75,41 @@ export default function InboxPage() {
   const [sending, setSending] = useState<string | null>(null);
   const [resolving, setResolving] = useState<string | null>(null);
 
-  const load = useCallback(() => {
+  const runFetch = useCallback(async ({ offset, append }: { offset: number; append: boolean }) => {
     if (!backendConfigured) return;
-    setLoading(true);
-    setError(null);
-    fetchInbox({ needsReply: tab === 'needs_you' ? true : undefined, limit: PAGE_SIZE })
-      .then(res => setItems(res.items))
-      .catch(err => setError(err instanceof Error ? err.message : 'Could not load your inbox.'))
-      .finally(() => setLoading(false));
-  }, [backendConfigured, tab]);
+    const seq = ++requestSeq.current;
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const res = await fetchInbox({
+        needsReply: tab === 'needs_you' ? true : undefined,
+        limit: PAGE_SIZE,
+        offset,
+      });
+      if (seq !== requestSeq.current) return; // superseded by a newer fetch
+      setItems(prev => (append ? [...prev, ...res.items] : res.items));
+      setHasMore(res.items.length === PAGE_SIZE);
+    } catch (err) {
+      if (seq !== requestSeq.current) return;
+      const msg = err instanceof Error ? err.message : 'Could not load your inbox.';
+      if (append) showToast(msg, 'error');
+      else setError(msg);
+    } finally {
+      if (seq === requestSeq.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  }, [backendConfigured, tab, showToast]);
+
+  const load = useCallback(() => runFetch({ offset: 0, append: false }), [runFetch]);
+  const loadMore = useCallback(
+    () => runFetch({ offset: items.length, append: true }),
+    [runFetch, items.length],
+  );
 
   useEffect(() => {
     // Data fetch from the backend, not derived state — see OpportunitiesPage.
@@ -277,6 +313,18 @@ export default function InboxPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && !error && hasMore && (
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="pop-btn-tertiary text-[12px] py-1.5 px-4 disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
         </div>
       )}
     </div>

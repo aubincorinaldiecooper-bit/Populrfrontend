@@ -110,4 +110,52 @@ describe('InboxPage — the holding-reply loop, closed', () => {
     render(<InboxPage />);
     await waitFor(() => expect(screen.getByText(/all caught up/i)).toBeInTheDocument());
   });
+
+  it('a full page offers Load more, and clicking it fetches the next offset', async () => {
+    const fullPage = Array.from({ length: 30 }, (_, i) => item({ id: `p1_${i}`, contact_handle: `fan_${i}` }));
+    mockFetchInbox
+      .mockResolvedValueOnce({ count: 30, items: fullPage })
+      .mockResolvedValueOnce({ count: 1, items: [item({ id: 'p2_0', contact_handle: 'page_two_fan' })] });
+    const user = userEvent.setup();
+    render(<InboxPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Load more/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Load more/ }));
+
+    expect(mockFetchInbox).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 30 }));
+    await waitFor(() => expect(screen.getByText('@page_two_fan')).toBeInTheDocument());
+    // The first page is still there — appended, not replaced.
+    expect(screen.getByText('@fan_0')).toBeInTheDocument();
+    // A short second page means the well is dry: no further Load more.
+    expect(screen.queryByRole('button', { name: /Load more/ })).not.toBeInTheDocument();
+  });
+
+  it('a short page never offers Load more', async () => {
+    mockFetchInbox.mockResolvedValue({ count: 1, items: [item({})] });
+    render(<InboxPage />);
+    await waitFor(() => expect(screen.getByText('@curious_fan')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Load more/ })).not.toBeInTheDocument();
+  });
+
+  it('a stale response from the previous tab never overwrites the current one', async () => {
+    let resolveFirst!: (v: { count: number; items: InboxItem[] }) => void;
+    mockFetchInbox
+      // Needs-you fetch: deliberately left hanging while the user moves on.
+      .mockImplementationOnce(() => new Promise(r => { resolveFirst = r; }))
+      // All-conversations fetch: resolves immediately.
+      .mockResolvedValueOnce({
+        count: 1,
+        items: [item({ id: 'all1', contact_handle: 'all_tab_fan', needs_reply: false, needs_reply_reason: null })],
+      });
+    const user = userEvent.setup();
+    render(<InboxPage />);
+
+    await user.click(screen.getByRole('button', { name: /All conversations/ }));
+    await waitFor(() => expect(screen.getByText('@all_tab_fan')).toBeInTheDocument());
+
+    // The slow needs-you response lands last — and must be ignored.
+    resolveFirst({ count: 1, items: [item({ id: 'stale1', contact_handle: 'stale_fan' })] });
+    await waitFor(() => expect(screen.queryByText('@stale_fan')).not.toBeInTheDocument());
+    expect(screen.getByText('@all_tab_fan')).toBeInTheDocument();
+  });
 });
