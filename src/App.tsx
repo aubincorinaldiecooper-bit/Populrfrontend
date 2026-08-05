@@ -13,7 +13,6 @@ import ToastContainer from './components/ToastContainer';
 import SubscriptionModal from './components/SubscriptionModal';
 
 // MVP pages
-import OpportunitiesPage from './pages/OpportunitiesPage';
 import ChannelsPage from './pages/ChannelsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
@@ -21,7 +20,6 @@ import InboxPage from './pages/InboxPage';
 import SettingsPage from './pages/SettingsPage';
 
 // Hidden pages (contextual, not in main nav)
-import SegmentsPage from './pages/SegmentsPage';
 import AutomationWizard from './components/automation-wizard/AutomationWizard';
 
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
@@ -98,7 +96,8 @@ function AppContent() {
   }
 
   // Onboarded, authenticated: the full product surface. `/` renders Home;
-  // Opportunities moved to its own `/opportunities` route. `/connect` is
+  // the retired `/opportunities` and `/segments` routes land on Contacts,
+  // where fans are classified now (filters + tags). `/connect` is
   // aliased to `/connections` for onboarded users, preserving the
   // `?connected=<platform>` query the OAuth callback attaches — that
   // marker is what ConnectionsPage reads to know a fresh account just
@@ -107,7 +106,7 @@ function AppContent() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Suspense fallback={<LoadingState />}><HomePage /></Suspense>} />
-        <Route path="/opportunities" element={<OpportunitiesPage />} />
+        <Route path="/opportunities" element={<Navigate to="/contacts" replace />} />
         <Route path="/connect" element={<Navigate to={`/channels${location.search}`} replace />} />
         <Route path="/channels" element={<ChannelsPage />} />
         <Route path="/connections" element={<Navigate to={`/channels${location.search}`} replace />} />
@@ -115,7 +114,7 @@ function AppContent() {
         <Route path="/campaigns/new" element={<CampaignBuilderPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/segments" element={<SegmentsPage />} />
+        <Route path="/segments" element={<Navigate to="/contacts" replace />} />
         <Route path="/automations" element={<Suspense fallback={<LoadingState />}><AutomationsPage /></Suspense>} />
         <Route path="/automations/new" element={<AutomationWizard />} />
         <Route path="/contacts" element={<Suspense fallback={<LoadingState />}><ContactsPage /></Suspense>} />

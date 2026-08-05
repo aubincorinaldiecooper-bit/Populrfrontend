@@ -194,116 +194,6 @@ export async function disconnectAccount(id: string): Promise<ConnectedAccount> {
 }
 
 // ============================================================
-// Opportunities — the prioritized engagement feed
-// ============================================================
-
-export type OpportunityPlatform = 'instagram' | 'tiktok' | 'linkedin' | string;
-export type OpportunityStatus = 'new' | 'reviewed' | 'responded' | 'dismissed';
-export type OpportunityAction =
-  | 'reply'
-  | 'message'
-  | 'open_on_platform'
-  | 'copy_response'
-  | 'mark_reviewed'
-  | 'mark_responded'
-  | 'dismiss';
-
-export interface Opportunity {
-  id: string;
-  platform: OpportunityPlatform;
-  person: {
-    id: string | null;
-    username: string | null;
-    displayName: string | null;
-    avatarUrl: string | null;
-  };
-  interaction: {
-    type: 'comment' | 'message' | 'reply' | 'mention' | 'other';
-    text: string;
-    occurredAt: string;
-    externalUrl: string | null;
-  };
-  source: {
-    id: string | null;
-    title: string | null;
-    caption: string | null;
-    mediaUrl: string | null;
-    externalUrl: string | null;
-  } | null;
-  intent: {
-    category: string;
-    label: string;
-    reason: string;
-    confidence: number | null;
-  };
-  status: OpportunityStatus;
-  availableActions: OpportunityAction[];
-  suggestedResponse: string | null;
-}
-
-export interface OpportunitySummary {
-  total: number;
-  new: number;
-  reviewed: number;
-  responded: number;
-  dismissed: number;
-  byPlatform: Record<string, number>;
-  byIntent: Record<string, number>;
-}
-
-/** GET /api/opportunities — prioritized, normalized engagement feed. */
-export async function fetchOpportunities(params: {
-  platform?: string;
-  intent?: string;
-  status?: string;
-  /** Restricts to one contact's opportunities — the Contacts page's "related opportunities". */
-  contactId?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<{ opportunities: Opportunity[]; total: number; summary: OpportunitySummary }> {
-  const qs = new URLSearchParams();
-  if (params.platform) qs.set('platform', params.platform);
-  if (params.intent) qs.set('intent', params.intent);
-  if (params.status) qs.set('status', params.status);
-  if (params.contactId) qs.set('contactId', params.contactId);
-  if (params.limit !== undefined) qs.set('limit', String(params.limit));
-  if (params.offset !== undefined) qs.set('offset', String(params.offset));
-  const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiFetch(`/api/opportunities${suffix}`);
-}
-
-/** GET /api/opportunities/:id — single opportunity detail. */
-export async function fetchOpportunity(id: string): Promise<Opportunity> {
-  const data = await apiFetch<{ opportunity: Opportunity }>(`/api/opportunities/${id}`);
-  return data.opportunity;
-}
-
-/** PATCH /api/opportunities/:id — resolution status only (reviewed/responded/dismissed). */
-export async function updateOpportunityStatus(
-  id: string,
-  status: 'reviewed' | 'responded' | 'dismissed',
-): Promise<Opportunity> {
-  const data = await apiFetch<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, {
-    method: 'PATCH',
-    body: { status },
-  });
-  return data.opportunity;
-}
-
-/**
- * POST /api/inbox/:id/reply — send a reply/message for an opportunity.
- * The opportunity id *is* the inbox_item id, so this reuses the existing,
- * capability-gated inbox reply endpoint directly rather than adding a
- * parallel one. Marks the opportunity responded on the backend.
- */
-export async function sendOpportunityReply(
-  id: string,
-  text: string,
-): Promise<{ sentText: string; channel: string }> {
-  return apiFetch(`/api/inbox/${id}/reply`, { method: 'POST', body: { text } });
-}
-
-// ============================================================
 // Platform capabilities — the backend's capability matrix, used to show
 // honest "limited access" messaging per platform instead of assuming parity.
 // ============================================================
@@ -708,6 +598,22 @@ export interface DashboardData {
     needsReply: number;
     activeAutomations: number;
   };
+  /** How fans respond to what automations send — raw counts from platform
+   *  receipts (messages sent → delivered → read), the engine's user_replied
+   *  events, and tracked-link counters. The UI derives rates from these so
+   *  denominators stay visible. Optional because a backend deployed before
+   *  this block existed simply omits it — the UI must render without it. */
+  engagement?: {
+    dmsSent: number;
+    dmsDelivered: number;
+    dmsRead: number;
+    mediaDmsSent: number;
+    contactsDmd: number;
+    contactsReplied: number;
+    linkSends: number;
+    linkClicks: number;
+    uniqueLinkClicks: number;
+  };
   topPostsByWarmLeads: {
     id: string; platform: string; caption: string | null; url: string | null;
     media_url: string | null; account_username: string | null;
@@ -893,15 +799,18 @@ export async function fetchContacts(filter: {
   tag?: string;
   needsReply?: boolean;
   search?: string;
+  /** 'recent' orders by last activity; default orders by lead score. */
+  sort?: 'score' | 'recent';
   limit?: number;
   offset?: number;
-} = {}): Promise<{ contacts: ContactRecord[]; total: number; stages: string[] }> {
+} = {}): Promise<{ contacts: ContactRecord[]; total: number; stages: string[]; allTags: string[] }> {
   const qs = new URLSearchParams();
   if (filter.stage) qs.set('stage', filter.stage);
   if (filter.platform) qs.set('platform', filter.platform);
   if (filter.tag) qs.set('tag', filter.tag);
   if (filter.needsReply !== undefined) qs.set('needsReply', String(filter.needsReply));
   if (filter.search) qs.set('search', filter.search);
+  if (filter.sort) qs.set('sort', filter.sort);
   if (filter.limit !== undefined) qs.set('limit', String(filter.limit));
   if (filter.offset !== undefined) qs.set('offset', String(filter.offset));
   const query = qs.toString();
