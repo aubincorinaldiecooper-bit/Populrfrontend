@@ -101,6 +101,38 @@ describe('testAutomation — missing AI preview is not a failure', () => {
     expect(result.note).not.toMatch(/temporarily unavailable/i);
   });
 
+  it('a holding-reply decision previews the warm reply plus the queued-for-you note', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        available: true,
+        decision: {
+          intent: 'general_engagement', confidence: 0.8, replyType: 'dm',
+          replyText: 'Great question — let me check and get back to you!',
+          linkToSend: null,
+          needsHuman: true, shouldAutoReply: false,
+          reason: 'Not covered by the instructions.',
+        },
+      }),
+    })));
+    try {
+      const result = await testAutomation(input({ sampleText: 'guide — do you ship to Canada?' }));
+      expect(result.needsHuman).toBe(true);
+      expect(result.dm).toBe('Great question — let me check and get back to you!');
+      expect(result.note).toMatch(/queued for you/i);
+
+      // Comment-only automations post the holding reply publicly — their DM
+      // branch never runs in production, and the preview must not claim one.
+      const commentOnly = await testAutomation(input({
+        sampleText: 'guide — do you ship to Canada?', replyChannel: 'comment',
+      }));
+      expect(commentOnly.publicReply).toBe('Great question — let me check and get back to you!');
+      expect(commentOnly.dm).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('an AI escalation decision suppresses reply previews — nothing sends, so nothing renders as sending', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

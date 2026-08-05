@@ -17,7 +17,9 @@ export default function AIInstructionField({
         </button>
       </div>
       <p className="text-[12px] text-[#6B6B6B] mb-2">
-        Tell Populr how to respond, what information to provide, the tone to use, and what action the creator wants the person to take.
+        Whatever you write here is what the AI says — state the facts you want shared, e.g.
+        &ldquo;if asked about price, say prices are coming soon.&rdquo; Questions you haven&apos;t
+        covered get a friendly holding reply and land in your queue for a personal follow-up.
       </p>
       <textarea
         id="ai-instructions"
@@ -28,7 +30,7 @@ export default function AIInstructionField({
         className="w-full h-28 border border-[#E8E4DF] rounded-xl p-3 text-[13px] placeholder:text-[#9B9B8F] resize-none focus:outline-none focus-visible:border-chartreuse focus-visible:ring-2 focus-visible:ring-chartreuse/20 transition-all disabled:opacity-50 disabled:bg-[#FAFAF8]"
       />
       <div className="flex items-center justify-between mt-1">
-        <p className="text-[11px] text-[#9B9B8F]">{aiEnabled ? 'Personalizes replies using this plus your brand voice from Settings.' : 'Enable AI replies to use these instructions.'}</p>
+        <p className="text-[11px] text-[#9B9B8F]">{aiEnabled ? 'Sensitive messages (refunds, complaints) always come to you — the AI never handles those alone.' : 'Enable AI replies to use these instructions.'}</p>
         <p className="text-[11px] text-[#9B9B8F] flex-shrink-0">{value.length}/{MAX_LENGTH}</p>
       </div>
     </div>
