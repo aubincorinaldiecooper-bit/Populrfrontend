@@ -1069,11 +1069,26 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     );
   }
   const d = resp.decision;
-  // An escalation decision means NOTHING is sent — the conversation queues
-  // for a human. Reply previews must vanish in that case: with them present
-  // the renderer shows send bubbles instead of the escalation notice, and
-  // the preview claims an auto-reply production would never make.
   if (d.needsHuman) {
+    // Holding reply: for questions the instructions don't cover, the AI
+    // sends a warm fact-free acknowledgment and then queues the
+    // conversation — so the preview shows that reply plus what happens next.
+    if (d.replyText) {
+      return {
+        matched: true,
+        keyword,
+        intent: d.intent,
+        confidence: d.confidence,
+        needsHuman: true,
+        reason: d.reason,
+        note: 'After this reply, the conversation is queued for you to follow up personally.',
+        publicReply: null,
+        dm: d.replyText,
+      };
+    }
+    // Pure escalation: NOTHING is sent. Previews must vanish — with them
+    // present the renderer shows send bubbles instead of the escalation
+    // notice, claiming an auto-reply production would never make.
     return {
       matched: true,
       keyword,
