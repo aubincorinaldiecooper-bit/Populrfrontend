@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { isOnboardingComplete } from "../lib/onboarding";
+import { consumeReturnTo } from "../lib/returnTo";
 
 const CREAM = "#F3F0EC";
 const BLACK = "#111111";
@@ -20,7 +22,7 @@ const BLACK = "#111111";
  * onboardingComplete flag can never accidentally sign someone in.
  */
 export default function AuthCompletePage() {
-  const { session, loading, refresh } = useAuth();
+  const { session, user, loading, refresh } = useAuth();
   const navigate = useNavigate();
   const refreshedOnce = useRef(false);
 
@@ -49,15 +51,19 @@ export default function AuthCompletePage() {
   useEffect(() => {
     if (loading) return;
     if (session) {
-      const onboardingComplete = readOnboardingComplete();
-      navigate(onboardingComplete ? "/" : "/connect", { replace: true });
+      if (!isOnboardingComplete(user?.id)) {
+        navigate("/connect", { replace: true });
+        return;
+      }
+      // Land where the user was actually headed before the auth bounce.
+      navigate(consumeReturnTo() ?? "/", { replace: true });
     } else {
       // No session after the callback resolved → treat as a failed
       // restoration and bounce back to /login with a safe error code.
       // The LoginPage renders human copy for this code.
       navigate("/login?error=session_failed", { replace: true });
     }
-  }, [loading, session, navigate]);
+  }, [loading, session, user?.id, navigate]);
 
   return (
     <div
@@ -72,10 +78,3 @@ export default function AuthCompletePage() {
   );
 }
 
-function readOnboardingComplete(): boolean {
-  try {
-    return window.localStorage.getItem("populr.onboardingComplete") === "true";
-  } catch {
-    return false;
-  }
-}

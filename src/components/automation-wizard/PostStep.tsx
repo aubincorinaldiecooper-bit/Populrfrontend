@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, AlertCircle, Instagram, RefreshCw, Search } from 'lucide-react';
-import { fetchPostsLibrary, syncPostsLibrary, findMissingPost, ApiError } from '../../lib/api';
+import { Loader2, AlertCircle, Instagram, RefreshCw } from 'lucide-react';
+import { fetchPostsLibrary, syncPostsLibrary } from '../../lib/api';
 import type { Post } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import SelectedPostCard from './SelectedPostCard';
-import PostPickerDrawer from './PostPickerDrawer';
+import PostPicker from './PostPicker';
 import type { AutomationWizardApi } from './useAutomationWizard';
 
 export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
@@ -16,13 +16,6 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // "Find a specific post by URL" fallback for anything Zernio's account
-  // sync missed (older posts, archived posts, edge cases).
-  const [missingUrl, setMissingUrl] = useState('');
-  const [findingMissing, setFindingMissing] = useState(false);
-  const [missingError, setMissingError] = useState<string | null>(null);
 
   // syncPostsLibrary can 200 with zero posts stored AND a real reason why
   // (Zernio auth/rate-limit/scope failure) in its `errors` array — that's
@@ -85,27 +78,6 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
       setSyncing(false);
     }
   }, [state.accountId, load]);
-
-  const handleFindMissing = useCallback(async () => {
-    const url = missingUrl.trim();
-    if (!url || !state.accountId) return;
-    setFindingMissing(true);
-    setMissingError(null);
-    try {
-      const { post } = await findMissingPost(state.accountId, url);
-      // Splice into the visible list (if not already there) and select.
-      setPosts(prev => (prev.some(p => p.id === post.id) ? prev : [post, ...prev]));
-      update('post', post);
-      setMissingUrl('');
-    } catch (err) {
-      const msg = err instanceof ApiError && err.status === 404
-        ? "Populr couldn't find a post at that URL for this account."
-        : err instanceof Error ? err.message : 'Could not look up that post.';
-      setMissingError(msg);
-    } finally {
-      setFindingMissing(false);
-    }
-  }, [missingUrl, state.accountId, update]);
 
   useEffect(() => {
     if (!state.accountId) return;
@@ -193,84 +165,40 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
         </div>
       )}
 
-      {!busy && !error && !state.post && (
-        <div className="pop-card p-8 flex flex-col items-center text-center gap-3">
-          <Instagram size={22} className="text-[#9B9B8F]" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#111111]">
-              {posts.length === 0 ? 'No Instagram posts found' : 'No post selected'}
-            </p>
-            <p className="text-[12px] text-[#6B6B6B] mt-1">
-              {posts.length === 0
-                ? syncNote
-                  ? 'See the sync issue above — you can retry, or paste a post URL below in the meantime.'
-                  : "We synced your account and didn't find any posts. Try Sync my posts again, or paste a post URL below."
-                : 'Pick the post you want this automation to watch.'}
-            </p>
-          </div>
-          {posts.length > 0 && (
-            <button onClick={() => setDrawerOpen(true)} className="pop-btn-primary">
-              Choose a post
-            </button>
-          )}
-        </div>
-      )}
-
+      {/* The chosen post stays pinned above the grid so "which post is this
+          automation watching" is answerable without scrolling back. */}
       {!busy && !error && state.post && (
         <SelectedPostCard
           post={state.post}
           handle={account.username}
           triggerSummary={triggerSummary}
-          onChangePost={() => setDrawerOpen(true)}
         />
       )}
 
-      {/* Find-by-URL fallback. Kept visible on the empty state (the primary
-          case) and folded under a subtle divider when the library has posts,
-          so the drawer stays the main path for users who already synced. */}
-      {!busy && !error && (
-        <div className="pop-card p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Search size={14} className="text-[#6B6B6B]" />
-            <p className="text-[13px] font-semibold text-[#111111]">Find a specific post by URL</p>
+      {!busy && !error && posts.length === 0 && (
+        <div className="pop-card p-8 flex flex-col items-center text-center gap-3">
+          <Instagram size={22} className="text-[#9B9B8F]" />
+          <div>
+            <p className="text-[13px] font-semibold text-[#111111]">No Instagram posts found</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-1 max-w-[380px]">
+              {syncNote
+                ? 'See the sync issue above, then try syncing again.'
+                : "We synced this account and didn't find any posts yet. If you've posted recently, sync again in a moment."}
+            </p>
           </div>
-          <p className="text-[12px] text-[#6B6B6B] mb-3">
-            If the post you&apos;re looking for isn&apos;t in the list yet, paste its
-            Instagram URL and Populr will fetch it directly.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={missingUrl}
-              onChange={e => { setMissingUrl(e.target.value); setMissingError(null); }}
-              placeholder="https://www.instagram.com/p/..."
-              className="flex-1 border border-[#E8E4DF] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-chartreuse"
-              disabled={findingMissing}
-            />
-            <button
-              onClick={handleFindMissing}
-              disabled={findingMissing || !missingUrl.trim()}
-              className="pop-btn-primary text-[13px] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {findingMissing ? 'Finding…' : 'Find'}
-            </button>
-          </div>
-          {missingError && (
-            <p className="text-[12px] text-[#DC2626] mt-2">{missingError}</p>
-          )}
+          <button onClick={handleSync} disabled={syncing} className="pop-btn-primary disabled:opacity-40">
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />Sync my posts
+          </button>
         </div>
       )}
 
-      <PostPickerDrawer
-        open={drawerOpen}
-        posts={posts}
-        loading={loading}
-        error={error}
-        selectedId={state.post?.id ?? null}
-        onCancel={() => setDrawerOpen(false)}
-        onRetry={() => void load()}
-        onUse={post => { update('post', post); setDrawerOpen(false); }}
-      />
+      {!busy && !error && posts.length > 0 && (
+        <PostPicker
+          posts={posts}
+          selectedId={state.post?.id ?? null}
+          onSelect={post => update('post', post)}
+        />
+      )}
     </div>
   );
 }

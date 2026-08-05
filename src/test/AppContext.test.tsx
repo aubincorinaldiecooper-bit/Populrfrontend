@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { authClientMock, resetAuthClientMock } from './authClient.mock';
 import { AppProvider, useApp } from '../context/AppContext';
+import { AuthProvider } from '../context/AuthContext';
 import type { ConnectedAccount } from '../lib/api';
 
 /* Regression coverage for a bug found in PR review: refreshConnectedAccounts
@@ -35,13 +37,25 @@ function Harness() {
   );
 }
 
+beforeEach(() => {
+  resetAuthClientMock();
+  authClientMock.getSession.mockResolvedValue({
+    data: {
+      session: { id: 'sess_1', userId: 'user_1', expiresAt: new Date(Date.now() + 86_400_000).toISOString() },
+      user: { id: 'user_1', email: 'creator@example.test', name: 'Creator' },
+    },
+  });
+});
+
 describe('AppContext — refreshConnectedAccounts', () => {
   it('transitions a platform back to idle once the backend reports it disconnected', async () => {
     mockAccounts = [];
     render(
-      <AppProvider>
-        <Harness />
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <Harness />
+        </AppProvider>
+      </AuthProvider>
     );
 
     // Bring it to "connected" first, matching a real prior-connection state.

@@ -56,7 +56,7 @@ export default function HomePage() {
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see your live stats here.
+              Populr can&apos;t reach its server, so your stats can&apos;t be loaded right now.
             </p>
           </div>
         </div>

@@ -343,7 +343,7 @@ export default function OpportunitiesPage() {
         <Banner
           status="warning"
           title="Populr isn't connected to a backend yet"
-          description="Set VITE_API_URL to your Populr backend to see real opportunities here. This page never shows placeholder data in its place."
+          description="Populr can't reach its server, so your opportunities can't be loaded right now. This page never shows placeholder data in their place."
           className="mb-6"
         />
       )}

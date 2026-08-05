@@ -2,16 +2,14 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Home, Zap, Compass, Users, Waypoints, Settings, Menu, X, Plus, MoreVertical,
+  Home, Zap, Compass, Users, Waypoints, Settings, Menu, X, Plus,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
-import { resolveIdentity } from '../lib/identity';
+import AccountMenu from './AccountMenu';
 
 // Populr's beta direction is automation-first: the primary CTA leads
-// straight to the automation builder. "Channels" is the product label for
-// the /connections route. Publishing surfaces (Create Post, Content, etc.)
-// stay reachable by URL but out of primary nav.
+// straight to the automation builder. "Channels" is this surface's own
+// route (/connections redirects to it). Publishing surfaces (Create Post,
+// Content, etc.) stay reachable by URL but out of primary nav.
 const navItems = [
   { path: '/', label: 'Home', icon: Home },
   { path: '/automations', label: 'Automations', icon: Zap },
@@ -26,13 +24,7 @@ function isActivePath(pathname: string, path: string): boolean {
   return pathname.startsWith(path);
 }
 
-function NavContent({
-  pathname, identity, onNavigate,
-}: {
-  pathname: string;
-  identity: ReturnType<typeof resolveIdentity>;
-  onNavigate: () => void;
-}) {
+function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
   return (
     <>
       {/* Brand */}
@@ -74,35 +66,14 @@ function NavContent({
         })}
       </nav>
 
-      {/* User */}
-      <Link
-        to="/settings"
-        onClick={onNavigate}
-        className="flex items-center gap-3 w-full p-2 rounded-full hover:bg-surface-container-high transition-colors"
-      >
-        {identity.avatarUrl ? (
-          <img src={identity.avatarUrl} alt={identity.name} className="w-10 h-10 rounded-full object-cover border border-surface-variant" />
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-surface-container-high border border-surface-variant flex items-center justify-center text-[13px] font-semibold text-on-surface-variant flex-shrink-0">
-            {identity.initials}
-          </div>
-        )}
-        <div className="text-left flex-1 min-w-0">
-          <p className="font-semibold text-[14px] text-on-surface truncate">{identity.name}</p>
-          {identity.handle && <p className="font-label text-[11px] text-on-surface-variant truncate">{identity.handle}</p>}
-        </div>
-        <MoreVertical size={18} className="text-on-surface-variant flex-shrink-0" />
-      </Link>
+      <AccountMenu onNavigate={onNavigate} />
     </>
   );
 }
 
 export default function Sidebar() {
   const location = useLocation();
-  const { accounts } = useApp();
-  const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const identity = resolveIdentity(user, accounts);
 
   // The drawer closes via each nav link's onNavigate handler below, so a
   // route-change effect would be redundant.
@@ -129,7 +100,7 @@ export default function Sidebar() {
         transition={{ duration: 0.4, ease: [0.24, 1, 0.4, 1] }}
         className="hidden md:flex fixed left-0 top-0 h-screen w-[280px] bg-transparent border-r border-surface-variant z-50 flex-col p-6 gap-7"
       >
-        <NavContent pathname={location.pathname} identity={identity} onNavigate={closeMobileNav} />
+        <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
       </motion.aside>
 
       {/* Mobile drawer */}
@@ -150,7 +121,7 @@ export default function Sidebar() {
               transition={{ type: 'tween', duration: 0.28, ease: [0.24, 1, 0.4, 1] }}
               className="md:hidden fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-surface-variant z-[50] flex flex-col p-6 gap-7"
             >
-              <NavContent pathname={location.pathname} identity={identity} onNavigate={closeMobileNav} />
+              <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
             </motion.aside>
           </>
         )}

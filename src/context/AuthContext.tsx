@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { authClient, clearApiAuthToken } from "../lib/authClient";
+import { onUnauthorized } from "../lib/api";
 
 /**
  * Minimal projection of the Better Auth session/user shape we actually
@@ -88,6 +89,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
+
+  // The backend is the authority on whether this session is still good. When
+  // it answers 401, end the session here so the route gate sends the user to
+  // /login — previously nothing inspected the status, so an expired session
+  // left the full authenticated shell (name, avatar, nav) rendering over
+  // pages that could only show "couldn't load" banners, until a manual
+  // reload. Re-verify with the auth service first so a single stray 401
+  // can't sign out a user whose session is actually fine.
+  useEffect(() => {
+    onUnauthorized(() => { void refresh(); });
+    return () => onUnauthorized(null);
+  }, [refresh]);
+
+  // A session that has already expired by the clock shouldn't keep rendering
+  // an authenticated shell until something happens to make a request.
+  useEffect(() => {
+    if (!session?.expiresAt) return;
+    const msLeft = new Date(session.expiresAt).getTime() - Date.now();
+    if (!Number.isFinite(msLeft)) return;
+    // setTimeout clamps above ~24.8 days; re-checking on that boundary is
+    // harmless and keeps the arithmetic honest for long-lived sessions.
+    // An already-expired session uses the same path with a zero delay, so
+    // the re-check always lands in its own tick rather than mid-render.
+    const delay = Math.min(Math.max(msLeft, 0), 2_147_483_647);
+    const timer = setTimeout(() => { void refresh(); }, delay);
+    return () => clearTimeout(timer);
+  }, [session?.expiresAt, refresh]);
 
   return (
     <AuthContext.Provider value={{ session, user, loading: session === undefined, refresh, signOut }}>

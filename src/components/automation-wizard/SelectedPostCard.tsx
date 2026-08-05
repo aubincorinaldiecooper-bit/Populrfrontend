@@ -1,4 +1,4 @@
-import { Instagram, MessageCircle, Heart, RefreshCw } from 'lucide-react';
+import { Instagram, MessageCircle, Heart, Check } from 'lucide-react';
 import type { Post } from '../../lib/api';
 
 function timeAgo(iso: string | null): string {
@@ -13,10 +13,13 @@ function timeAgo(iso: string | null): string {
 }
 
 export default function SelectedPostCard({
-  post, handle, triggerSummary, onChangePost,
-}: { post: Post; handle: string | null; triggerSummary: string; onChangePost: () => void }) {
+  post, handle, triggerSummary,
+}: { post: Post; handle: string | null; triggerSummary: string }) {
   return (
-    <div className="pop-card p-4">
+    <div className="pop-card p-4 border-[#111111]">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#5C6B00] flex items-center gap-1 mb-2.5">
+        <Check size={11} strokeWidth={3} />Watching this post
+      </p>
       <div className="flex gap-3">
         <div className="w-16 h-16 rounded-xl bg-[#FAFAF8] flex-shrink-0 overflow-hidden">
           {post.media_url ? (
@@ -37,11 +40,8 @@ export default function SelectedPostCard({
           </div>
         </div>
       </div>
-      <div className="mt-3 pt-3 border-t border-[#F0EEEA] flex items-center justify-between gap-3">
+      <div className="mt-3 pt-3 border-t border-[#F0EEEA]">
         <p className="text-[11px] text-[#6B6B6B]">{triggerSummary}</p>
-        <button onClick={onChangePost} className="pop-btn-ghost text-[12px] py-1.5 px-2.5 flex-shrink-0">
-          <RefreshCw size={12} />Change post
-        </button>
       </div>
     </div>
   );

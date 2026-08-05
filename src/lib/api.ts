@@ -58,6 +58,24 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Notified when the backend rejects a call with 401, i.e. the session this
+ * client believes it has is no longer valid server-side.
+ *
+ * A module-level hook rather than an import of AuthContext: this file is
+ * imported *by* the context, so calling into it directly would be circular.
+ * AuthProvider registers itself on mount (see onUnauthorized).
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function onUnauthorized(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
+function notifyUnauthorized(): void {
+  unauthorizedHandler?.();
+}
+
 async function apiFetch<T>(
   path: string,
   init?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
@@ -79,10 +97,18 @@ async function apiFetch<T>(
     body: init?.body ? JSON.stringify(init.body) : undefined,
   });
   if (!res.ok) {
+    // An expired session used to surface as an ordinary inline error on
+    // whichever page happened to fetch — "Could not load contacts." — while
+    // the app kept rendering the signed-out user's name, avatar and shell
+    // indefinitely. Nothing anywhere inspected the status. Notifying here
+    // lets AuthContext end the session once, from one place, so the route
+    // gate can do its job.
+    if (res.status === 401) notifyUnauthorized();
+
     // Surface the backend's own error/message when it sends one (e.g.
     // { error: "disallowed_return_url", message: "..." }), not just the
     // HTTP status — that's the difference between "connect is broken" and
-    // "ALLOWED_FRONTEND_ORIGINS isn't set" being visible without devtools.
+    // a misconfigured allowlist being visible without devtools.
     const parsed = await res
       .json()
       .then((body: { error?: string; message?: string; details?: string[] }) => body)
@@ -819,10 +845,12 @@ export async function syncPostsLibrary(accountId?: string): Promise<{ accounts: 
   return apiFetch('/api/posts/sync', { method: 'POST', body: accountId ? { accountId } : {} });
 }
 
-/** POST /api/posts/find-missing — "Can't find a post? Paste the URL." */
-export async function findMissingPost(accountId: string, url: string): Promise<{ post: PostLibraryItem; source: 'zernio' | 'url_only' }> {
-  return apiFetch('/api/posts/find-missing', { method: 'POST', body: { accountId, url } });
-}
+/* The "paste a post URL" fallback that used to live here (POST
+ * /api/posts/find-missing) has been removed from the product: it could store
+ * a placeholder post row carrying no metrics and no thumbnail, which then
+ * looked like a real synced post everywhere downstream. The automation wizard
+ * now selects only from genuinely synced posts. The backend endpoint still
+ * exists but is intentionally unused by this client. */
 
 // ============================================================
 // Compatibility shims for the restored redesigned frontend.
