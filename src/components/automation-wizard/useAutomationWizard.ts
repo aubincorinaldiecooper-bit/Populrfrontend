@@ -55,6 +55,9 @@ export interface WizardState {
   commentReplyBody: string;
   dmBody: string;
   linkUrl: string;
+  /** Optional image/video URL attached to the DM — Zernio's sendDM carries
+   *  it, and the engine sends it capability-gated per platform. */
+  mediaUrl: string;
   aiEnabled: boolean;
   aiInstructions: string;
   active: boolean;
@@ -64,7 +67,7 @@ export interface WizardState {
 function blankState(): WizardState {
   return {
     automationId: null, name: '', type: null, accountId: null, post: null,
-    triggerKeywords: [], commentReplyBody: '', dmBody: '', linkUrl: '',
+    triggerKeywords: [], commentReplyBody: '', dmBody: '', linkUrl: '', mediaUrl: '',
     aiEnabled: true, aiInstructions: '', active: false, dirty: false,
   };
 }
@@ -81,6 +84,7 @@ function initialStateFor(editAutomation: Automation | null): WizardState {
     commentReplyBody: editAutomation.comment_reply_body ?? '',
     dmBody: editAutomation.message_body ?? '',
     linkUrl: editAutomation.link_url ?? '',
+    mediaUrl: editAutomation.media_url ?? '',
     aiEnabled: editAutomation.ai_enabled,
     aiInstructions: editAutomation.ai_instructions ?? '',
     active: editAutomation.active,
@@ -204,6 +208,12 @@ export function useAutomationWizard() {
       commentReplyBody: state.commentReplyBody.trim() ? state.commentReplyBody.trim() : null,
       messageBody: state.dmBody.trim() ? state.dmBody.trim() : null,
       linkUrl: state.linkUrl.trim() ? state.linkUrl.trim() : null,
+      mediaUrl: state.mediaUrl.trim() ? state.mediaUrl.trim() : null,
+      // The backend validates the media type against the platform's DM
+      // capabilities, keyed by responseType.
+      responseType: state.mediaUrl.trim()
+        ? (/\.(mp4|mov|webm)(\?|$)/i.test(state.mediaUrl.trim()) ? 'video' : 'image')
+        : 'text',
       aiEnabled: state.aiEnabled,
       aiInstructions: state.aiInstructions.trim() ? state.aiInstructions.trim() : null,
       active: activate,

@@ -78,6 +78,24 @@ describe('testAutomation — previews the configured replies, not placeholders',
     const result = await testAutomation(input({ sampleText: 'guide', aiEnabled: false }));
     expect(result.publicReply).toBe('Just sent you a DM! 📩');
   });
+
+  it('the configured media rides along with the DM preview — and never with a comment-only reply', async () => {
+    const withMedia = await testAutomation(input({
+      sampleText: 'guide',
+      aiEnabled: false,
+      dmBody: 'Here you go, {{name}}!',
+      mediaUrl: 'https://creator.example/preview.jpg',
+    }));
+    expect(withMedia.dmMediaUrl).toBe('https://creator.example/preview.jpg');
+
+    const commentOnly = await testAutomation(input({
+      sampleText: 'guide',
+      aiEnabled: false,
+      replyChannel: 'comment',
+      mediaUrl: 'https://creator.example/preview.jpg',
+    }));
+    expect(commentOnly.dmMediaUrl ?? null).toBeNull();
+  });
 });
 
 describe('testAutomation — missing AI preview is not a failure', () => {

@@ -67,6 +67,7 @@ function sanitizeState(value: unknown): WizardState | null {
     commentReplyBody: typeof s.commentReplyBody === 'string' ? s.commentReplyBody : '',
     dmBody: typeof s.dmBody === 'string' ? s.dmBody : '',
     linkUrl: typeof s.linkUrl === 'string' ? s.linkUrl : '',
+    mediaUrl: typeof s.mediaUrl === 'string' ? s.mediaUrl : '',
     aiEnabled: typeof s.aiEnabled === 'boolean' ? s.aiEnabled : true,
     aiInstructions: typeof s.aiInstructions === 'string' ? s.aiInstructions : '',
     active: s.active === true,
