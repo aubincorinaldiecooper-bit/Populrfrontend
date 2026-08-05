@@ -7,12 +7,12 @@ interface WizardFooterProps {
   saving: boolean;
   onBack: () => void;
   onContinue: () => void;
-  onSaveDraft: () => void;
+  onSavePaused: () => void;
   onActivate: () => void;
 }
 
 export default function WizardFooter({
-  isFirstStep, isReview, canProceed, saving, onBack, onContinue, onSaveDraft, onActivate,
+  isFirstStep, isReview, canProceed, saving, onBack, onContinue, onSavePaused, onActivate,
 }: WizardFooterProps) {
   return (
     <div className="sticky bottom-0 bg-white border-t border-[#E8E4DF] px-6 py-4 flex-shrink-0 z-10">
@@ -22,8 +22,11 @@ export default function WizardFooter({
         </button>
         {isReview ? (
           <div className="flex items-center gap-2">
-            <button onClick={onSaveDraft} disabled={saving} className="pop-btn-tertiary disabled:opacity-50">
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}Save draft
+            {/* "Save as paused" creates the real (validated) automation with
+                active=false — distinct from the local, unfinished drafts in
+                the Automations page's Drafts section. */}
+            <button onClick={onSavePaused} disabled={saving} className="pop-btn-tertiary disabled:opacity-50">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}Save as paused
             </button>
             <button onClick={onActivate} disabled={saving} className="pop-btn-primary disabled:opacity-50">
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}Activate automation

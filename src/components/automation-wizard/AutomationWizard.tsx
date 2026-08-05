@@ -10,17 +10,19 @@ import ReviewStep from './ReviewStep';
 
 export default function AutomationWizard() {
   const wizard = useAutomationWizard();
-  const { state, isEditing, currentStep, steps, stepIndex, canProceed, saving, goNext, goBack, cancel, save } = wizard;
+  const { state, isEditing, currentStep, steps, stepIndex, canProceed, saving, draftSaved, goNext, goBack, cancel, save } = wizard;
 
   useEffect(() => {
+    // Only edit mode has anything to lose on unload: new automations
+    // autosave to the Drafts section as the user types.
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!state.dirty) return;
+      if (!isEditing || !state.dirty) return;
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [state.dirty]);
+  }, [isEditing, state.dirty]);
 
   return (
     <div className="h-screen flex flex-col bg-cream">
@@ -34,6 +36,9 @@ export default function AutomationWizard() {
             <p className="text-[11px] text-[#6B6B6B]">This is where you set up your Instagram automation.</p>
           </div>
         </div>
+        {!isEditing && draftSaved && (
+          <span className="text-[11px] text-[#9B9B8F] flex-shrink-0">Saved to drafts</span>
+        )}
       </div>
 
       <WizardStepper steps={steps} currentStep={currentStep} />
@@ -64,7 +69,7 @@ export default function AutomationWizard() {
         saving={saving}
         onBack={stepIndex === 0 ? cancel : goBack}
         onContinue={goNext}
-        onSaveDraft={() => save(false)}
+        onSavePaused={() => save(false)}
         onActivate={() => save(true)}
       />
     </div>

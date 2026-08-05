@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
 import {
-  Search, Play, Pause, Zap, ArrowLeft, Plus, Loader2, AlertCircle, MessageCircle,
+  Search, Play, Pause, Zap, ArrowLeft, Plus, Loader2, AlertCircle, MessageCircle, PenLine, Trash2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
@@ -12,8 +12,9 @@ import {
 } from '../lib/api';
 import type { Automation, AutomationEvent } from '../lib/api';
 import { AUTOMATION_TYPES, automationToTypeCard } from '../components/automation-wizard/useAutomationWizard';
+import { listWizardDrafts, deleteWizardDraft, type WizardDraft } from '../components/automation-wizard/wizardDrafts';
 
-type StatusTab = 'all' | 'active' | 'paused';
+type StatusTab = 'all' | 'active' | 'paused' | 'drafts';
 
 function automationTypeLabel(a: Pick<Automation, 'trigger_type' | 'reply_channel'>): string {
   return AUTOMATION_TYPES[automationToTypeCard(a)].title;
@@ -25,6 +26,9 @@ export default function AutomationsPage() {
   const backendConfigured = isBackendConfigured();
 
   const [automations, setAutomations] = useState<Automation[]>([]);
+  // Unfinished automations, autosaved by the wizard on this device — see
+  // components/automation-wizard/wizardDrafts.ts. Local reads, no fetch.
+  const [drafts, setDrafts] = useState<WizardDraft[]>(() => listWizardDrafts());
   const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -61,6 +65,7 @@ export default function AutomationsPage() {
   const paused = automations.filter(a => !a.active);
 
   const filtered = useMemo(() => {
+    if (statusTab === 'drafts') return [];
     let result = [...automations];
     if (search) {
       const q = search.toLowerCase();
@@ -70,6 +75,14 @@ export default function AutomationsPage() {
     if (statusTab === 'paused') result = result.filter(a => !a.active);
     return result;
   }, [automations, search, statusTab]);
+
+  const visibleDrafts = useMemo(() => {
+    if (statusTab !== 'all' && statusTab !== 'drafts') return [];
+    if (!search) return drafts;
+    const q = search.toLowerCase();
+    return drafts.filter(d =>
+      d.state.name.toLowerCase().includes(q) || d.state.triggerKeywords.some(k => k.includes(q)));
+  }, [drafts, search, statusTab]);
 
   const toggleStatus = async (a: Automation) => {
     try {
@@ -82,6 +95,18 @@ export default function AutomationsPage() {
   };
 
   const handleEdit = (a: Automation) => navigate('/automations/new', { state: { automation: a } });
+
+  const resumeDraft = (d: WizardDraft) => navigate('/automations/new', { state: { draftId: d.id } });
+
+  const removeDraft = (d: WizardDraft) => {
+    if (!window.confirm('Delete this draft? This can\'t be undone.')) return;
+    deleteWizardDraft(d.id);
+    const remaining = listWizardDrafts();
+    setDrafts(remaining);
+    // Don't leave the user stranded on a tab that no longer exists.
+    if (remaining.length === 0 && statusTab === 'drafts') setStatusTab('all');
+    showToast('Draft deleted', 'success');
+  };
 
   if (!backendConfigured) {
     return (
@@ -157,7 +182,9 @@ export default function AutomationsPage() {
     <div className="pop-page">
       <PageHeader
         title="Automations"
-        subtitle={loading ? 'Loading...' : `${active.length} active · ${automations.length} total`}
+        subtitle={loading
+          ? 'Loading...'
+          : `${active.length} active · ${automations.length} total${drafts.length > 0 ? ` · ${drafts.length} draft${drafts.length === 1 ? '' : 's'}` : ''}`}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
             <div className="relative w-full sm:w-auto">
@@ -186,6 +213,9 @@ export default function AutomationsPage() {
             { key: 'all' as StatusTab, label: 'All', count: automations.length },
             { key: 'active' as StatusTab, label: 'Active', count: active.length },
             { key: 'paused' as StatusTab, label: 'Paused', count: paused.length },
+            // The Drafts tab only exists while there's something in it —
+            // like a post composer's drafts folder.
+            ...(drafts.length > 0 ? [{ key: 'drafts' as StatusTab, label: 'Drafts', count: drafts.length }] : []),
           ].map(t => (
             <button key={t.key} onClick={() => setStatusTab(t.key)}
               className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${statusTab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
@@ -195,12 +225,75 @@ export default function AutomationsPage() {
         </div>
       )}
 
+      {/* Drafts — unfinished automations the wizard autosaved on this device.
+          Rendered ahead of the (backend-loaded) list so they're visible even
+          while automations are still loading. */}
+      {!error && visibleDrafts.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-baseline gap-2 mb-3">
+            <h2 className="font-geist font-semibold text-[13px] text-[#111111]">Drafts</h2>
+            <span className="text-[11px] text-[#9B9B8F]">Unfinished automations, saved on this device</span>
+          </div>
+          <div className="space-y-3">
+            {visibleDrafts.map(d => (
+              <div key={d.id} className="pop-card p-4 pop-card-hover cursor-pointer border-dashed" onClick={() => resumeDraft(d)}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#FAFAF8]">
+                      <PenLine size={18} className="text-[#6B6B6B]" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-geist font-semibold text-[13px] text-[#111111] truncate">
+                          {d.state.name.trim() || 'Untitled automation'}
+                        </h3>
+                        <StatusPill status="draft" className="text-[10px]" />
+                      </div>
+                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                        {d.state.type ? AUTOMATION_TYPES[d.state.type].title : 'Type not chosen yet'}
+                      </p>
+                      {d.state.triggerKeywords.length > 0 && (
+                        <div className="flex gap-1 flex-wrap mt-1.5">
+                          {d.state.triggerKeywords.map(k => (
+                            <span key={k} className="bg-[#FAFAF8] text-[#6B6B6B] text-[10px] px-2 py-0.5 rounded-full">{k}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={e => { e.stopPropagation(); resumeDraft(d); }} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all" title="Continue setup">
+                      <PenLine size={14} className="text-[#6B6B6B]" />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); removeDraft(d); }} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all" title="Delete draft">
+                      <Trash2 size={14} className="text-[#DC2626]" />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#F0EEEA] flex items-center justify-between">
+                  <p className="text-[11px] text-[#9B9B8F] capitalize">instagram</p>
+                  <span className="text-[10px] text-[#9B9B8F]">Saved {new Date(d.savedAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
           <Loader2 size={20} className="animate-spin mr-2" /> Loading automations...
         </div>
+      ) : !error && statusTab === 'drafts' ? (
+        visibleDrafts.length === 0 && (
+          <EmptyState icon="automations" title="No drafts found" description="Automations you start but don't finish are saved here automatically." action={<button onClick={() => navigate('/automations/new')} className="pop-btn-primary">Create automation</button>} />
+        )
       ) : !error && filtered.length === 0 ? (
-        <EmptyState icon="automations" title="No automations found" description="Create automations to respond to engagement automatically." action={<button onClick={() => navigate('/automations/new')} className="pop-btn-primary">Create automation</button>} />
+        // Drafts visible above are still something — reserve the big empty
+        // state for a genuinely empty page.
+        visibleDrafts.length === 0 && (
+          <EmptyState icon="automations" title="No automations found" description="Create automations to respond to engagement automatically." action={<button onClick={() => navigate('/automations/new')} className="pop-btn-primary">Create automation</button>} />
+        )
       ) : !error && (
         <div className="space-y-3">
           {filtered.map(a => (
