@@ -637,6 +637,46 @@ export async function fetchAutomationsSummary(): Promise<AutomationsSummary> {
 }
 
 // ============================================================
+// Workspace settings — scoped server-side to the caller's own workspace.
+//
+// The pause switch here stops automation for THIS workspace only. Populr also
+// has a platform-wide emergency stop for incident response, but that one is
+// operator-only: it lives behind an admin surface, is never reported by this
+// endpoint, and is deliberately not something a creator can see or change.
+// ============================================================
+
+export interface WorkspaceSettings {
+  /** True when this workspace's own automations are paused by its owner. */
+  workspacePause: boolean;
+  /** Whether the deployment has Smart Replies (OpenRouter) configured. */
+  smartRepliesConfigured: boolean;
+}
+
+/** GET /api/settings — the caller's own workspace settings. */
+export async function fetchWorkspaceSettings(): Promise<WorkspaceSettings> {
+  const data = await apiFetch<{
+    workspacePause?: boolean;
+    globalPause?: boolean;
+    smartRepliesConfigured?: boolean;
+  }>('/api/settings');
+  return {
+    // `globalPause` is the older wire name for the same value, kept by the
+    // backend for compatibility; prefer the accurate one when present.
+    workspacePause: data.workspacePause ?? data.globalPause ?? false,
+    smartRepliesConfigured: data.smartRepliesConfigured ?? false,
+  };
+}
+
+/** POST /api/settings/pause — pause or resume this workspace's automations. */
+export async function setWorkspacePause(paused: boolean): Promise<boolean> {
+  const data = await apiFetch<{ workspacePause?: boolean; globalPause?: boolean }>(
+    '/api/settings/pause',
+    { method: 'POST', body: { paused } }
+  );
+  return data.workspacePause ?? data.globalPause ?? paused;
+}
+
+// ============================================================
 // Contacts — everyone who has engaged with a connected account
 // (who they are, how they found the creator, their tags/score/stage, and
 // their full conversation history). Talks to populrbackend's /api/contacts,

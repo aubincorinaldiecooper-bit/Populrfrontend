@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
-import { LogOut, Waypoints, ArrowRight } from 'lucide-react';
+import { LogOut, Waypoints, ArrowRight, AlertCircle, Loader2, Pause, Play } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import {
+  isBackendConfigured, fetchWorkspaceSettings, setWorkspacePause,
+} from '../lib/api';
 
 /**
- * Settings is deliberately small: it shows the signed-in Populr account and
- * ends the session. Nothing else here is real yet.
+ * Settings is deliberately small: the signed-in Populr account, the
+ * workspace's automation pause switch, and ending the session. Everything
+ * here is backed by a real endpoint.
  *
  * It previously carried Notifications, Billing, and Security tabs, none of
  * which were wired to anything:
@@ -32,7 +36,55 @@ export default function SettingsPage() {
   const { showToast } = useApp();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const backendConfigured = isBackendConfigured();
   const [signingOut, setSigningOut] = useState(false);
+
+  // Pause state is fetched, never assumed: rendering a default and correcting
+  // it after the response would show the creator the wrong answer to "are my
+  // automations running right now" for as long as the request takes.
+  const [paused, setPaused] = useState<boolean | null>(null);
+  // Load and write failures are kept apart on purpose. A failed load means
+  // the status is unknown, so the control can't be shown at all — claiming
+  // "running" or "paused" would be a guess. A failed write means the status
+  // is still known and unchanged, so the control must stay on screen with
+  // the error beside it; replacing it would strand the user with no way to
+  // try again and no view of where they actually stand.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pauseBusy, setPauseBusy] = useState(false);
+
+  const loadPause = useCallback(() => {
+    if (!backendConfigured) return;
+    setLoadError(null);
+    setSaveError(null);
+    fetchWorkspaceSettings()
+      .then(s => setPaused(s.workspacePause))
+      .catch(err => setLoadError(err instanceof Error ? err.message : 'Could not load your automation status.'));
+  }, [backendConfigured]);
+
+  useEffect(() => {
+    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadPause();
+  }, [loadPause]);
+
+  const togglePause = async () => {
+    if (paused === null || pauseBusy) return;
+    const next = !paused;
+    setPauseBusy(true);
+    setSaveError(null);
+    try {
+      // Trust the server's echoed value rather than the optimistic one, so the
+      // switch can never show a state the backend didn't actually record.
+      setPaused(await setWorkspacePause(next));
+      showToast(next ? 'Automations paused for this workspace' : 'Automations resumed', 'success');
+    } catch (err) {
+      // `paused` is deliberately left untouched — the write didn't happen.
+      setSaveError(err instanceof Error ? err.message : 'Could not change your automation status.');
+    } finally {
+      setPauseBusy(false);
+    }
+  };
 
   // Who's signed in comes from Better Auth (name/email/avatar), never from a
   // connected social platform — a connected account can be any platform the
@@ -81,6 +133,70 @@ export default function SettingsPage() {
             can&apos;t be edited in Populr yet.
           </p>
         </section>
+
+        {/* Scoped to this workspace. Populr also has a platform-wide
+            emergency stop, but that is operator-only for incident response —
+            it is never reported here, because it isn't the creator's to see
+            or act on. */}
+        {backendConfigured && (
+          <section className="pop-card p-6">
+            <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Automations</h2>
+            <p className="text-[12px] text-[#6B6B6B] mb-4">
+              Pause every automation in this workspace without editing them one by one.
+              Comments and DMs are still recorded while paused — Populr just won&apos;t reply.
+            </p>
+
+            {loadError ? (
+              <div className="flex items-start gap-2">
+                <AlertCircle size={15} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
+                <p className="text-[12px] text-[#6B6B6B] flex-1">{loadError}</p>
+                <button onClick={loadPause} className="pop-btn-tertiary text-[12px] py-1 px-3 flex-shrink-0">
+                  Retry
+                </button>
+              </div>
+            ) : paused === null ? (
+              <p className="text-[12px] text-[#9B9B8F] flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" />Checking your automation status…
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={togglePause}
+                    disabled={pauseBusy}
+                    aria-pressed={paused}
+                    className={`${paused ? 'pop-btn-primary' : 'pop-btn-tertiary'} text-[13px] disabled:opacity-50`}
+                  >
+                    {pauseBusy
+                      ? <><Loader2 size={14} className="animate-spin" />Saving…</>
+                      : paused
+                        ? <><Play size={14} />Resume automations</>
+                        : <><Pause size={14} />Pause automations</>}
+                  </button>
+                  <span className="text-[12px] text-[#6B6B6B]">
+                    {paused
+                      ? 'Paused — nothing is being sent automatically.'
+                      : 'Running — your active automations reply as normal.'}
+                  </span>
+                </div>
+                {/* Shown beside the control, not instead of it: the state
+                    above is still accurate, and the user needs to be able to
+                    try again. */}
+                {saveError && (
+                  <div className="flex items-start gap-2 mt-3">
+                    <AlertCircle size={14} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
+                    <p className="text-[12px] text-[#6B6B6B]">{saveError}</p>
+                  </div>
+                )}
+                <p className="text-[11px] text-[#9B9B8F] mt-3">
+                  This affects only your workspace. Individual automations keep their own
+                  active or paused state, so resuming here brings back exactly what was
+                  running before.
+                </p>
+              </>
+            )}
+          </section>
+        )}
 
         {/* Connected social accounts are managed on Channels — pointing there
             keeps one home for that rather than a second, drifting copy of the
