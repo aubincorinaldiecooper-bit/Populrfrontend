@@ -687,6 +687,47 @@ export async function setWorkspacePause(paused: boolean): Promise<boolean> {
 }
 
 // ============================================================
+// Dashboard — the workspace rollup behind Home. One scoped call (see
+// populrbackend dashboardService): pause state, totals, which posts are
+// actually producing warm leads, and the recent automation activity feed.
+// ============================================================
+
+export interface DashboardData {
+  /** True when this workspace's automations aren't running (its own pause
+   *  switch or the platform stop — the banner doesn't need to know which). */
+  globallyPaused: boolean;
+  connectedAccounts: {
+    id: string; platform: string; username: string | null;
+    displayName: string | null; avatarUrl: string | null;
+    readiness: string; caveat: string | null;
+  }[];
+  totals: {
+    contacts: number;
+    warmLeads: number;
+    hotLeads: number;
+    needsReply: number;
+    activeAutomations: number;
+  };
+  topPostsByWarmLeads: {
+    id: string; platform: string; caption: string | null; url: string | null;
+    media_url: string | null; account_username: string | null;
+    warm_leads: number; contacts: number;
+  }[];
+  topPlatformsByWarmLeads: { platform: string; warm_leads: number; contacts: number }[];
+  topFunnelsByClicks: { id: string; name: string; template_key: string | null; clicks: number; unique_clicks: number }[];
+  recentActivity: {
+    id: string; event_type: string; status: string; detail: string | null;
+    created_at: string; contact_handle: string | null; contact_name: string | null;
+    automation_name: string | null; source_platform: string | null;
+  }[];
+}
+
+/** GET /api/dashboard — everything Home needs in one scoped call. */
+export async function fetchDashboard(): Promise<DashboardData> {
+  return apiFetch('/api/dashboard');
+}
+
+// ============================================================
 // Inbox — the conversations queue. Server-side this has existed all along
 // (workspace-scoped since populrbackend PR #31): items land here when an
 // automation replies, when the AI sends a holding reply for an uncovered
