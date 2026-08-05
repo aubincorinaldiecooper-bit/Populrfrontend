@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { createAutomation, updateAutomation } from '../../lib/api';
 import type { Automation, AutomationInput, Post, TriggerType, ReplyChannel } from '../../lib/api';
+import { deleteWizardDraft, getWizardDraft, newWizardDraftId, saveWizardDraft } from './wizardDrafts';
 
 export type AutomationTypeCard = 'comment_dm' | 'comment_reply' | 'dm_only';
 
@@ -76,92 +77,73 @@ function initialStateFor(editAutomation: Automation | null): WizardState {
   };
 }
 
-// ============================================================
-// Local draft persistence for NEW automations only. Editing an existing
-// automation always hydrates from the real backend record (above) — mixing
-// in a stray local draft there would risk bleeding one automation's
-// half-typed fields into a different one.
-//
-// The backend can't hold an in-progress draft until it has a name,
-// accountId, and at least one keyword (POST /api/automations 400s without
-// them — see populrbackend/src/routes/automations.ts), which rules out
-// autosaving to the server from step 1. So this is deliberately a
-// browser-local, single-slot stash: it exists purely so that navigating
-// away mid-wizard (sidebar click, back button, closed tab) and returning
-// to /automations/new resumes exactly where the creator left off, instead
-// of silently discarding everything they'd typed.
-// ============================================================
-const DRAFT_STORAGE_KEY = 'populr.automationWizardDraft.v1';
-
-interface StoredDraft {
-  state: WizardState;
-  stepIndex: number;
-}
-
-function readDraft(): StoredDraft | null {
-  try {
-    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredDraft>;
-    if (!parsed || typeof parsed !== 'object' || !parsed.state) return null;
-    return { state: parsed.state, stepIndex: typeof parsed.stepIndex === 'number' ? parsed.stepIndex : 0 };
-  } catch {
-    // Corrupt JSON, storage disabled (private browsing), or a shape from a
-    // future version of this draft format — treat as "no draft" rather
-    // than crash the wizard on load.
-    return null;
-  }
-}
-
-function writeDraft(draft: StoredDraft): void {
-  try {
-    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-  } catch {
-    // Storage full or disabled — the wizard still works this session, it
-    // just won't survive a navigation. Not worth surfacing to the user.
-  }
-}
-
-function clearDraft(): void {
-  try {
-    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
-  } catch {
-    // Nothing to do if storage is unavailable.
-  }
+/**
+ * Whether there's anything worth keeping as a draft yet. Prevents an opened-
+ * and-abandoned blank wizard from littering the Drafts section with empty
+ * "Untitled" entries. accountId deliberately doesn't count: CreateStep
+ * auto-selects a sole connected account on mount (marking the wizard dirty
+ * with zero user input), and even a hand-picked account is a single click —
+ * not work worth resuming on its own.
+ */
+function hasDraftContent(state: WizardState): boolean {
+  return (
+    state.name.trim() !== '' ||
+    state.type !== null ||
+    state.post !== null ||
+    state.triggerKeywords.length > 0 ||
+    state.aiInstructions.trim() !== ''
+  );
 }
 
 export function useAutomationWizard() {
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast, accounts } = useApp();
-  const editAutomation = (location.state as { automation?: Automation } | null)?.automation ?? null;
+  const navState = location.state as { automation?: Automation; draftId?: string } | null;
+  const editAutomation = navState?.automation ?? null;
+  // Only honored for new automations: editing an existing one always hydrates
+  // from the real backend record — mixing in a local draft there would risk
+  // bleeding one automation's half-typed fields into a different one.
+  const resumeDraftId = editAutomation ? null : navState?.draftId ?? null;
 
-  // Each of these lazy initializers runs exactly once, on mount, and never
-  // again — so calling the same pure localStorage read from three of them
-  // is equivalent to (and simpler than) reading it once into a ref.
-  const [state, setState] = useState<WizardState>(
-    () => (editAutomation ? null : readDraft())?.state ?? initialStateFor(editAutomation)
-  );
+  // The draft slot this wizard session autosaves into (see the effect below):
+  // the resumed draft's own id, or a fresh slot for a brand-new automation.
+  // /automations/new without a draftId therefore ALWAYS starts blank — a
+  // previous unfinished attempt never hijacks a fresh create; it stays in the
+  // Automations page's Drafts section until explicitly resumed or deleted.
+  const [draftId] = useState(() => resumeDraftId ?? newWizardDraftId());
+  // Each lazy initializer runs exactly once, on mount — so repeating the same
+  // pure localStorage read in three of them is equivalent to (and simpler
+  // than) reading it once into a ref.
+  const [state, setState] = useState<WizardState>(() => {
+    if (editAutomation) return initialStateFor(editAutomation);
+    return (resumeDraftId ? getWizardDraft(resumeDraftId) : null)?.state ?? blankState();
+  });
   const [stepIndex, setStepIndex] = useState(
-    () => (editAutomation ? null : readDraft())?.stepIndex ?? 0
+    () => (resumeDraftId ? getWizardDraft(resumeDraftId) : null)?.stepIndex ?? 0
   );
-  const [didRestoreDraft] = useState(() => !editAutomation && !!readDraft());
+  // True once this session's work is durably in the drafts store — drives the
+  // wizard header's "Saved to drafts" indicator (the composer-style quiet
+  // status text, not a toast).
+  const [draftSaved, setDraftSaved] = useState(
+    () => !!resumeDraftId && !!getWizardDraft(resumeDraftId)
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (didRestoreDraft) showToast('Resumed your draft automation', 'info');
-    // Fires once on mount only — showToast identity isn't relevant here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist on every change, but only for brand-new automations (never
-  // while editing an existing one — see the comment on readDraft/writeDraft
-  // above) and only once there's something worth resuming.
+  // Autosave on every change — the same posture as the post composer's draft
+  // autosave. Never while editing an existing automation (see resumeDraftId
+  // above), and only once there's something worth resuming; after that, keep
+  // the slot in sync even if the user clears those fields again.
   useEffect(() => {
     if (editAutomation || !state.dirty) return;
-    writeDraft({ state, stepIndex });
-  }, [editAutomation, state, stepIndex]);
+    if (!draftSaved && !hasDraftContent(state)) return;
+    saveWizardDraft({ id: draftId, state, stepIndex, savedAt: new Date().toISOString() });
+    // One-shot flip (guarded above), reflecting a localStorage side effect —
+    // not a render-derived value, and it can't cascade.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!draftSaved) setDraftSaved(true);
+  }, [editAutomation, draftId, state, stepIndex, draftSaved]);
 
   const pendingSourcePostId = editAutomation?.source_post_id ?? null;
 
@@ -221,10 +203,10 @@ export function useAutomationWizard() {
         ? await updateAutomation(state.automationId, input)
         : await createAutomation(input);
       setState(prev => ({ ...prev, automationId: automation.id, active: automation.active, dirty: false }));
-      // Now durably on the backend — the local stash's only job was
-      // bridging the gap until this point, so it's redundant from here on.
-      if (!editAutomation) clearDraft();
-      showToast(activate ? 'Automation activated' : 'Draft saved', 'success');
+      // Now durably on the backend — the local draft's only job was
+      // bridging the gap until this point, so its slot is retired.
+      if (!editAutomation) deleteWizardDraft(draftId);
+      showToast(activate ? 'Automation activated' : 'Automation saved as paused', 'success');
       navigate('/automations');
       return automation;
     } catch (err) {
@@ -235,27 +217,25 @@ export function useAutomationWizard() {
     } finally {
       setSaving(false);
     }
-  }, [buildInput, editAutomation, navigate, showToast, state.automationId]);
-
-  const confirmDiscard = useCallback(() => {
-    if (!state.dirty) return true;
-    return window.confirm('Discard unsaved changes to this automation?');
-  }, [state.dirty]);
+  }, [buildInput, draftId, editAutomation, navigate, showToast, state.automationId]);
 
   const cancel = useCallback(() => {
-    if (!confirmDiscard()) return;
-    // An explicit, confirmed discard means "forget this" — don't resurrect
-    // it as a restored draft the next time /automations/new is opened.
-    if (!editAutomation) clearDraft();
+    // Edits to an existing automation aren't draft-persisted, so closing
+    // would genuinely lose them — confirm first. A new automation's work is
+    // already autosaved to Drafts, so closing just leaves, exactly like
+    // backing out of a post composer.
+    if (editAutomation && state.dirty && !window.confirm('Discard unsaved changes to this automation?')) {
+      return;
+    }
     navigate('/automations');
-  }, [confirmDiscard, editAutomation, navigate]);
+  }, [editAutomation, state.dirty, navigate]);
 
   return {
     state, update, isEditing: !!editAutomation, pendingSourcePostId,
     instagramAccounts,
     steps, currentStep, stepIndex,
     canProceed, canProceedFromCreate, canProceedFromPost, canProceedFromReplies,
-    goNext, goBack, cancel, confirmDiscard,
+    goNext, goBack, cancel, draftSaved,
     saving, saveError, save,
   };
 }
