@@ -1069,12 +1069,28 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     );
   }
   const d = resp.decision;
+  // An escalation decision means NOTHING is sent — the conversation queues
+  // for a human. Reply previews must vanish in that case: with them present
+  // the renderer shows send bubbles instead of the escalation notice, and
+  // the preview claims an auto-reply production would never make.
+  if (d.needsHuman) {
+    return {
+      matched: true,
+      keyword,
+      intent: d.intent,
+      confidence: d.confidence,
+      needsHuman: true,
+      reason: d.reason,
+      publicReply: null,
+      dm: null,
+    };
+  }
   return {
     matched: true,
     keyword,
     intent: d.intent,
     confidence: d.confidence,
-    needsHuman: d.needsHuman,
+    needsHuman: false,
     reason: d.reason,
     // Public reply is the automation's static text in production (see the
     // engineService leak fix) — previewed as the real configured text, not

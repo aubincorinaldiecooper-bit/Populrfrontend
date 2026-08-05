@@ -139,7 +139,14 @@ function OpportunityRow({
       tabIndex={0}
       aria-label={`Opportunity from ${personLabel}`}
       onClick={onOpen}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+      onKeyDown={e => {
+        // Only keys pressed on the row itself open the drawer. A keydown on
+        // a nested action (Dismiss, Copy, Open on platform) bubbles up here,
+        // and preventDefault would cancel that button's own Enter/Space
+        // activation while hijacking it into opening the drawer.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
+      }}
       className="pop-card pop-card-hover p-4 cursor-pointer focus-visible:ring-2 focus-visible:ring-chartreuse/40 outline-none"
     >
       <div className="flex items-start gap-3">

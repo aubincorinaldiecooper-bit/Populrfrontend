@@ -101,6 +101,35 @@ describe('testAutomation — missing AI preview is not a failure', () => {
     expect(result.note).not.toMatch(/temporarily unavailable/i);
   });
 
+  it('an AI escalation decision suppresses reply previews — nothing sends, so nothing renders as sending', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        available: true,
+        decision: {
+          intent: 'support_issue', confidence: 0.9, replyType: 'dm',
+          replyText: null, linkToSend: null,
+          needsHuman: true, shouldAutoReply: false,
+          reason: 'Sounds like a complaint — best handled personally.',
+        },
+      }),
+    })));
+    try {
+      const result = await testAutomation(input({
+        sampleText: 'guide is broken, refund please',
+        commentReplyBody: 'Check your DMs!',
+        dmBody: 'Hey {{name}}, here you go: {{link}}',
+      }));
+      expect(result.needsHuman).toBe(true);
+      // The configured texts must NOT appear as previews: an escalation
+      // sends nothing, and bubbles would claim otherwise.
+      expect(result.publicReply).toBeNull();
+      expect(result.dm).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('Smart Replies unconfigured on the server: note says so without claiming breakage', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
