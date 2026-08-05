@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Search, ArrowLeft, AlertCircle, X, Plus,
+  Search, ArrowLeft, AlertCircle, X, Plus, Reply, Clock, Tag,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
@@ -50,6 +50,13 @@ export default function ContactsPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [stageTab, setStageTab] = useState<LeadStage | 'all'>('all');
+  // Behavior filters + tag filter: urgency (the needs_reply flag the queue
+  // sets), recency (who was active last), and the creator's own labels.
+  // Tags are the substrate saved segments will be built on later.
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [sortRecent, setSortRecent] = useState(false);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,16 +69,24 @@ export default function ContactsPage() {
     fetchContacts({
       search: search || undefined,
       stage: stageTab === 'all' ? undefined : stageTab,
+      needsReply: urgentOnly ? true : undefined,
+      sort: sortRecent ? 'recent' : undefined,
+      tag: activeTag || undefined,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     })
-      .then(res => { setContacts(res.contacts); setTotal(res.total); })
+      .then(res => {
+        setContacts(res.contacts);
+        setTotal(res.total);
+        // Workspace-wide, not page-scoped — safe to keep across filters.
+        setAllTags(res.allTags ?? []);
+      })
       .catch(err => setError(err instanceof Error ? err.message : 'Could not load contacts.'))
       .finally(() => setLoading(false));
-  }, [backendConfigured, search, stageTab, page]);
+  }, [backendConfigured, search, stageTab, urgentOnly, sortRecent, activeTag, page]);
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // Data fetch from the backend, not derived state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
@@ -80,7 +95,7 @@ export default function ContactsPage() {
     // Resetting pagination when search/filter (external inputs) change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(0);
-  }, [search, stageTab]);
+  }, [search, stageTab, urgentOnly, sortRecent, activeTag]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -137,11 +152,39 @@ export default function ContactsPage() {
           className="pop-search w-full" />
       </div>
 
-      <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
+      <div className="flex gap-1 mb-2 overflow-x-auto pb-1">
         {STAGE_TABS.map(t => (
           <button key={t.key} onClick={() => setStageTab(t.key)}
             className={`px-3 py-1.5 rounded-xl text-[12px] font-medium whitespace-nowrap transition-all ${stageTab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
             {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Behavior + tag chips: how fans act (waiting on you, active lately)
+          and how you've labeled them. These compose with the stage tabs and
+          search — and they're how contacts get classified until saved
+          segments exist to name these combinations. */}
+      <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">
+        <button
+          onClick={() => setUrgentOnly(v => !v)}
+          aria-pressed={urgentOnly}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap border transition-all ${urgentOnly ? 'bg-[#111111] text-white border-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B] hover:bg-white'}`}>
+          <Reply size={12} />Waiting on you
+        </button>
+        <button
+          onClick={() => setSortRecent(v => !v)}
+          aria-pressed={sortRecent}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap border transition-all ${sortRecent ? 'bg-[#111111] text-white border-[#111111]' : 'border-[#E8E4DF] text-[#6B6B6B] hover:bg-white'}`}>
+          <Clock size={12} />Recently active
+        </button>
+        {allTags.length > 0 && <span aria-hidden className="w-px h-4 bg-[#E8E4DF] mx-1 flex-shrink-0" />}
+        {allTags.map(tag => (
+          <button key={tag}
+            onClick={() => setActiveTag(t => t === tag ? null : tag)}
+            aria-pressed={activeTag === tag}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap border transition-all ${activeTag === tag ? 'bg-chartreuse text-[#111111] border-chartreuse' : 'border-[#E8E4DF] text-[#6B6B6B] hover:bg-white'}`}>
+            <Tag size={12} />{tag}
           </button>
         ))}
       </div>
@@ -158,11 +201,11 @@ export default function ContactsPage() {
         {loading ? (
           <TableSkeleton count={6} label="Loading contacts" />
         ) : !error && contacts.length === 0 ? (
-          search || stageTab !== 'all' ? (
+          search || stageTab !== 'all' || urgentOnly || activeTag ? (
             <EmptyState
               icon="search"
               title="No contacts match your filters"
-              description="Try a different search term, or switch back to All."
+              description="Try a different search term, or clear the filters above."
             />
           ) : (
             <EmptyState
@@ -257,7 +300,7 @@ function ContactDetailView({
   }, [contactId]);
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // Data fetch from the backend, not derived state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);

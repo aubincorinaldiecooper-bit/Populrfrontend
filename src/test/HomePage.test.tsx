@@ -19,6 +19,11 @@ function dashboard(overrides: Partial<DashboardData> = {}): DashboardData {
       displayName: 'Creator', avatarUrl: null, readiness: 'ready', caveat: null,
     }],
     totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 0, activeAutomations: 3 },
+    engagement: {
+      dmsSent: 0, dmsDelivered: 0, dmsRead: 0, mediaDmsSent: 0,
+      contactsDmd: 0, contactsReplied: 0,
+      linkSends: 0, linkClicks: 0, uniqueLinkClicks: 0,
+    },
     topPostsByWarmLeads: [],
     topPlatformsByWarmLeads: [],
     topFunnelsByClicks: [],
@@ -148,6 +153,50 @@ describe('HomePage — purpose-driven dashboard', () => {
     await waitFor(() => expect(screen.getByText('Recent activity')).toBeInTheDocument());
     expect(screen.getByText('Sent the guide to @curious_fan')).toBeInTheDocument();
     expect(screen.getByText('5m ago')).toBeInTheDocument();
+  });
+
+  it('shows how fans respond as rates over visible denominators', async () => {
+    mockFetchDashboard.mockResolvedValue(dashboard({
+      engagement: {
+        dmsSent: 40, dmsDelivered: 30, dmsRead: 20, mediaDmsSent: 6,
+        contactsDmd: 10, contactsReplied: 4,
+        linkSends: 25, linkClicks: 9, uniqueLinkClicks: 5,
+      },
+    }));
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('How fans respond')).toBeInTheDocument());
+    // 5 unique taps of 25 sends = 20%; 4 of 10 wrote back = 40%; 20 of 40 read = 50%.
+    expect(screen.getByText('20%')).toBeInTheDocument();
+    expect(screen.getByText('40%')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText('of 25 links sent')).toBeInTheDocument();
+    expect(screen.getByText("of 10 fans DM'd")).toBeInTheDocument();
+    expect(screen.getByText('DMs carried media')).toBeInTheDocument();
+  });
+
+  it('nothing sent yet: the engagement section stays hidden, not a wall of 0%', async () => {
+    mockFetchDashboard.mockResolvedValue(dashboard());
+    renderHome();
+    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    expect(screen.queryByText('How fans respond')).not.toBeInTheDocument();
+  });
+
+  it('links sent but no DMs yet: rates with an empty denominator show a dash, never 0%', async () => {
+    mockFetchDashboard.mockResolvedValue(dashboard({
+      engagement: {
+        dmsSent: 0, dmsDelivered: 0, dmsRead: 0, mediaDmsSent: 0,
+        contactsDmd: 0, contactsReplied: 0,
+        linkSends: 8, linkClicks: 2, uniqueLinkClicks: 2,
+      },
+    }));
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('How fans respond')).toBeInTheDocument());
+    expect(screen.getByText('25%')).toBeInTheDocument();
+    // "Wrote back" and "DMs read" have no denominator: dash, not 0%.
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
   });
 
   it('a failed load offers Retry, and Retry actually refetches', async () => {

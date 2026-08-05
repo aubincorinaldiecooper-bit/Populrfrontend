@@ -49,7 +49,7 @@ export default function AutomationsPage() {
   }, [backendConfigured]);
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // Data fetch from the backend, not derived state — see ContactsPage.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);

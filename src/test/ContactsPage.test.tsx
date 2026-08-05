@@ -48,7 +48,12 @@ const allContacts: ContactRecord[] = Array.from({ length: 60 }, (_, i) => makeCo
 const mockFetchContacts = vi.fn(async (filter: { limit?: number; offset?: number } = {}) => {
   const offset = filter.offset ?? 0;
   const limit = filter.limit ?? 20;
-  return { contacts: allContacts.slice(offset, offset + limit), total: allContacts.length, stages: [] };
+  return {
+    contacts: allContacts.slice(offset, offset + limit),
+    total: allContacts.length,
+    stages: [],
+    allTags: ['pricing', 'vip'],
+  };
 });
 
 const mockUseApp = vi.fn();
@@ -93,5 +98,55 @@ describe('ContactsPage — pagination beyond the first page', () => {
     expect(mockFetchContacts).toHaveBeenCalledWith(
       expect.objectContaining({ offset: 40, limit: 20 })
     );
+  });
+});
+
+describe('ContactsPage — classification chips (urgency, recency, tags)', () => {
+  it('"Waiting on you" toggles the needsReply filter and resets to page one', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+
+    await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Waiting on you/ }));
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ needsReply: true, offset: 0 })
+    ));
+
+    // Toggling off drops the filter entirely — not needsReply: false, which
+    // would EXCLUDE waiting contacts.
+    await user.click(screen.getByRole('button', { name: /Waiting on you/ }));
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ needsReply: undefined })
+    ));
+  });
+
+  it('"Recently active" requests the recency sort', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+
+    await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Recently active/ }));
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: 'recent' })
+    ));
+  });
+
+  it('workspace tags render as chips; picking one filters, picking it again clears', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /pricing/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /pricing/ }));
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tag: 'pricing', offset: 0 })
+    ));
+
+    await user.click(screen.getByRole('button', { name: /pricing/ }));
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tag: undefined })
+    ));
   });
 });

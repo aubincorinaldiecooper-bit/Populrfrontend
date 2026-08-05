@@ -4,7 +4,7 @@ import { getSubscriptionCheckoutUrl } from '../lib/api';
 const INCLUDED_POINTS = [
   'Connect additional social accounts',
   'Keep engagement syncing',
-  'Review opportunities across platforms',
+  'Turn engagement into contacts automatically',
 ];
 
 /**

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
-  Home, Zap, Compass, Inbox, Users, Waypoints, Settings, Menu, X, Plus,
+  Home, Zap, Inbox, Users, Waypoints, Settings, Menu, X, Plus,
 } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 
@@ -13,7 +13,6 @@ import AccountMenu from './AccountMenu';
 const navItems = [
   { path: '/', label: 'Home', icon: Home },
   { path: '/automations', label: 'Automations', icon: Zap },
-  { path: '/opportunities', label: 'Opportunities', icon: Compass },
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/channels', label: 'Channels', icon: Waypoints },

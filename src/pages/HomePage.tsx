@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   Zap, Users, ArrowRight, AlertCircle, Inbox as InboxIcon, Flame, Plus,
-  Pause, TrendingUp, RefreshCw,
+  Pause, TrendingUp, RefreshCw, MousePointerClick, MessageCircleReply, Eye,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
@@ -34,6 +34,27 @@ function timeAgo(iso: string): string {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+/** Rounded percentage, or an em dash when nothing has been sent yet —
+ *  0-of-0 is "no data", never "0%". */
+function rate(numerator: number, denominator: number): string {
+  if (denominator === 0) return '—';
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function RateTile({ icon, value, label, basis }: {
+  icon: React.ReactNode; value: string; label: string; basis: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-[#9B9B8F] mb-1.5">{icon}
+        <span className="text-[11px]">{label}</span>
+      </div>
+      <p className="font-geist-mono font-bold text-xl text-[#111111]">{value}</p>
+      <p className="text-[11px] text-[#9B9B8F] mt-0.5">{basis}</p>
+    </div>
+  );
 }
 
 function StatTile({ to, icon, iconBg, value, label, accent = false }: {
@@ -73,7 +94,7 @@ export default function HomePage() {
   }, [backendConfigured]);
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // Data fetch from the backend, not derived state — see ContactsPage.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
@@ -224,6 +245,45 @@ export default function HomePage() {
                   label="Contacts"
                 />
               </div>
+
+              {/* How fans respond to what automations send: real platform
+                  activity — link taps, replies, read receipts — as rates
+                  with their denominators in view. Hidden until something
+                  has actually been sent; empty analytics teach nothing. */}
+              {(data.engagement.dmsSent > 0 || data.engagement.linkSends > 0) && (
+                <section className="pop-card p-5">
+                  <h2 className="pop-card-title mb-1">How fans respond</h2>
+                  <p className="text-[12px] text-[#6B6B6B] mb-4">
+                    From platform receipts, replies, and tracked-link taps.
+                  </p>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <RateTile
+                      icon={<MousePointerClick size={13} />}
+                      label="Link taps"
+                      value={rate(data.engagement.uniqueLinkClicks, data.engagement.linkSends)}
+                      basis={`of ${data.engagement.linkSends} link${data.engagement.linkSends === 1 ? '' : 's'} sent`}
+                    />
+                    <RateTile
+                      icon={<MessageCircleReply size={13} />}
+                      label="Wrote back"
+                      value={rate(data.engagement.contactsReplied, data.engagement.contactsDmd)}
+                      basis={`of ${data.engagement.contactsDmd} fan${data.engagement.contactsDmd === 1 ? '' : 's'} DM'd`}
+                    />
+                    <RateTile
+                      icon={<Eye size={13} />}
+                      label="DMs read"
+                      value={rate(data.engagement.dmsRead, data.engagement.dmsSent)}
+                      basis={`of ${data.engagement.dmsSent} DM${data.engagement.dmsSent === 1 ? '' : 's'} sent`}
+                    />
+                    <RateTile
+                      icon={<TrendingUp size={13} />}
+                      label="With media"
+                      value={String(data.engagement.mediaDmsSent)}
+                      basis={`DM${data.engagement.mediaDmsSent === 1 ? '' : 's'} carried media`}
+                    />
+                  </div>
+                </section>
+              )}
 
               {/* The question this product exists to answer: which content
                   is actually producing leads. */}

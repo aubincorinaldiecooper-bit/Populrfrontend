@@ -65,7 +65,7 @@ export default function InboxPage() {
   // Monotonic request id: only the newest in-flight fetch may write state.
   // Without it, switching tabs while a slow request is in flight lets the
   // older response land last and show the previous tab's queue under the
-  // newly selected one. Same pattern as OpportunitiesPage.
+  // newly selected one. Same pattern as ContactsPage.
   const requestSeq = useRef(0);
 
   // Which item has its composer open, and its draft text. One at a time —
@@ -112,7 +112,7 @@ export default function InboxPage() {
   );
 
   useEffect(() => {
-    // Data fetch from the backend, not derived state — see OpportunitiesPage.
+    // Data fetch from the backend, not derived state — see ContactsPage.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);

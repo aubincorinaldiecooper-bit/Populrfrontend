@@ -24,7 +24,7 @@ interface AppState {
   accountsLoading: boolean;
   // Set when the last refreshAccounts() call failed — distinct from a
   // successful load that simply found zero accounts, so callers (e.g.
-  // OpportunitiesPage's empty state) can tell "nothing connected yet" apart
+  // a page's empty state) can tell "nothing connected yet" apart
   // from "couldn't check what's connected" instead of conflating them.
   accountsError: string | null;
   // UI
