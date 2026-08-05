@@ -19,7 +19,12 @@ export default function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[100] space-y-2">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="false"
+      className="fixed top-20 right-4 md:top-4 z-[100] space-y-2 max-w-[calc(100vw-2rem)]"
+    >
       {toasts.map(toast => {
         const Icon = iconMap[toast.type];
         return (
@@ -29,7 +34,11 @@ export default function ToastContainer() {
           >
             <Icon size={16} className="flex-shrink-0" />
             <p className="text-[13px] font-medium flex-1">{toast.message}</p>
-            <button onClick={() => removeToast(toast.id)} className="flex-shrink-0 hover:opacity-70 transition-opacity">
+            <button
+              onClick={() => removeToast(toast.id)}
+              aria-label="Dismiss notification"
+              className="flex-shrink-0 -mr-1.5 p-1.5 rounded-lg hover:opacity-70 transition-opacity"
+            >
               <X size={14} />
             </button>
           </div>

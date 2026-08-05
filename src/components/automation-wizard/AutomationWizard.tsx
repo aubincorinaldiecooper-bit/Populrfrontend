@@ -25,7 +25,7 @@ export default function AutomationWizard() {
   }, [isEditing, state.dirty]);
 
   return (
-    <div className="h-screen flex flex-col bg-cream">
+    <div className="h-[calc(100vh-4rem)] md:h-screen flex flex-col bg-cream">
       <div className="bg-white border-b border-[#E8E4DF] px-6 py-3 flex-shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={cancel} className="p-2 hover:bg-[#FAFAF8] rounded-lg transition-all" aria-label="Close">
@@ -33,7 +33,7 @@ export default function AutomationWizard() {
           </button>
           <div>
             <h1 className="font-geist font-bold text-base text-[#111111]">{isEditing ? 'Edit automation' : 'Create automation'}</h1>
-            <p className="text-[11px] text-[#6B6B6B]">This is where you set up your Instagram automation.</p>
+            <p className="text-[11px] text-[#6B6B6B]">Step {stepIndex + 1} of {steps.length}</p>
           </div>
         </div>
         {!isEditing && draftSaved && (

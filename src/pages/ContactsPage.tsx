@@ -93,7 +93,7 @@ export default function ContactsPage() {
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Set <code className="bg-[#FAFAF8] px-1 py-0.5 rounded">VITE_API_URL</code> to your Populr backend to see real contacts here.
+              Populr can&apos;t reach its server, so your contacts can&apos;t be loaded right now.
             </p>
           </div>
         </div>
@@ -156,7 +156,19 @@ export default function ContactsPage() {
             <Loader2 size={20} className="animate-spin mr-2" />Loading contacts...
           </div>
         ) : !error && contacts.length === 0 ? (
-          <EmptyState icon="contacts" title="No contacts found" description="Try adjusting your search or filters." />
+          search || stageTab !== 'all' ? (
+            <EmptyState
+              icon="search"
+              title="No contacts match your filters"
+              description="Try a different search term, or switch back to All."
+            />
+          ) : (
+            <EmptyState
+              icon="contacts"
+              title="No contacts yet"
+              description="People who comment on or message your connected accounts show up here automatically once your automations start running."
+            />
+          )
         ) : !error && (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -170,8 +182,15 @@ export default function ContactsPage() {
               </thead>
               <tbody>
                 {contacts.map(contact => (
-                  <tr key={contact.id} onClick={() => setDetailId(contact.id)}
-                    className="border-b border-[#F0EEEA] last:border-0 hover:bg-[#FAFAF8] transition-colors cursor-pointer">
+                  <tr
+                    key={contact.id}
+                    tabIndex={0}
+                    aria-label={`Open ${contact.handle ? `@${contact.handle}` : contact.name || 'contact'}`}
+                    onClick={() => setDetailId(contact.id)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailId(contact.id); }
+                    }}
+                    className="border-b border-[#F0EEEA] last:border-0 hover:bg-[#FAFAF8] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chartreuse">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
                         {contact.avatar_url ? (

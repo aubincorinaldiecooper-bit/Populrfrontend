@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router';
 import { useApp } from './context/AppContext';
+import { rememberReturnTo } from './lib/returnTo';
 import { useAuth } from './context/AuthContext';
 import { lazy, Suspense } from 'react';
 
@@ -75,10 +76,13 @@ function AppContent() {
   if (authLoading) return <LoadingState />;
 
   if (!session) {
-    // Any protected route + no session → send to /login. Deliberately
-    // does not carry a returnTo — the server rejects unvalidated
-    // callbackURLs and adding one from the frontend just invites open
-    // redirects.
+    // Any protected route + no session → send to /login, remembering where
+    // they were headed so signing in returns them there instead of always
+    // dumping them on Home. The path is stashed in sessionStorage and
+    // validated as same-origin (see lib/returnTo.ts) rather than threaded
+    // through the URL: the auth service rejects unvalidated callbackURLs,
+    // and a query-param returnTo is the classic open-redirect vector.
+    rememberReturnTo(location.pathname + location.search);
     return <Navigate to="/login" replace />;
   }
 

@@ -317,7 +317,7 @@ export default function CreatePostPage() {
         <Banner
           status="warning"
           title="Populr isn't connected to a backend yet"
-          description="Set VITE_API_URL to your Populr backend to create and publish posts."
+          description="Populr can't reach its server, so posts can't be created right now."
         />
       </div>
     );

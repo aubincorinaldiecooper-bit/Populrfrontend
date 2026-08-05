@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { authClient } from "../lib/authClient";
 import { useAuth } from "../context/AuthContext";
+import { isOnboardingComplete } from "../lib/onboarding";
+import { consumeReturnTo } from "../lib/returnTo";
 
 const LIME = "#C5FF3D";
 const CREAM = "#F3F0EC";
@@ -65,7 +67,7 @@ function errorMessage(kind: ErrorKind): string | null {
 const RESEND_COOLDOWN_SECONDS = 30;
 
 export default function LoginPage() {
-  const { session, loading, refresh } = useAuth();
+  const { session, user, loading, refresh } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -110,9 +112,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (loading) return;
     if (!session) return;
-    const onboardingComplete = readOnboardingComplete();
-    navigate(onboardingComplete ? "/" : "/connect", { replace: true });
-  }, [loading, session, navigate]);
+    if (!isOnboardingComplete(user?.id)) {
+      navigate("/connect", { replace: true });
+      return;
+    }
+    navigate(consumeReturnTo() ?? "/", { replace: true });
+  }, [loading, session, user?.id, navigate]);
 
   // Countdown for the resend cooldown.
   useEffect(() => {
@@ -385,13 +390,6 @@ export default function LoginPage() {
  * Duplicated intentionally: LoginPage only needs the read side, and
  * importing AppContext just for this would create a cycle since
  * AuthProvider wraps AppProvider. */
-function readOnboardingComplete(): boolean {
-  try {
-    return window.localStorage.getItem("populr.onboardingComplete") === "true";
-  } catch {
-    return false;
-  }
-}
 
 function GoogleIcon() {
   return (

@@ -1,20 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type {
-  OnboardingPlatform, Campaign, Broadcast,
-  TeamMember, PendingInvitation, TeamRole,
-  ContactNote,
-} from '../data';
-import {
-  campaigns as initialCampaigns, broadcasts as initialBroadcasts,
-  defaultOnboardingPlatforms, defaultTeamMembers,
-  contacts as initialContacts,
-} from '../data';
-import type { Contact } from '../data';
+import type { OnboardingPlatform } from '../data';
+import { defaultOnboardingPlatforms } from '../data';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
 } from '../lib/api';
 import type { ConnectedAccount } from '../lib/api';
+import { isOnboardingComplete, markOnboardingComplete, adoptLegacyOnboardingFlag } from '../lib/onboarding';
+import { useAuth } from './AuthContext';
 
 export interface Toast {
   id: string;
@@ -23,17 +16,10 @@ export interface Toast {
 }
 
 interface AppState {
-  onboardingComplete: boolean;
-  selectedConversationId: string | null;
-  selectedContactId: string | null;
-  showContactDrawer: boolean;
-  smartReply: { text: string; editing: boolean } | null;
-  contactDrawerContext: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics' | null;
   // Connected account state
   connectedPlatforms: OnboardingPlatform[];
-  selectedAudienceGoal: string;
-  // Authoritative connected accounts, straight from the backend (Settings >
-  // Connected accounts). Empty until refreshAccounts() resolves.
+  // Authoritative connected accounts, straight from the backend (see the
+  // Channels page). Empty until refreshAccounts() resolves.
   accounts: ConnectedAccount[];
   accountsLoading: boolean;
   // Set when the last refreshAccounts() call failed — distinct from a
@@ -41,14 +27,6 @@ interface AppState {
   // OpportunitiesPage's empty state) can tell "nothing connected yet" apart
   // from "couldn't check what's connected" instead of conflating them.
   accountsError: string | null;
-  // Contacts
-  contacts: Contact[];
-  // Campaign / broadcast
-  campaigns: Campaign[];
-  broadcasts: Broadcast[];
-  // Team
-  teamMembers: TeamMember[];
-  pendingInvitations: PendingInvitation[];
   // UI
   toasts: Toast[];
   isLoading: boolean;
@@ -59,40 +37,19 @@ interface AppState {
 }
 
 interface AppContextType extends AppState {
+  /** Derived from the signed-in user, not stored — see AppProvider. */
+  onboardingComplete: boolean;
   completeOnboarding: () => void;
-  selectConversation: (id: string | null) => void;
-  selectContact: (id: string | null) => void;
-  openContactDrawer: (contactId: string, context?: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics') => void;
-  closeContactDrawer: () => void;
-  setContactDrawerContext: (ctx: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics' | null) => void;
-  setSmartReply: (reply: { text: string; editing: boolean } | null) => void;
   // Onboarding platform connection
-  connectPlatform: (id: string) => void;
   beginPlatformConnect: (id: string) => void;
   refreshConnectedAccounts: () => Promise<void>;
   completeOAuthReturn: (id: string) => Promise<void>;
   failOAuthReturn: (id: string | undefined) => void;
   openSubscriptionModal: (platform?: string) => void;
   closeSubscriptionModal: () => void;
-  setSelectedAudienceGoal: (goal: string) => void;
   // Connected accounts (authoritative, backend-backed)
   refreshAccounts: () => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
-  // Campaign/broadcast
-  addCampaign: (campaign: Campaign) => void;
-  addBroadcast: (broadcast: Broadcast) => void;
-  saveCampaignAsDraft: (campaign: Partial<Campaign>) => void;
-  // Team
-  inviteTeamMember: (email: string, role: TeamRole) => void;
-  revokeInvitation: (id: string) => void;
-  changeMemberRole: (id: string, role: TeamRole) => void;
-  removeTeamMember: (id: string) => void;
-  // Contact actions
-  addContactNote: (contactId: string, note: Omit<ContactNote, 'id'>) => void;
-  addContactToCampaign: (contactId: string, campaignName: string, stage: string) => void;
-  updateContactTags: (contactId: string, tags: string[]) => void;
-  mergeContacts: (keepId: string, removeId: string) => void;
-  updateContactStage: (contactId: string, stage: string) => void;
   // Toast
   showToast: (message: string, type: Toast['type']) => void;
   removeToast: (id: string) => void;
@@ -101,23 +58,9 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-// Onboarding completion outlives the tab because the OAuth connect flow leaves
-// the app entirely and comes back via a full page load. Without this, the
-// return trip lands on the marketing page instead of the route that reads
-// ?connected= and pulls the freshly linked account. It also delivers the
-// intended return experience: a creator who's already connected an account
-// lands straight on Opportunities.
-const ONBOARDING_STORAGE_KEY = 'populr.onboardingComplete';
-
-function readOnboardingComplete(): boolean {
-  try {
-    return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === 'true';
-  } catch {
-    // Storage can be unavailable (private mode, blocked cookies) — fall back
-    // to the pre-onboarding experience rather than breaking the app.
-    return false;
-  }
-}
+/** Shown when the app can't reach its backend. Deliberately names no env var
+ *  — build configuration isn't something a creator can act on. */
+const NOT_CONFIGURED_MESSAGE = "Populr can't reach its server right now. Please try again shortly.";
 
 // Verifying a return from Zernio's hosted OAuth (see completeOAuthReturn
 // below) is async and keyed by platform id, not by component instance — a
@@ -144,79 +87,54 @@ function delay(ms: number): Promise<void> {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  // AuthProvider wraps AppProvider (see main.tsx), so the signed-in user is
+  // available here — which is what lets the onboarding flag be per-account
+  // rather than per-browser.
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
+  // Completed during *this* session, before any storage read would reflect
+  // it. Merged with the persisted flag below.
+  const [justOnboarded, setJustOnboarded] = useState(false);
+
   const [state, setState] = useState<AppState>({
-    onboardingComplete: readOnboardingComplete(),
-    selectedConversationId: '1',
-    selectedContactId: null,
-    showContactDrawer: false,
-    smartReply: null,
-    contactDrawerContext: null,
     connectedPlatforms: defaultOnboardingPlatforms.map(p => ({ ...p })),
-    selectedAudienceGoal: '',
     accounts: [],
     accountsLoading: false,
     accountsError: null,
-    contacts: initialContacts.map(c => ({ ...c })),
-    campaigns: initialCampaigns.map(c => ({ ...c })),
-    broadcasts: initialBroadcasts.map(b => ({ ...b })),
-    teamMembers: defaultTeamMembers.map(m => ({ ...m })),
-    pendingInvitations: [],
     toasts: [],
     isLoading: false,
     subscriptionModal: null,
   });
 
+  // Derived during render, not stored: the route gate reads this while
+  // deciding where to send the user, so a tick where the session has
+  // resolved but the flag hasn't would redirect an onboarded creator to
+  // /connect and throw away the route they actually opened.
+  const onboardingComplete = justOnboarded || isOnboardingComplete(userId);
+
+  // Storage tidy-up only (see adoptLegacyOnboardingFlag) — the read above
+  // already honors the legacy key, so this changes nothing on screen.
+  useEffect(() => { adoptLegacyOnboardingFlag(userId); }, [userId]);
+
+  // A different account signing in on the same browser must not inherit the
+  // previous one's in-session completion.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setJustOnboarded(false);
+  }, [userId]);
+
   const completeOnboarding = useCallback(() => {
-    try {
-      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
-    } catch {
-      // Non-fatal: the session still proceeds, it just won't survive a reload.
-    }
-    setState(prev => ({ ...prev, onboardingComplete: true }));
-  }, []);
+    markOnboardingComplete(userId);
+    setJustOnboarded(true);
+  }, [userId]);
 
-  const selectConversation = useCallback((id: string | null) => {
-    setState(prev => ({ ...prev, selectedConversationId: id }));
-  }, []);
 
-  const selectContact = useCallback((id: string | null) => {
-    setState(prev => ({ ...prev, selectedContactId: id }));
-  }, []);
 
-  const openContactDrawer = useCallback((contactId: string, context?: 'inbox' | 'contacts' | 'dashboard' | 'pipeline' | 'analytics') => {
-    setState(prev => ({ ...prev, selectedContactId: contactId, showContactDrawer: true, contactDrawerContext: context || null }));
-  }, []);
 
-  const closeContactDrawer = useCallback(() => {
-    setState(prev => ({ ...prev, showContactDrawer: false, selectedContactId: null, contactDrawerContext: null }));
-  }, []);
 
-  const setContactDrawerContext = useCallback((ctx: typeof state.contactDrawerContext) => {
-    setState(prev => ({ ...prev, contactDrawerContext: ctx }));
-  }, []);
 
-  const setSmartReply = useCallback((reply: { text: string; editing: boolean } | null) => {
-    setState(prev => ({ ...prev, smartReply: reply }));
-  }, []);
 
-  // No backend configured (VITE_API_URL unset) — there is no real connect
-  // flow to run, so this reflects that honestly instead of faking a
-  // successful connection with an invented handle. Matches how
-  // completeOAuthReturn treats the same "not configured" case.
-  const connectPlatform = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      connectedPlatforms: prev.connectedPlatforms.map(p =>
-        p.id === id
-          ? { ...p, status: 'error' as const, errorMessage: 'Populr is not configured (VITE_API_URL is missing).' }
-          : p
-      ),
-    }));
-  }, []);
-
-  const setSelectedAudienceGoal = useCallback((goal: string) => {
-    setState(prev => ({ ...prev, selectedAudienceGoal: goal }));
-  }, []);
 
   // Authoritative connected accounts — always the backend's own list, never
   // inferred or held only in the frontend, per the "no fake success" rule
@@ -246,128 +164,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Campaign management
-  const addCampaign = useCallback((campaign: Campaign) => {
-    setState(prev => ({ ...prev, campaigns: [...prev.campaigns, campaign] }));
-  }, []);
 
-  const addBroadcast = useCallback((broadcast: Broadcast) => {
-    setState(prev => ({ ...prev, broadcasts: [...prev.broadcasts, broadcast] }));
-  }, []);
 
-  const saveCampaignAsDraft = useCallback((campaign: Partial<Campaign>) => {
-    const draft: Campaign = {
-      id: `draft-${Date.now()}`,
-      name: campaign.name || 'Untitled draft',
-      goal: campaign.goal || '',
-      trigger: campaign.trigger || '',
-      message: campaign.message || '',
-      destination: campaign.destination || '',
-      status: 'draft',
-      discovered: 0,
-      engaged: 0,
-      interested: 0,
-      converted: 0,
-      clicks: 0,
-      conversions: 0,
-      rate: '0%',
-      platform: campaign.platform || 'instagram',
-      automationStatus: 'none',
-      humanHandoffs: 0,
-      ...campaign,
-    };
-    setState(prev => ({ ...prev, campaigns: [...prev.campaigns, draft] }));
-  }, []);
 
   // Team management
-  const inviteTeamMember = useCallback((email: string, role: TeamRole) => {
-    const invitation: PendingInvitation = {
-      id: `inv-${Date.now()}`,
-      email,
-      role,
-      invitedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      status: 'pending',
-    };
-    setState(prev => ({ ...prev, pendingInvitations: [...prev.pendingInvitations, invitation] }));
-  }, []);
 
-  const revokeInvitation = useCallback((id: string) => {
-    setState(prev => ({ ...prev, pendingInvitations: prev.pendingInvitations.filter(i => i.id !== id) }));
-  }, []);
 
-  const changeMemberRole = useCallback((id: string, role: TeamRole) => {
-    setState(prev => ({
-      ...prev,
-      teamMembers: prev.teamMembers.map(m => m.id === id ? { ...m, role } : m),
-    }));
-  }, []);
 
-  const removeTeamMember = useCallback((id: string) => {
-    setState(prev => ({ ...prev, teamMembers: prev.teamMembers.filter(m => m.id !== id) }));
-  }, []);
 
   // Contact actions
-  const addContactNote = useCallback((contactId: string, note: Omit<ContactNote, 'id'>) => {
-    const newNote: ContactNote = { ...note, id: `note-${Date.now()}` };
-    setState(prev => ({
-      ...prev,
-      contacts: prev.contacts.map(c =>
-        c.id === contactId
-          ? { ...c, notes: [...c.notes, newNote] }
-          : c
-      ),
-    }));
-  }, []);
 
-  const addContactToCampaign = useCallback((contactId: string, campaignName: string, stage: string) => {
-    setState(prev => ({
-      ...prev,
-      contacts: prev.contacts.map(c =>
-        c.id === contactId
-          ? { ...c, campaigns: [...c.campaigns, { name: campaignName, stage }] }
-          : c
-      ),
-    }));
-  }, []);
 
-  const updateContactTags = useCallback((contactId: string, tags: string[]) => {
-    setState(prev => ({
-      ...prev,
-      contacts: prev.contacts.map(c =>
-        c.id === contactId ? { ...c, tags } : c
-      ),
-    }));
-  }, []);
 
-  const mergeContacts = useCallback((keepId: string, removeId: string) => {
-    setState(prev => {
-      const keep = prev.contacts.find(c => c.id === keepId);
-      const remove = prev.contacts.find(c => c.id === removeId);
-      if (!keep || !remove) return prev;
-      return {
-        ...prev,
-        contacts: prev.contacts.filter(c => c.id !== removeId).map(c =>
-          c.id === keepId
-            ? {
-                ...c,
-                tags: [...new Set([...(c.tags || []), ...(remove.tags || [])])],
-                notes: [...c.notes, ...remove.notes],
-                campaigns: [...c.campaigns, ...remove.campaigns],
-                insights: [...new Set([...c.insights, ...remove.insights])],
-              }
-            : c
-        ),
-      };
-    });
-  }, []);
 
-  const updateContactStage = useCallback((contactId: string, stage: string) => {
-    setState(prev => ({
-      ...prev,
-      contacts: prev.contacts.map(c =>
-        c.id === contactId ? { ...c, stage: stage as Contact['stage'] } : c
-      ),
-    }));
-  }, []);
 
   // Toast
   const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
@@ -391,11 +200,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Real Instagram/TikTok/YouTube/X connect, backed by the Zernio-powered
-  // backend. Falls back to the local simulated connect when no backend is
-  // configured (VITE_API_URL unset), so the app still demos standalone.
+  // backend. With no backend configured there is no real connect flow to
+  // run, so the card reflects that honestly rather than faking a successful
+  // connection with an invented handle.
   const beginPlatformConnect = useCallback((id: string) => {
     if (!isBackendConfigured()) {
-      connectPlatform(id);
+      setState(prev => ({
+        ...prev,
+        connectedPlatforms: prev.connectedPlatforms.map(p =>
+          p.id === id
+            ? { ...p, status: 'error' as const, errorMessage: NOT_CONFIGURED_MESSAGE }
+            : p
+        ),
+      }));
       return;
     }
     setState(prev => ({
@@ -439,7 +256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }));
         showToast(message, 'error');
       });
-  }, [connectPlatform, showToast, openSubscriptionModal]);
+  }, [showToast, openSubscriptionModal]);
 
   // Pulls real synced accounts from the backend and reflects them onto both
   // the onboarding platform list and the authoritative `accounts` list —
@@ -493,7 +310,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p =>
             p.id === id
-              ? { ...p, status: 'error' as const, errorMessage: 'Populr is not configured (VITE_API_URL is missing).' }
+              ? { ...p, status: 'error' as const, errorMessage: NOT_CONFIGURED_MESSAGE }
               : p
           ),
         }));
@@ -596,35 +413,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       ...state,
+      onboardingComplete,
       completeOnboarding,
-      selectConversation,
-      selectContact,
-      openContactDrawer,
-      closeContactDrawer,
-      setContactDrawerContext,
-      setSmartReply,
-      connectPlatform,
       beginPlatformConnect,
       refreshConnectedAccounts,
       completeOAuthReturn,
       failOAuthReturn,
       openSubscriptionModal,
       closeSubscriptionModal,
-      setSelectedAudienceGoal,
       refreshAccounts,
       disconnectAccount,
-      addCampaign,
-      addBroadcast,
-      saveCampaignAsDraft,
-      inviteTeamMember,
-      revokeInvitation,
-      changeMemberRole,
-      removeTeamMember,
-      addContactNote,
-      addContactToCampaign,
-      updateContactTags,
-      mergeContacts,
-      updateContactStage,
       showToast,
       removeToast,
       setLoading,

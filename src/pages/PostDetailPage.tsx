@@ -3,14 +3,13 @@ import { useNavigate, useParams } from 'react-router';
 import {
   ArrowLeft, AlertCircle,
   Pencil, Trash2, XCircle, RefreshCw, ExternalLink, Clock, Image as ImageIcon,
-  Video as VideoIcon, GalleryHorizontal, Type as TypeIcon, User,
+  Video as VideoIcon, GalleryHorizontal, Type as TypeIcon,
 } from 'lucide-react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
 import { platformMeta } from '../lib/platformMeta';
 import { STATUS_LABEL, STATUS_STYLE } from '../lib/postStatus';
 import {
@@ -31,7 +30,6 @@ export default function PostDetailPage() {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
   const { showToast } = useApp();
-  const { user } = useAuth();
 
   const [post, setPost] = useState<PostWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,9 +165,6 @@ export default function PostDetailPage() {
           </div>
 
           <Card padding={5} className="space-y-2.5">
-            <div className="flex items-center gap-2 text-[12px] text-[#6B6B6B]">
-              <User size={13} /> Created by {user?.name || user?.email || 'you'}
-            </div>
             <div className="flex items-center gap-2 text-[12px] text-[#6B6B6B]">
               <Clock size={13} /> Created {fullDate(p.created_at)}
             </div>
