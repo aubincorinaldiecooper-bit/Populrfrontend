@@ -1,9 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
-import { X, ExternalLink, Copy, Check, Send, EyeOff } from 'lucide-react';
+import { X, ExternalLink, Copy, Check, Send, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import gsap from 'gsap';
-import { Button } from '@astryxdesign/core/Button';
-import { Banner } from '@astryxdesign/core/Banner';
-import { TextArea } from '@astryxdesign/core/TextArea';
 import PlatformDot from './PlatformDot';
 import { sendOpportunityReply } from '../lib/api';
 import type { Opportunity, OpportunityStatus } from '../lib/api';
@@ -58,18 +55,33 @@ export default function OpportunityDetailDrawer({
   const [copied, setCopied] = useState(false);
   const [statusPending, setStatusPending] = useState<OpportunityStatus | null>(null);
 
+  // GSAP drives these tweens outside CSS, so the global
+  // prefers-reduced-motion override can't reach them — honored explicitly.
+  const reduceMotion = typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   useEffect(() => {
     if (drawerRef.current && backdropRef.current) {
-      gsap.to(backdropRef.current, { opacity: 1, duration: 0.25 });
-      gsap.to(drawerRef.current, { x: '0%', duration: 0.35, ease: 'power3.out' });
+      gsap.to(backdropRef.current, { opacity: 1, duration: reduceMotion ? 0 : 0.25 });
+      gsap.to(drawerRef.current, { x: '0%', duration: reduceMotion ? 0 : 0.35, ease: 'power3.out' });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleClose = () => {
-    if (drawerRef.current) gsap.to(drawerRef.current, { x: '100%', duration: 0.25, ease: 'power3.in' });
-    if (backdropRef.current) gsap.to(backdropRef.current, { opacity: 0, duration: 0.2, onComplete: onClose });
+    if (drawerRef.current) gsap.to(drawerRef.current, { x: '100%', duration: reduceMotion ? 0 : 0.25, ease: 'power3.in' });
+    if (backdropRef.current) gsap.to(backdropRef.current, { opacity: 0, duration: reduceMotion ? 0 : 0.2, onComplete: onClose });
     else onClose();
   };
+
+  // A modal surface closes on Escape — same standard the mobile nav drawer
+  // follows.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const canRespondInApp = opportunity.availableActions.includes('reply') || opportunity.availableActions.includes('message');
   const canOpenOnPlatform = opportunity.availableActions.includes('open_on_platform');
@@ -116,6 +128,9 @@ export default function OpportunityDetailDrawer({
       <div ref={backdropRef} onClick={handleClose} className="fixed inset-0 bg-[rgba(17,17,17,0.3)] z-[60] opacity-0" />
       <div
         ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Opportunity details"
         className="fixed right-0 top-0 h-screen w-[520px] max-w-full bg-white z-[70] shadow-drawer flex flex-col overflow-hidden"
         style={{ transform: 'translateX(100%)' }}
       >
@@ -139,7 +154,9 @@ export default function OpportunityDetailDrawer({
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="sm" isIconOnly icon={<X size={18} />} label="Close" onClick={handleClose} />
+          <button onClick={handleClose} aria-label="Close" className="w-9 h-9 rounded-full flex items-center justify-center text-[#6B6B6B] hover:bg-[#FAFAF8] transition-colors flex-shrink-0">
+            <X size={18} />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -205,7 +222,9 @@ export default function OpportunityDetailDrawer({
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[#9B9B8F]">Suggested response</h2>
                 {canCopyResponse && (
-                  <Button variant="ghost" size="sm" label={copied ? 'Copied' : 'Copy'} icon={copied ? <Check size={13} /> : <Copy size={13} />} onClick={handleCopy} />
+                  <button onClick={handleCopy} className="pop-btn-ghost text-[12px] py-1 px-2.5">
+                    {copied ? <><Check size={13} />Copied</> : <><Copy size={13} />Copy</>}
+                  </button>
                 )}
               </div>
               <p className="text-[13px] text-[#111111] leading-relaxed bg-[#FAFAF8] rounded-xl p-4">{opportunity.suggestedResponse}</p>
@@ -217,24 +236,43 @@ export default function OpportunityDetailDrawer({
             <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[#9B9B8F] mb-3">Respond</h2>
 
             {!canRespondInApp && (
-              <Banner
-                status="warning"
-                title="Can't send a reply here yet"
-                description={`Populr can't send a reply on ${opportunity.platform} for this interaction yet.${canOpenOnPlatform ? ' Open it on the platform to respond directly, or copy the suggested response above.' : ' Mark this reviewed once you’ve followed up manually.'}`}
-                className="mb-3"
-              />
+              <div className="bg-[#FFF3E0] rounded-xl p-4 mb-3 flex items-start gap-2.5">
+                <AlertCircle size={15} className="text-[#D97706] flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[13px] font-semibold text-[#111111]">Can&apos;t send a reply here yet</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5 leading-relaxed">
+                    Populr can&apos;t send a reply on {opportunity.platform} for this interaction yet.
+                    {canOpenOnPlatform ? ' Open it on the platform to respond directly, or copy the suggested response above.' : ' Mark this reviewed once you\u2019ve followed up manually.'}
+                  </p>
+                </div>
+              </div>
             )}
 
             {canRespondInApp && !showComposer && (
-              <Button variant="primary" width="100%" icon={<Send size={14} />} label="Write a reply" onClick={() => setShowComposer(true)} />
+              <button onClick={() => setShowComposer(true)} className="pop-btn-primary w-full justify-center">
+                <Send size={14} />Write a reply
+              </button>
             )}
 
             {canRespondInApp && showComposer && !confirming && (
               <div className="space-y-3">
-                <TextArea label="Reply" isLabelHidden value={replyDraft} onChange={setReplyDraft} rows={4} placeholder="Write your reply..." />
+                <textarea
+                  value={replyDraft}
+                  onChange={e => setReplyDraft(e.target.value)}
+                  rows={4}
+                  placeholder="Write your reply..."
+                  aria-label="Reply"
+                  className="w-full bg-white border border-[#E8E4DF] rounded-xl px-3.5 py-2.5 text-[13px] placeholder:text-[#9B9B8F] outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/40 resize-y"
+                />
                 <div className="flex gap-2">
-                  <Button variant="primary" className="flex-1" label="Review & send" isDisabled={!replyDraft.trim()} onClick={() => setConfirming(true)} />
-                  <Button variant="ghost" label="Cancel" onClick={() => setShowComposer(false)} />
+                  <button
+                    onClick={() => setConfirming(true)}
+                    disabled={!replyDraft.trim()}
+                    className="pop-btn-primary flex-1 justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Review &amp; send
+                  </button>
+                  <button onClick={() => setShowComposer(false)} className="pop-btn-ghost">Cancel</button>
                 </div>
               </div>
             )}
@@ -259,13 +297,16 @@ export default function OpportunityDetailDrawer({
                 </div>
                 {sendError && <p className="text-[12px] text-[#DC2626]">{sendError}</p>}
                 <div className="flex gap-2">
-                  <Button
-                    variant="primary" className="flex-1" label={sending ? 'Sending...' : 'Confirm & send'}
-                    icon={!sending ? <Send size={14} /> : undefined}
-                    isLoading={sending} isDisabled={sending}
+                  <button
                     onClick={handleConfirmSend}
-                  />
-                  <Button variant="ghost" label="Back" isDisabled={sending} onClick={() => setConfirming(false)} />
+                    disabled={sending}
+                    className="pop-btn-primary flex-1 justify-center disabled:opacity-50"
+                  >
+                    {sending ? <><Loader2 size={14} className="animate-spin" />Sending…</> : <><Send size={14} />Confirm &amp; send</>}
+                  </button>
+                  <button onClick={() => setConfirming(false)} disabled={sending} className="pop-btn-ghost disabled:opacity-50">
+                    Back
+                  </button>
                 </div>
               </div>
             )}
@@ -276,23 +317,31 @@ export default function OpportunityDetailDrawer({
             <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[#9B9B8F] mb-3">Other actions</h2>
             <div className="flex flex-wrap gap-2">
               {canOpenOnPlatform && openUrl && (
-                <Button variant="secondary" size="sm" label="Open on platform" icon={<ExternalLink size={13} />} href={openUrl} target="_blank" rel="noreferrer" />
+                <a href={openUrl} target="_blank" rel="noreferrer" className="pop-btn-tertiary text-[12px] py-1.5 px-3 inline-flex items-center gap-1.5">
+                  <ExternalLink size={13} />Open on platform
+                </a>
               )}
-              <Button
-                variant="secondary" size="sm" label="Mark reviewed" icon={<Check size={13} />}
-                isLoading={statusPending === 'reviewed'} isDisabled={statusPending !== null || opportunity.status === 'reviewed'}
+              <button
                 onClick={() => handleStatus('reviewed')}
-              />
-              <Button
-                variant="secondary" size="sm" label="Mark responded" icon={<Check size={13} />}
-                isLoading={statusPending === 'responded'} isDisabled={statusPending !== null || opportunity.status === 'responded'}
+                disabled={statusPending !== null || opportunity.status === 'reviewed'}
+                className="pop-btn-tertiary text-[12px] py-1.5 px-3 disabled:opacity-40"
+              >
+                {statusPending === 'reviewed' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Mark reviewed
+              </button>
+              <button
                 onClick={() => handleStatus('responded')}
-              />
-              <Button
-                variant="ghost" size="sm" label="Dismiss" icon={<EyeOff size={13} />}
-                isLoading={statusPending === 'dismissed'} isDisabled={statusPending !== null || opportunity.status === 'dismissed'}
+                disabled={statusPending !== null || opportunity.status === 'responded'}
+                className="pop-btn-tertiary text-[12px] py-1.5 px-3 disabled:opacity-40"
+              >
+                {statusPending === 'responded' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Mark responded
+              </button>
+              <button
                 onClick={() => handleStatus('dismissed')}
-              />
+                disabled={statusPending !== null || opportunity.status === 'dismissed'}
+                className="pop-btn-ghost text-[12px] py-1.5 px-3 disabled:opacity-40"
+              >
+                {statusPending === 'dismissed' ? <Loader2 size={13} className="animate-spin" /> : <EyeOff size={13} />}Dismiss
+              </button>
             </div>
           </div>
         </div>

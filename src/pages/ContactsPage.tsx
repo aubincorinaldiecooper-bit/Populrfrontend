@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Search, ArrowLeft, AlertCircle, Loader2, UserPlus, X, Plus,
+  Search, ArrowLeft, AlertCircle, X, Plus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
 import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
-import { TableSkeleton } from '../components/Skeleton';
+import { TableSkeleton, Skeleton } from '../components/Skeleton';
 import {
   isBackendConfigured, fetchContacts, fetchContact, updateContact, updateContactTag,
 } from '../lib/api';
@@ -43,7 +43,6 @@ function timeAgo(iso: string | null): string {
 }
 
 export default function ContactsPage() {
-  const { showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -118,21 +117,25 @@ export default function ContactsPage() {
         title="Contacts"
         subtitle="Your people, your community, your next big collab."
         action={
-          <div className="flex items-center gap-2">
-            <div className="relative hidden sm:block">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
-                className="pop-search w-56" />
-            </div>
-            <button
-              onClick={() => showToast("Contacts are created automatically when someone engages with your automations — there's no manual add yet.", 'info')}
-              className="pop-btn-primary"
-            >
-              <UserPlus size={14} />Add contact
-            </button>
+          // No "Add contact" button: contacts are created automatically when
+          // someone engages with an automation, and a primary button whose
+          // only behavior was a toast explaining it does nothing was a dead
+          // affordance — the empty state below carries that explanation.
+          <div className="relative hidden sm:block">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
+              className="pop-search w-56" />
           </div>
         }
       />
+
+      {/* On mobile the header search is hidden — without this, phones had no
+          way to search contacts at all. */}
+      <div className="relative sm:hidden mb-4">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts..."
+          className="pop-search w-full" />
+      </div>
 
       <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
         {STAGE_TABS.map(t => (
@@ -314,8 +317,20 @@ function ContactDetailView({
       </button>
 
       {loading && (
-        <div className="flex items-center justify-center py-16 text-[#6B6B6B]">
-          <Loader2 size={20} className="animate-spin mr-2" />Loading contact...
+        <div role="status" aria-busy="true" aria-label="Loading contact">
+          <div className="flex items-center gap-4 mb-6">
+            <Skeleton className="w-16 h-16 rounded-full flex-shrink-0" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 rounded w-40" />
+              <Skeleton className="h-3 rounded w-24" />
+            </div>
+          </div>
+          <div className="pop-card p-5 space-y-3">
+            <Skeleton className="h-3 rounded w-[30%]" />
+            <Skeleton className="h-3 rounded w-[55%]" />
+            <Skeleton className="h-3 rounded w-[45%]" />
+          </div>
+          <span className="sr-only">Loading contact</span>
         </div>
       )}
 

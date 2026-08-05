@@ -61,6 +61,25 @@ describe('testAutomation — matching mirrors the engine', () => {
   });
 });
 
+describe('testAutomation — previews the configured replies, not placeholders', () => {
+  it('renders the configured comment reply and DM with {{name}}/{{link}} resolved', async () => {
+    const result = await testAutomation(input({
+      sampleText: 'guide please',
+      aiEnabled: false,
+      commentReplyBody: 'Check your DMs, {{name}}!',
+      dmBody: 'Hey {{name}} — grab it here: {{link}}',
+      linkUrl: 'https://creator.example/guide',
+    }));
+    expect(result.publicReply).toBe('Check your DMs, there!');
+    expect(result.dm).toBe('Hey there — grab it here: https://creator.example/guide');
+  });
+
+  it("falls back to the engine's own default comment reply when none is configured", async () => {
+    const result = await testAutomation(input({ sampleText: 'guide', aiEnabled: false }));
+    expect(result.publicReply).toBe('Just sent you a DM! 📩');
+  });
+});
+
 describe('testAutomation — missing AI preview is not a failure', () => {
   it('AI off: matched, will auto-reply, with an informational note — not needsHuman', async () => {
     const result = await testAutomation(input({ sampleText: 'link please', aiEnabled: false }));

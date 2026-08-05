@@ -48,6 +48,13 @@ export interface WizardState {
   accountId: string | null;
   post: Post | null;
   triggerKeywords: string[];
+  /** The replies the automation actually sends — these map to the backend's
+   *  comment_reply_body / message_body / link_url. Until these existed the
+   *  Replies step configured nothing: every automation fell back to the
+   *  engine's generic default text with no link. */
+  commentReplyBody: string;
+  dmBody: string;
+  linkUrl: string;
   aiEnabled: boolean;
   aiInstructions: string;
   active: boolean;
@@ -57,7 +64,8 @@ export interface WizardState {
 function blankState(): WizardState {
   return {
     automationId: null, name: '', type: null, accountId: null, post: null,
-    triggerKeywords: [], aiEnabled: true, aiInstructions: '', active: false, dirty: false,
+    triggerKeywords: [], commentReplyBody: '', dmBody: '', linkUrl: '',
+    aiEnabled: true, aiInstructions: '', active: false, dirty: false,
   };
 }
 
@@ -70,6 +78,9 @@ function initialStateFor(editAutomation: Automation | null): WizardState {
     accountId: editAutomation.account_id,
     post: null, // hydrated by PostStep from source_post_id once posts load
     triggerKeywords: editAutomation.keywords,
+    commentReplyBody: editAutomation.comment_reply_body ?? '',
+    dmBody: editAutomation.message_body ?? '',
+    linkUrl: editAutomation.link_url ?? '',
     aiEnabled: editAutomation.ai_enabled,
     aiInstructions: editAutomation.ai_instructions ?? '',
     active: editAutomation.active,
@@ -117,7 +128,10 @@ export function useAutomationWizard() {
   // than) reading it once into a ref.
   const [state, setState] = useState<WizardState>(() => {
     if (editAutomation) return initialStateFor(editAutomation);
-    return (resumeDraftId ? getWizardDraft(resumeDraftId) : null)?.state ?? blankState();
+    // Merged over blankState: drafts saved before the reply fields existed
+    // resume with empty strings rather than undefined.
+    const draft = resumeDraftId ? getWizardDraft(resumeDraftId) : null;
+    return draft ? { ...blankState(), ...draft.state } : blankState();
   });
   const [stepIndex, setStepIndex] = useState(
     () => (resumeDraftId ? getWizardDraft(resumeDraftId) : null)?.stepIndex ?? 0
@@ -187,6 +201,9 @@ export function useAutomationWizard() {
       keywords: state.triggerKeywords,
       sourcePostId: cfg.needsPost && state.post ? Number(state.post.id) : null,
       allPosts: !cfg.needsPost,
+      commentReplyBody: state.commentReplyBody.trim() ? state.commentReplyBody.trim() : null,
+      messageBody: state.dmBody.trim() ? state.dmBody.trim() : null,
+      linkUrl: state.linkUrl.trim() ? state.linkUrl.trim() : null,
       aiEnabled: state.aiEnabled,
       aiInstructions: state.aiInstructions.trim() ? state.aiInstructions.trim() : null,
       active: activate,
