@@ -36,10 +36,51 @@ export function newWizardDraftId(): string {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function isDraft(value: unknown): value is WizardDraft {
-  if (!value || typeof value !== 'object') return false;
+const TYPE_CARDS = ['comment_dm', 'comment_reply', 'dm_only'] as const;
+
+/**
+ * Coerce a stored state into a shape the wizard and the Drafts list can
+ * safely consume (they read state.name.toLowerCase(),
+ * state.triggerKeywords.some(...), etc. without further guards). Anything
+ * that isn't an object is unusable; individual fields of the wrong type —
+ * a partially corrupt or future-versioned entry — degrade to their blank
+ * defaults instead of crashing the page.
+ */
+function sanitizeState(value: unknown): WizardState | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const s = value as Record<string, unknown>;
+  return {
+    automationId: typeof s.automationId === 'string' ? s.automationId : null,
+    name: typeof s.name === 'string' ? s.name : '',
+    type: TYPE_CARDS.includes(s.type as (typeof TYPE_CARDS)[number])
+      ? (s.type as WizardState['type'])
+      : null,
+    accountId: typeof s.accountId === 'string' ? s.accountId : null,
+    post: s.post && typeof s.post === 'object' && !Array.isArray(s.post)
+      ? (s.post as WizardState['post'])
+      : null,
+    triggerKeywords: Array.isArray(s.triggerKeywords)
+      ? s.triggerKeywords.filter((k): k is string => typeof k === 'string')
+      : [],
+    aiEnabled: typeof s.aiEnabled === 'boolean' ? s.aiEnabled : true,
+    aiInstructions: typeof s.aiInstructions === 'string' ? s.aiInstructions : '',
+    active: s.active === true,
+    dirty: s.dirty === true,
+  };
+}
+
+function toDraft(value: unknown): WizardDraft | null {
+  if (!value || typeof value !== 'object') return null;
   const d = value as Partial<WizardDraft>;
-  return typeof d.id === 'string' && !!d.state && typeof d.state === 'object';
+  if (typeof d.id !== 'string') return null;
+  const state = sanitizeState(d.state);
+  if (!state) return null;
+  return {
+    id: d.id,
+    state,
+    stepIndex: typeof d.stepIndex === 'number' ? d.stepIndex : 0,
+    savedAt: typeof d.savedAt === 'string' ? d.savedAt : new Date(0).toISOString(),
+  };
 }
 
 function readAll(): WizardDraft[] {
@@ -49,12 +90,7 @@ function readAll(): WizardDraft[] {
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        drafts = parsed.filter(isDraft).map(d => ({
-          id: d.id,
-          state: d.state,
-          stepIndex: typeof d.stepIndex === 'number' ? d.stepIndex : 0,
-          savedAt: typeof d.savedAt === 'string' ? d.savedAt : new Date(0).toISOString(),
-        }));
+        drafts = parsed.map(toDraft).filter((d): d is WizardDraft => d !== null);
       }
     }
   } catch {
@@ -69,11 +105,12 @@ function readAll(): WizardDraft[] {
   try {
     const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyRaw) {
-      const legacy = JSON.parse(legacyRaw) as { state?: WizardState; stepIndex?: number };
-      if (legacy && typeof legacy === 'object' && legacy.state) {
+      const legacy = JSON.parse(legacyRaw) as { state?: unknown; stepIndex?: number };
+      const legacyState = legacy && typeof legacy === 'object' ? sanitizeState(legacy.state) : null;
+      if (legacyState) {
         drafts.push({
           id: newWizardDraftId(),
-          state: legacy.state,
+          state: legacyState,
           stepIndex: typeof legacy.stepIndex === 'number' ? legacy.stepIndex : 0,
           savedAt: new Date().toISOString(),
         });

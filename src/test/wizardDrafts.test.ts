@@ -109,6 +109,30 @@ describe('wizardDrafts store', () => {
     expect(listWizardDrafts()).toEqual([good]);
   });
 
+  it('coerces malformed state fields to safe defaults instead of crashing consumers', () => {
+    // A partially corrupt / future-versioned entry: the Drafts list reads
+    // state.name.toLowerCase() and state.triggerKeywords.some(...) without
+    // further guards, so every field must come back type-correct.
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
+      { id: 'x', state: {} },
+      { id: 'y', state: { name: 123, type: 'not_a_real_type', triggerKeywords: 'kw', aiInstructions: null } },
+      { id: 'z', state: { name: 'ok', triggerKeywords: ['a', 7, 'b'] } },
+    ]));
+    const [x, y, z] = ['x', 'y', 'z'].map(id => getWizardDraft(id)!);
+    expect(x.state.name).toBe('');
+    expect(x.state.triggerKeywords).toEqual([]);
+    expect(y.state.name).toBe('');
+    expect(y.state.type).toBeNull();
+    expect(y.state.triggerKeywords).toEqual([]);
+    expect(y.state.aiInstructions).toBe('');
+    expect(z.state.triggerKeywords).toEqual(['a', 'b']);
+    // Sanity: the fields the UI calls methods on are the right types.
+    for (const d of listWizardDrafts()) {
+      expect(typeof d.state.name.toLowerCase()).toBe('string');
+      expect(d.state.triggerKeywords.every(k => typeof k === 'string')).toBe(true);
+    }
+  });
+
   it('caps the store, dropping the oldest drafts first', () => {
     for (let i = 0; i < 25; i++) {
       saveWizardDraft(draft({ savedAt: `2026-07-${String(i + 1).padStart(2, '0')}T00:00:00.000Z` }));

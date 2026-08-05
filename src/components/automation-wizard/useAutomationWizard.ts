@@ -80,13 +80,15 @@ function initialStateFor(editAutomation: Automation | null): WizardState {
 /**
  * Whether there's anything worth keeping as a draft yet. Prevents an opened-
  * and-abandoned blank wizard from littering the Drafts section with empty
- * "Untitled" entries.
+ * "Untitled" entries. accountId deliberately doesn't count: CreateStep
+ * auto-selects a sole connected account on mount (marking the wizard dirty
+ * with zero user input), and even a hand-picked account is a single click —
+ * not work worth resuming on its own.
  */
 function hasDraftContent(state: WizardState): boolean {
   return (
     state.name.trim() !== '' ||
     state.type !== null ||
-    state.accountId !== null ||
     state.post !== null ||
     state.triggerKeywords.length > 0 ||
     state.aiInstructions.trim() !== ''
