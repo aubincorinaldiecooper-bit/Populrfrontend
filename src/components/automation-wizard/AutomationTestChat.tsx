@@ -140,13 +140,37 @@ function TestResultBubbles({ result }: { result: AutomationTestResult }) {
       </div>
     );
   }
+
+  // Non-keyword triggers legitimately match with no keyword — never render
+  // `Matched keyword ""`.
+  const matchedLabel = result.keyword
+    ? <>Matched keyword &ldquo;{result.keyword}&rdquo;</>
+    : <>Trigger matched</>;
+
+  // The escalation case: the AI decided a human should answer. Only ever
+  // true from a real AI decision — a missing preview is not an escalation.
   if (result.needsHuman && !result.publicReply && !result.dm) {
     return (
       <div className="bg-[#FFF3E0] text-[#D97706] px-3 py-2 rounded-xl text-[12px]">
-        Matched keyword &ldquo;{result.keyword}&rdquo; — {result.reason ?? 'needs a human reply.'}
+        {matchedLabel} — {result.reason ?? 'needs a human reply.'}
       </div>
     );
   }
+
+  // Matched with nothing to preview: the automation replies in production
+  // (deterministic path); there's just no AI draft to show. A calm
+  // confirmation, not the old orange "temporarily unavailable" dead-end.
+  if (!result.publicReply && !result.dm) {
+    return (
+      <div>
+        <div className="bg-[#E0F5E9] text-[#059669] px-3 py-2 rounded-xl text-[12px]">
+          {matchedLabel} — {result.reason ?? 'Populr will reply automatically.'}
+        </div>
+        {result.note && <p className="text-[10px] text-[#9B9B8F] pl-1 mt-1 leading-relaxed">{result.note}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1.5">
       {result.publicReply && (
@@ -165,6 +189,7 @@ function TestResultBubbles({ result }: { result: AutomationTestResult }) {
           <p className="text-[9px] text-[#9B9B8F] pl-1 mt-0.5">DM</p>
         </div>
       )}
+      {result.note && <p className="text-[10px] text-[#9B9B8F] pl-1 leading-relaxed">{result.note}</p>}
     </div>
   );
 }

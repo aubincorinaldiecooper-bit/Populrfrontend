@@ -1,0 +1,99 @@
+import { describe, it, expect, vi } from 'vitest';
+
+/* The wizard test chat's matching and no-preview behavior.
+ *
+ * Two regressions from the redesign restore, both visible in one screenshot:
+ *
+ * 1. The local matcher only enforced keywords when triggerType === 'keyword'
+ *    — a value the wizard never produces ('comment' / 'dm') — so ANY sample
+ *    "matched", with a null keyword rendered as `Matched keyword ""`. The
+ *    engine (populrbackend automationMatch.ts) gates on keywords for every
+ *    trigger type, so the preview claimed triggers production would never
+ *    fire.
+ *
+ * 2. A missing AI preview (Smart Replies unconfigured, endpoint down)
+ *    rendered as an orange "temporarily unavailable" dead-end implying the
+ *    automation was broken. Keyword automations reply deterministically
+ *    without AI (the backend e2e passes with zero AI calls), so a missing
+ *    preview is a note on a successful match, never a failure.
+ */
+
+// api.ts imports authClient, which throws at module load without
+// VITE_AUTH_URL — stub it so the pure matching logic is importable.
+vi.mock('../lib/authClient', () => ({
+  getApiAuthToken: async () => null,
+  authClient: {},
+}));
+
+import { testAutomation } from '../lib/api';
+import type { AutomationTestInput } from '../lib/api';
+
+function input(overrides: Partial<AutomationTestInput> = {}): AutomationTestInput {
+  return {
+    platform: 'instagram',
+    accountId: 'acc_1',
+    triggerType: 'comment',      // what the wizard actually produces
+    keywords: ['guide', 'link'],
+    replyChannel: 'both',
+    channel: 'comment',
+    sampleText: 'hi',
+    aiEnabled: true,
+    ...overrides,
+  };
+}
+
+describe('testAutomation — matching mirrors the engine', () => {
+  it('does NOT match when no keyword appears, even for comment/dm triggers', async () => {
+    const result = await testAutomation(input({ sampleText: 'hi' }));
+    expect(result.matched).toBe(false);
+    expect(result.reason).toMatch(/keyword/i);
+  });
+
+  it('matches and reports the actual keyword when one appears', async () => {
+    const result = await testAutomation(input({ sampleText: 'send me the GUIDE please', aiEnabled: false }));
+    expect(result.matched).toBe(true);
+    expect(result.keyword).toBe('guide');
+  });
+
+  it('a matched result never carries an empty-string keyword', async () => {
+    const result = await testAutomation(input({ sampleText: 'guide', aiEnabled: false }));
+    expect(result.keyword).not.toBe('');
+  });
+});
+
+describe('testAutomation — missing AI preview is not a failure', () => {
+  it('AI off: matched, will auto-reply, with an informational note — not needsHuman', async () => {
+    const result = await testAutomation(input({ sampleText: 'link please', aiEnabled: false }));
+    expect(result.matched).toBe(true);
+    expect(result.needsHuman).toBe(false);
+    expect(result.reason).toMatch(/reply automatically/i);
+    expect(result.note).toMatch(/AI drafting is off/i);
+  });
+
+  it('preview endpoint unreachable: still a successful match with a note, not an error or dead-end', async () => {
+    // No fetch mock: in the test env the request genuinely fails, which is
+    // exactly the condition under test.
+    const result = await testAutomation(input({ sampleText: 'guide', aiEnabled: true }));
+    expect(result.matched).toBe(true);
+    expect(result.needsHuman).toBe(false);
+    expect(result.note).toMatch(/doesn't affect the automation/i);
+    // The old copy must be gone in every branch.
+    expect(result.reason).not.toMatch(/temporarily unavailable/i);
+    expect(result.note).not.toMatch(/temporarily unavailable/i);
+  });
+
+  it('Smart Replies unconfigured on the server: note says so without claiming breakage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ available: false, reason: 'not_configured' }),
+    })));
+    try {
+      const result = await testAutomation(input({ sampleText: 'guide' }));
+      expect(result.matched).toBe(true);
+      expect(result.needsHuman).toBe(false);
+      expect(result.note).toMatch(/isn't set up on this server/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

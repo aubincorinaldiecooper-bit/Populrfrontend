@@ -930,6 +930,11 @@ export interface AutomationTestResult {
   intent?: string;
   confidence?: number;
   reason?: string;
+  /** Subdued informational line (e.g. why there's no AI draft to show).
+   *  Never a failure claim: a missing AI preview doesn't stop the
+   *  automation from replying in production, and the copy must not imply
+   *  that it does. */
+  note?: string | null;
   publicReply?: string | null;
   dm?: string | null;
 }
@@ -968,16 +973,39 @@ function localKeywordMatch(text: string, keywords: string[], mode: 'contains' | 
  *  same guarantees as the underlying endpoint. */
 export async function testAutomation(input: AutomationTestInput): Promise<AutomationTestResult> {
   const keyword = localKeywordMatch(input.sampleText, input.keywords);
-  if (input.triggerType === 'keyword' && !keyword) {
-    return { matched: false, reason: 'No trigger keyword found in the sample text.' };
-  }
-  if (!input.aiEnabled) {
+
+  // Mirrors the engine (populrbackend/src/services/automationMatch.ts):
+  // keywords gate matching for EVERY trigger type. The old guard here only
+  // checked them when triggerType === 'keyword' — a value the wizard never
+  // produces ('comment' / 'dm'), so any sample "matched" with a null
+  // keyword, the bubble rendered `Matched keyword ""`, and the preview
+  // claimed a trigger that production would never fire.
+  if (input.keywords.length > 0 && !keyword) {
     return {
-      matched: true, keyword, needsHuman: true,
-      reason: 'AI is off for this automation — enable it to preview a generated reply.',
+      matched: false,
+      reason: `None of this automation's trigger keywords appear in the sample ${input.channel === 'dm' ? 'DM' : 'comment'}.`,
     };
   }
-  const resp = await apiFetch<
+
+  // From here the trigger DID match, so in production the automation fires
+  // and replies regardless of whether an AI draft can be previewed — keyword
+  // automations send their configured replies deterministically (see
+  // populrbackend's engine: e2e passes with zero AI calls). A missing AI
+  // preview is therefore a note on a successful match, never a warning that
+  // something is broken or needs a human.
+  const matchedWithoutPreview = (note: string): AutomationTestResult => ({
+    matched: true, keyword, needsHuman: false,
+    reason: 'Populr will reply automatically.',
+    note,
+  });
+
+  if (!input.aiEnabled) {
+    return matchedWithoutPreview(
+      'AI drafting is off for this automation, so replies use your configured text as-is.'
+    );
+  }
+
+  let resp:
     | { available: false; reason: string }
     | {
         available: true;
@@ -986,24 +1014,32 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
           replyText: string | null; linkToSend: { key: string; url: string } | null;
           needsHuman: boolean; shouldAutoReply: boolean; reason: string;
         };
-      }
-  >('/api/automations/test-reply', {
-    method: 'POST',
-    body: {
-      platform: input.platform,
-      channel: input.channel,
-      messageText: input.sampleText,
-    },
-  });
+      };
+  try {
+    resp = await apiFetch('/api/automations/test-reply', {
+      method: 'POST',
+      body: {
+        platform: input.platform,
+        channel: input.channel,
+        messageText: input.sampleText,
+      },
+    });
+  } catch {
+    // The preview endpoint failing is a preview problem, not an automation
+    // problem — surfacing it as a red test failure (the old behavior)
+    // overstated it.
+    return matchedWithoutPreview(
+      "The AI draft preview couldn't load just now. This doesn't affect the automation itself."
+    );
+  }
   if (!resp.available) {
-    return {
-      matched: true, keyword, needsHuman: true,
-      reason: resp.reason === 'not_configured'
-        ? "Smart Replies isn't configured on this server yet."
+    return matchedWithoutPreview(
+      resp.reason === 'not_configured'
+        ? "Smart Replies isn't set up on this server, so there's no AI draft to show."
         : resp.reason === 'ai_disabled'
-        ? 'AI is turned off in Brand Settings.'
-        : 'The AI preview is temporarily unavailable.',
-    };
+        ? "AI is turned off in Brand Settings, so there's no AI draft to show."
+        : "The AI draft preview couldn't load just now. This doesn't affect the automation itself."
+    );
   }
   const d = resp.decision;
   const wantsComment = input.replyChannel === 'comment' || input.replyChannel === 'both';
