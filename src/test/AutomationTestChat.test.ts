@@ -96,6 +96,27 @@ describe('testAutomation — previews the configured replies, not placeholders',
     }));
     expect(commentOnly.dmMediaUrl ?? null).toBeNull();
   });
+
+  it('the tracked-link button previews with the DM — and only when a link exists to carry', async () => {
+    const withButton = await testAutomation(input({
+      sampleText: 'guide',
+      aiEnabled: false,
+      dmBody: 'Here you go!',
+      linkUrl: 'https://creator.example/guide',
+      buttonLabel: 'Get the guide',
+    }));
+    expect(withButton.dmButtonLabel).toBe('Get the guide');
+
+    // A button with no link has nothing to open — the wizard disables the
+    // field, and the preview must not invent one either.
+    const noLink = await testAutomation(input({
+      sampleText: 'guide',
+      aiEnabled: false,
+      dmBody: 'Here you go!',
+      buttonLabel: 'Get the guide',
+    }));
+    expect(noLink.dmButtonLabel ?? null).toBeNull();
+  });
 });
 
 describe('testAutomation — missing AI preview is not a failure', () => {

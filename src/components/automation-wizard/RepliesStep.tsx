@@ -109,6 +109,28 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
                 <p className="text-[11px] text-[#9B9B8F] mt-1">
                   Populr wraps this in a tracked link, so clicks show up in your stats and lead scoring.
                 </p>
+
+                {wantsDM && (
+                  <div className="mt-3">
+                    <label htmlFor="wizard-button-label" className="block text-[12px] font-semibold text-[#111111] mb-1">
+                      Send it as a button <span className="font-normal text-[#9B9B8F]">(optional)</span>
+                    </label>
+                    <input
+                      id="wizard-button-label"
+                      type="text"
+                      value={state.buttonLabel}
+                      onChange={e => update('buttonLabel', e.target.value.slice(0, 40))}
+                      disabled={!state.linkUrl.trim()}
+                      placeholder="Get the guide"
+                      className="w-full bg-white border border-[#E8E4DF] rounded-xl px-3.5 py-2.5 text-[13px] placeholder:text-[#9B9B8F] outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/40 disabled:opacity-50 disabled:bg-[#FAFAF8]"
+                    />
+                    <p className="text-[11px] text-[#9B9B8F] mt-1">
+                      {state.linkUrl.trim()
+                        ? 'Adds a tappable button to the DM that opens your tracked link — usually outperforms a pasted URL.'
+                        : 'Add a link above first — the button opens your tracked link.'}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

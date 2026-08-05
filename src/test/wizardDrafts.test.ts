@@ -31,6 +31,7 @@ function wizardState(overrides: Partial<WizardState> = {}): WizardState {
     dmBody: '',
     linkUrl: '',
     mediaUrl: '',
+    buttonLabel: '',
     aiEnabled: true,
     aiInstructions: '',
     active: false,

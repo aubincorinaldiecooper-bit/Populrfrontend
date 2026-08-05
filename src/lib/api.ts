@@ -506,6 +506,10 @@ export interface AutomationRecord {
   media_url: string | null;
   link_url: string | null;
   link_kind: string | null;
+  /** Tappable DM buttons (Zernio sendDM buttons). The engine swaps a
+   *  button's url for the per-contact tracked link when it matches the
+   *  automation's link_url. */
+  buttons: { label: string; url?: string }[] | null;
   tags: string[];
   score_delta: number;
   stage_update: string | null;
@@ -538,6 +542,7 @@ export interface AutomationInput {
    *  capability to validate ('image' | 'video' | 'text'). */
   mediaUrl?: string | null;
   responseType?: string;
+  buttons?: { label: string; url?: string }[] | null;
   tags?: string[];
   scoreDelta?: number;
   stageUpdate?: string | null;
@@ -679,6 +684,71 @@ export async function setWorkspacePause(paused: boolean): Promise<boolean> {
     { method: 'POST', body: { paused } }
   );
   return data.workspacePause ?? data.globalPause ?? paused;
+}
+
+// ============================================================
+// Inbox — the conversations queue. Server-side this has existed all along
+// (workspace-scoped since populrbackend PR #31): items land here when an
+// automation replies, when the AI sends a holding reply for an uncovered
+// question, or when something needs the creator personally. Rows carry the
+// joined message/contact context plus the AI's suggested draft when one
+// was parked for review.
+// ============================================================
+
+export interface InboxItem {
+  id: string;
+  contact_id: string | null;
+  account_id: string | null;
+  platform: string;
+  channel: 'comment' | 'dm';
+  status: string;
+  needs_reply: boolean;
+  needs_reply_reason: string | null;
+  automation_status: string | null;
+  suggested_reply: string | null;
+  ai_intent: string | null;
+  ai_confidence: string | number | null;
+  created_at: string;
+  updated_at: string;
+  message_text: string | null;
+  message_direction: string | null;
+  contact_handle: string | null;
+  contact_name: string | null;
+  lead_score: number | null;
+  stage: string | null;
+  post_caption: string | null;
+  automation_name: string | null;
+}
+
+/** GET /api/inbox — this workspace's conversations. */
+export async function fetchInbox(filter: {
+  needsReply?: boolean; limit?: number; offset?: number;
+} = {}): Promise<{ count: number; items: InboxItem[] }> {
+  const params = new URLSearchParams();
+  if (filter.needsReply !== undefined) params.set('needsReply', String(filter.needsReply));
+  if (filter.limit) params.set('limit', String(filter.limit));
+  if (filter.offset) params.set('offset', String(filter.offset));
+  const qs = params.toString();
+  return apiFetch(`/api/inbox${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * POST /api/inbox/:id/reply — send the creator's reply in-channel.
+ * `useSuggested: true` sends the AI's parked draft as-is (one tap).
+ */
+export async function sendInboxReply(
+  id: string,
+  input: { text?: string; useSuggested?: boolean },
+): Promise<{ sentText: string; channel: string }> {
+  return apiFetch(`/api/inbox/${id}/reply`, { method: 'POST', body: input });
+}
+
+/** POST /api/inbox/:id/needs-reply — resolve (or re-flag) without replying. */
+export async function setInboxNeedsReply(
+  id: string,
+  needsReply: boolean,
+): Promise<{ id: string; needsReply: boolean }> {
+  return apiFetch(`/api/inbox/${id}/needs-reply`, { method: 'POST', body: { needsReply } });
 }
 
 // ============================================================
@@ -945,6 +1015,9 @@ export interface AutomationTestResult {
   /** Media the DM will carry (the automation's attachment) — the engine
    *  attaches it to every DM send, AI-drafted or not. */
   dmMediaUrl?: string | null;
+  /** Label of the tappable button attached to the DM, when configured. Like
+   *  media, the engine attaches buttons to every DM send. */
+  dmButtonLabel?: string | null;
 }
 
 export interface AutomationTestInput {
@@ -964,6 +1037,8 @@ export interface AutomationTestInput {
   dmBody?: string;
   linkUrl?: string;
   mediaUrl?: string;
+  /** Label of the tappable button carrying the tracked link, when set. */
+  buttonLabel?: string;
 }
 
 /** Very small keyword matcher — mirrors populrbackend/src/services/
@@ -1027,8 +1102,12 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     ? renderPreviewTemplate(input.dmBody.trim(), previewLink)
     : null;
   // The engine attaches the automation's media to every DM it sends,
-  // AI-drafted or deterministic alike.
+  // AI-drafted or deterministic alike — and its buttons, whose url it swaps
+  // for the per-contact tracked link. A button needs a link to carry.
   const dmMedia = wantsDM && input.mediaUrl?.trim() ? input.mediaUrl.trim() : null;
+  const dmButton = wantsDM && input.buttonLabel?.trim() && input.linkUrl?.trim()
+    ? input.buttonLabel.trim()
+    : null;
 
   const matchedWithoutPreview = (note: string): AutomationTestResult => ({
     matched: true, keyword, needsHuman: false,
@@ -1037,6 +1116,7 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     publicReply: commentPreview,
     dm: dmPreview,
     dmMediaUrl: dmPreview ? dmMedia : null,
+    dmButtonLabel: dmPreview ? dmButton : null,
   });
 
   if (!input.aiEnabled) {
@@ -1102,6 +1182,7 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
         publicReply: postsPublicly ? d.replyText : null,
         dm: postsPublicly ? null : d.replyText,
         dmMediaUrl: postsPublicly ? null : dmMedia,
+        dmButtonLabel: postsPublicly ? null : dmButton,
       };
     }
     // Pure escalation: NOTHING is sent. Previews must vanish — with them
@@ -1132,6 +1213,7 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     publicReply: commentPreview,
     dm: wantsDM ? (d.replyType === 'dm' && d.replyText ? d.replyText : dmPreview) : null,
     dmMediaUrl: wantsDM ? dmMedia : null,
+    dmButtonLabel: wantsDM ? dmButton : null,
   };
 }
 
