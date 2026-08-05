@@ -245,9 +245,9 @@
  * Theme mounts at the true root with no nested-theme boundary to stop
  * at. That's correct for pages actually built with Astryx, but it broke
  * this app's existing pattern of inheriting text color from an ancestor
- * (e.g. LandingPage's dark sections set `color: '#fff'` once on a
- * wrapper and rely on inheritance) — an explicit rule always wins over
- * inheritance, regardless of how low-priority its layer is.
+ * (a wrapper sets `color` once and its headings/paragraphs inherit it) —
+ * an explicit rule always wins over inheritance, regardless of how
+ * low-priority its layer is.
  *
  * Placed in @layer tw-preflight (not unlayered): that wins over
  * @layer reset, restoring plain inheritance for not-yet-migrated pages,
