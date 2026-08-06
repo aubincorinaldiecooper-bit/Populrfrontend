@@ -5,9 +5,8 @@ import AIInstructionField from './AIInstructionField';
 import AutomationTestChat from './AutomationTestChat';
 import { AUTOMATION_TYPES, isUsableHttpUrl } from './useAutomationWizard';
 import type { AutomationWizardApi } from './useAutomationWizard';
-import { useApp } from '../../context/AppContext';
-import { isBackendConfigured, fetchCapabilities } from '../../lib/api';
-import type { PlatformCapabilities } from '../../lib/api';
+import { platformMeta } from '../../lib/platformMeta';
+import { isBackendConfigured } from '../../lib/api';
 
 const URL_ERROR = 'Enter a full link starting with http:// or https://.';
 
@@ -61,39 +60,29 @@ function Disclosure({
  * therefore fallbacks, collapsed under one disclosure.
  */
 export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi }) {
-  const { state, update, hasReplyContent } = wizard;
-  const { accounts } = useApp();
+  const { state, update, hasReplyContent, platform, platformCaps: caps, dmTakesMedia, dmTakesButtons } = wizard;
   const cfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const wantsComment = cfg?.replyChannel === 'comment' || cfg?.replyChannel === 'both';
   const wantsDM = cfg?.replyChannel === 'dm' || cfg?.replyChannel === 'both';
   const backendConfigured = isBackendConfigured();
 
-  const platform = accounts.find(a => a.id === state.accountId)?.platform ?? 'instagram';
+  const platformName = platformMeta(platform ?? 'instagram').name;
 
-  // Platform capabilities gate which reply fields exist at all. Unknown
-  // capabilities (still loading, or the endpoint failed) fail open — hiding
-  // a field the platform does support is worse than showing one it doesn't,
-  // since the engine skips unsupported sends safely anyway.
-  const [caps, setCaps] = useState<PlatformCapabilities | null>(null);
-  useEffect(() => {
-    if (!backendConfigured) return;
-    let cancelled = false;
-    fetchCapabilities()
-      .then(list => {
-        if (cancelled) return;
-        setCaps(list.find(c => c.platform === platform) ?? null);
-      })
-      .catch(err => console.error('[wizard] capabilities load failed — showing all channel fields:', err));
-    return () => { cancelled = true; };
-  }, [backendConfigured, platform]);
-
+  // Platform capabilities (fetched once by the wizard hook, shared with the
+  // type cards) gate which reply fields exist at all. Unknown capabilities
+  // (still loading, or the endpoint failed) fail open — hiding a field the
+  // platform does support is worse than showing one it doesn't, since the
+  // engine skips unsupported sends safely anyway.
   const showComment = wantsComment && (caps?.supportsCommentReplies ?? true);
   const showDM = wantsDM && (caps?.supportsDMs ?? true);
   // A media value the user can't see is a media value they can't correct:
   // when capabilities hide the DM fields but a (possibly invalid) media URL
   // is already in state — which still gates Continue — its field stays
-  // visible so the error can actually be fixed or the value cleared.
-  const showMediaField = showDM || (wantsDM && state.mediaUrl.trim() !== '');
+  // visible so the error can actually be fixed or the value cleared. DMs on
+  // some platforms are text-only (Reddit): no media field there either
+  // (dmTakesMedia/dmTakesButtons come from the hook, the same values its
+  // content gate and buildInput use).
+  const showMediaField = (showDM && dmTakesMedia) || (wantsDM && state.mediaUrl.trim() !== '');
 
   const linkInvalid = !isUsableHttpUrl(state.linkUrl);
   const mediaInvalid = !isUsableHttpUrl(state.mediaUrl);
@@ -229,7 +218,7 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
 
           {!showComment && !showDM ? (
             <p className="text-[12px] text-[#9B9B8F]">
-              {platform.charAt(0).toUpperCase() + platform.slice(1)} doesn&apos;t support the replies this
+              {platformName} doesn&apos;t support the replies this
               automation type sends right now.
             </p>
           ) : (
@@ -313,7 +302,7 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
             )}
           </div>
 
-          {showDM && linkUsable && (
+          {showDM && dmTakesButtons && linkUsable && (
             <div>
               <label htmlFor="wizard-button-label" className="block text-[12px] font-semibold text-[#111111] mb-1">
                 Send it as a button

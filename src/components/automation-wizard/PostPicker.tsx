@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Check, Instagram, MessageCircle, Heart, Search } from 'lucide-react';
+import { Check, MessageCircle, Heart, Search } from 'lucide-react';
+import { platformMeta } from '../../lib/platformMeta';
 import type { Post } from '../../lib/api';
 
 type SortKey = 'recent' | 'most-comments';
@@ -87,6 +88,7 @@ export default function PostPicker({
         <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 list-none p-0 m-0">
           {visible.map(post => {
             const selected = post.id === selectedId;
+            const PlatformIcon = platformMeta(post.platform).icon;
             return (
               <li key={post.id}>
                 <button
@@ -104,7 +106,7 @@ export default function PostPicker({
                       <img src={post.media_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Instagram size={20} className="text-[#9B9B8F]" />
+                        <PlatformIcon size={20} className="text-[#9B9B8F]" />
                       </div>
                     )}
                     {selected && (

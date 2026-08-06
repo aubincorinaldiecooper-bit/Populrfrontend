@@ -56,6 +56,10 @@ function sanitizeState(value: unknown): WizardState | null {
       ? (s.type as WizardState['type'])
       : null,
     accountId: typeof s.accountId === 'string' ? s.accountId : null,
+    // Absent in drafts saved before the wizard was channel-aware (all
+    // Instagram by construction); the wizard re-derives from the live
+    // account list whenever it can, so null is only a fallback label.
+    platform: typeof s.platform === 'string' ? s.platform : null,
     post: s.post && typeof s.post === 'object' && !Array.isArray(s.post)
       ? (s.post as WizardState['post'])
       : null,

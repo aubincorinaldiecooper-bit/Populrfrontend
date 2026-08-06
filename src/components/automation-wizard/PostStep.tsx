@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, AlertCircle, Instagram, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { fetchPostsLibrary, syncPostsLibrary } from '../../lib/api';
 import type { Post } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
+import { platformMeta } from '../../lib/platformMeta';
 import SelectedPostCard from './SelectedPostCard';
 import { PostGridSkeleton } from '../Skeleton';
 import PostPicker from './PostPicker';
@@ -12,6 +13,10 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
   const { state, update, pendingSourcePostId } = wizard;
   const { accounts } = useApp();
   const account = accounts.find(a => a.id === state.accountId);
+  // Copy and icons follow the selected account's platform — this step serves
+  // whichever channel the automation runs on, not Instagram by definition.
+  const meta = platformMeta(account?.platform ?? state.platform ?? 'instagram');
+  const PlatformIcon = meta.icon;
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,8 +32,8 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
   const [syncNote, setSyncNote] = useState<string | null>(null);
 
   // Auto-sync once per account per session when the library comes back
-  // empty. Guarded so a genuinely-empty account (no Instagram posts at
-  // all) doesn't loop forever.
+  // empty. Guarded so a genuinely-empty account (no posts on the platform
+  // at all) doesn't loop forever.
   const autoSyncedFor = useRef<string | null>(null);
 
   const load = useCallback(async (): Promise<Post[]> => {
@@ -50,7 +55,7 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
       }
       return list;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load your Instagram posts.');
+      setError(err instanceof Error ? err.message : 'Could not load your posts.');
       return [];
     } finally {
       setLoading(false);
@@ -74,11 +79,11 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
         setSyncNote(result.errors[0]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not sync your posts from Instagram.');
+      setError(err instanceof Error ? err.message : `Could not sync your posts from ${meta.name}.`);
     } finally {
       setSyncing(false);
     }
-  }, [state.accountId, load]);
+  }, [state.accountId, load, meta.name]);
 
   useEffect(() => {
     if (!state.accountId) return;
@@ -107,8 +112,8 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
       <div className="pop-card p-5 flex items-start gap-3">
         <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-[13px] font-semibold text-[#111111]">Instagram isn&apos;t connected</p>
-          <p className="text-[12px] text-[#6B6B6B] mt-1">Connect your Instagram account from Channels to choose a post.</p>
+          <p className="text-[13px] font-semibold text-[#111111]">This account isn&apos;t connected</p>
+          <p className="text-[12px] text-[#6B6B6B] mt-1">Connect an account from Channels, then pick it in the first step to choose a post.</p>
         </div>
       </div>
     );
@@ -119,20 +124,20 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
     : 'Comments on this post will trigger this automation once keywords are set.';
 
   const busy = loading || syncing;
-  const busyLabel = syncing ? 'Syncing your posts from Instagram…' : 'Loading your posts…';
+  const busyLabel = syncing ? `Syncing your posts from ${meta.name}…` : 'Loading your posts…';
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-geist font-bold text-base text-[#111111] mb-1">Choose the post to watch</h2>
-          <p className="text-[12px] text-[#6B6B6B]">Populr listens for comments on this Instagram post.</p>
+          <p className="text-[12px] text-[#6B6B6B]">Populr listens for comments on this {meta.name} post.</p>
         </div>
         <button
           onClick={handleSync}
           disabled={busy}
           className="pop-btn-tertiary text-[12px] py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Refresh your posts from Instagram"
+          title={`Refresh your posts from ${meta.name}`}
         >
           <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
           {syncing ? 'Syncing…' : 'Sync my posts'}
@@ -141,7 +146,7 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
 
       {busy && (
         <div className="space-y-3">
-          {/* The label still matters here: syncing from Instagram is a
+          {/* The label still matters here: syncing from the platform is a
               noticeably longer wait than a local library read, and the grid
               shape alone doesn't say which one is happening. */}
           <p className="text-[12px] text-[#6B6B6B] flex items-center gap-2">
@@ -166,7 +171,7 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
         <div className="bg-[#FEF3C7] text-[#92400E] px-3.5 py-2.5 rounded-xl text-[12px] flex items-start gap-2">
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold">Instagram sync didn&apos;t fully succeed</p>
+            <p className="font-semibold">{meta.name} sync didn&apos;t fully succeed</p>
             <p className="mt-0.5">{syncNote}</p>
           </div>
         </div>
@@ -184,9 +189,9 @@ export default function PostStep({ wizard }: { wizard: AutomationWizardApi }) {
 
       {!busy && !error && posts.length === 0 && (
         <div className="pop-card p-8 flex flex-col items-center text-center gap-3">
-          <Instagram size={22} className="text-[#9B9B8F]" />
+          <PlatformIcon size={22} className="text-[#9B9B8F]" />
           <div>
-            <p className="text-[13px] font-semibold text-[#111111]">No Instagram posts found</p>
+            <p className="text-[13px] font-semibold text-[#111111]">No {meta.name} posts found</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1 max-w-[380px]">
               {syncNote
                 ? 'See the sync issue above, then try syncing again.'

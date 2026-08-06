@@ -1,5 +1,6 @@
-import { Instagram, MessageCircle, Heart, Check } from 'lucide-react';
+import { MessageCircle, Heart, Check } from 'lucide-react';
 import type { Post } from '../../lib/api';
+import { platformMeta } from '../../lib/platformMeta';
 
 function timeAgo(iso: string | null): string {
   if (!iso) return '';
@@ -15,6 +16,7 @@ function timeAgo(iso: string | null): string {
 export default function SelectedPostCard({
   post, handle, triggerSummary,
 }: { post: Post; handle: string | null; triggerSummary: string }) {
+  const PlatformIcon = platformMeta(post.platform).icon;
   return (
     <div className="pop-card p-4 border-[#111111]">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-[#5C6B00] flex items-center gap-1 mb-2.5">
@@ -25,7 +27,7 @@ export default function SelectedPostCard({
           {post.media_url ? (
             <img src={post.media_url} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center"><Instagram size={20} className="text-[#9B9B8F]" /></div>
+            <div className="w-full h-full flex items-center justify-center"><PlatformIcon size={20} className="text-[#9B9B8F]" /></div>
           )}
         </div>
         <div className="min-w-0 flex-1">

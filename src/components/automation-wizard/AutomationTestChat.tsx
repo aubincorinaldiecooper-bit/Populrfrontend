@@ -13,7 +13,7 @@ interface TestEntry {
 }
 
 export default function AutomationTestChat({ wizard, onClose }: { wizard: AutomationWizardApi; onClose?: () => void }) {
-  const { state } = wizard;
+  const { state, platform } = wizard;
   const [input, setInput] = useState('');
   const [entries, setEntries] = useState<TestEntry[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -31,17 +31,19 @@ export default function AutomationTestChat({ wizard, onClose }: { wizard: Automa
   const cfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const channel: 'comment' | 'dm' = cfg?.triggerType === 'dm' ? 'dm' : 'comment';
 
-  const canTest = backendConfigured && !!state.type && !!state.accountId && state.triggerKeywords.length > 0;
+  // The preview must run against the selected account's real platform — its
+  // capability rules shape the reply — so an unknown platform can't test.
+  const canTest = backendConfigured && !!state.type && !!state.accountId && !!platform && state.triggerKeywords.length > 0;
 
   const runTest = async () => {
     const sampleText = input.trim();
-    if (!sampleText || !cfg || !state.accountId) return;
+    if (!sampleText || !cfg || !state.accountId || !platform) return;
     const id = `t-${Date.now()}`;
     setEntries(prev => [...prev, { id, sampleText, status: 'loading' }]);
     setInput('');
     try {
       const result = await testAutomation({
-        platform: 'instagram',
+        platform,
         accountId: state.accountId,
         triggerType: cfg.triggerType,
         keywords: state.triggerKeywords,
@@ -90,7 +92,7 @@ export default function AutomationTestChat({ wizard, onClose }: { wizard: Automa
         {!canTest && (
           <div className="text-center py-8 px-3">
             <p className="text-[12px] text-[#9B9B8F]">
-              {!backendConfigured ? "Populr isn't connected to a backend yet." : !state.type ? 'Choose an automation type to test it.' : !state.accountId ? 'Connect an Instagram account to test.' : 'Add at least one trigger keyword to test.'}
+              {!backendConfigured ? "Populr isn't connected to a backend yet." : !state.type ? 'Choose an automation type to test it.' : !state.accountId || !platform ? 'Pick a connected account to test.' : 'Add at least one trigger keyword to test.'}
             </p>
           </div>
         )}
