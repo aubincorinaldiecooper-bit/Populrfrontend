@@ -60,7 +60,10 @@ function Disclosure({
  * therefore fallbacks, collapsed under one disclosure.
  */
 export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi }) {
-  const { state, update, hasReplyContent, platform, platformCaps: caps, dmTakesMedia, dmTakesButtons } = wizard;
+  const {
+    state, update, hasReplyContent, platform, platformCaps: caps,
+    dmTakesMedia, dmTakesButtons, dmMediaBlockedReason,
+  } = wizard;
   const cfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const wantsComment = cfg?.replyChannel === 'comment' || cfg?.replyChannel === 'both';
   const wantsDM = cfg?.replyChannel === 'dm' || cfg?.replyChannel === 'both';
@@ -108,12 +111,13 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
   // what can actually be saved. An exact DM carrying only a valid link or
   // media is production-valid, so it must be testable too, not rejected with
   // "write a message first."
-  // Invalid URLs are blocked from Continue, so the tester must not preview
-  // them either — it would render/embed a "reply" production would never send.
+  // Invalid URLs — and an attachment kind this platform's DMs can't carry —
+  // are blocked from Continue, so the tester must not preview them either:
+  // it would render a "reply" production would never send.
   const urlsValid = !linkInvalid && !mediaInvalid;
   const canTest =
     backendConfigured && !!state.type && !!state.accountId &&
-    state.triggerKeywords.length > 0 && hasReplyContent && urlsValid;
+    state.triggerKeywords.length > 0 && hasReplyContent && urlsValid && !dmMediaBlockedReason;
   const testHint = !backendConfigured
     ? "Populr isn't connected to a backend yet."
     : state.triggerKeywords.length === 0
@@ -122,7 +126,7 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
         ? (state.aiEnabled ? 'Write instructions for Populr first.' : 'Write a reply message first.')
         : !urlsValid
           ? 'Fix the link or media URL first.'
-          : undefined;
+          : dmMediaBlockedReason ?? undefined;
 
   const commentField = (
     <div>
@@ -266,11 +270,16 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
                 value={state.mediaUrl}
                 onChange={e => update('mediaUrl', e.target.value)}
                 placeholder="https://your-site.com/photo.jpg or …/clip.mp4"
-                aria-invalid={mediaInvalid}
-                className={`${FIELD_CLASS} ${mediaInvalid ? 'border-[#DC2626]' : ''}`}
+                aria-invalid={mediaInvalid || !!dmMediaBlockedReason}
+                className={`${FIELD_CLASS} ${mediaInvalid || dmMediaBlockedReason ? 'border-[#DC2626]' : ''}`}
               />
               {mediaInvalid ? (
                 <p className="text-[11px] text-[#DC2626] mt-1">{URL_ERROR}</p>
+              ) : dmMediaBlockedReason ? (
+                // A valid URL of a kind this platform can't deliver (e.g. a
+                // video on X, which takes DM images only) — same posture as
+                // an invalid URL: visible, blocking, correctable.
+                <p className="text-[11px] text-[#DC2626] mt-1">{dmMediaBlockedReason}</p>
               ) : (
                 <p className="text-[11px] text-[#9B9B8F] mt-1">
                   An image or video sent inside the DM (hosted URL). Platforms that don&apos;t

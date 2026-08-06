@@ -73,6 +73,13 @@ export function typeRestriction(
 
 export type WizardStepKey = 'create' | 'post' | 'replies' | 'review';
 
+/** Whether a media URL is a video by extension — the same rule buildInput
+ *  uses to pick responseType, so "what kind is this attachment" never
+ *  disagrees between validation, preview, and save. */
+export function isVideoMediaUrl(value: string): boolean {
+  return /\.(mp4|mov|webm)(\?|$)/i.test(value.trim());
+}
+
 /** A link the automation can actually send: an absolute http(s) URL. Empty
  *  counts as "not provided" (these fields are optional); anything else —
  *  bare words, typos, javascript: — gets an inline error in the Replies
@@ -303,14 +310,37 @@ export function useAutomationWizard() {
   // no DM buttons). What the platform can't carry doesn't count as reply
   // content and is never persisted — otherwise a media-only DM on a
   // text-only platform would save an automation that sends nothing.
+  // dmTakesMedia ("can carry ANY media") drives field visibility; the
+  // entered attachment itself is judged by its own KIND below, since a
+  // platform can support one kind but not the other (X: images, not video).
   const dmTakesMedia = platformCaps ? platformCaps.supportsDMImages || platformCaps.supportsDMVideo : true;
   const dmTakesButtons = platformCaps?.supportsButtons ?? true;
+  const mediaIsVideo = isVideoMediaUrl(state.mediaUrl);
+  const mediaKindAllowed =
+    !platformCaps || (mediaIsVideo ? platformCaps.supportsDMVideo : platformCaps.supportsDMImages);
+  // A valid attachment of a kind this platform's DMs can't carry blocks
+  // progression with the reason — silently dropping what the user typed
+  // would contradict the Review/preview. (Persisting it anyway would 422:
+  // the backend validates responseType per platform.)
+  const dmMediaBlockedReason = (() => {
+    if (!platformCaps || mediaKindAllowed) return null;
+    const trimmed = state.mediaUrl.trim();
+    if (!repliesWantDM || trimmed === '' || !isUsableHttpUrl(state.mediaUrl)) return null;
+    const name = platformMeta(platformCaps.platform).name;
+    const otherKindAllowed = mediaIsVideo ? platformCaps.supportsDMImages : platformCaps.supportsDMVideo;
+    return `${name} DMs can't carry ${mediaIsVideo ? 'video' : 'images'}${
+      otherKindAllowed
+        ? ` — try ${mediaIsVideo ? 'an image' : 'a video'} instead, or remove the attachment.`
+        : ' — remove the attachment.'
+    }`;
+  })();
 
   // A DM-bearing reply has content if it has text, a usable link, or media
-  // (a button rides on the link). A comment-only reply needs comment text.
+  // the platform can deliver (a button rides on the link). A comment-only
+  // reply needs comment text.
   const usableLinkPresent = state.linkUrl.trim() !== '' && isUsableHttpUrl(state.linkUrl);
   const dmHasContent =
-    state.dmBody.trim() !== '' || usableLinkPresent || (state.mediaUrl.trim() !== '' && dmTakesMedia);
+    state.dmBody.trim() !== '' || usableLinkPresent || (state.mediaUrl.trim() !== '' && mediaKindAllowed);
   // The automation must have SOMETHING to send, or it would save and activate
   // only to send an empty/no-op reply (the engine now skips an empty DM). In
   // AI mode the instructions are the reply, so they're what's required.
@@ -324,7 +354,8 @@ export function useAutomationWizard() {
     state.triggerKeywords.length > 0 &&
     hasReplyContent &&
     isUsableHttpUrl(state.linkUrl) &&
-    (!repliesWantDM || isUsableHttpUrl(state.mediaUrl));
+    (!repliesWantDM || isUsableHttpUrl(state.mediaUrl)) &&
+    !dmMediaBlockedReason;
 
   const canProceed = (() => {
     if (currentStep === 'create') return canProceedFromCreate;
@@ -347,9 +378,11 @@ export function useAutomationWizard() {
     // Belt-and-braces behind the Replies step's progression gate: an invalid
     // URL is never persisted as a usable link/attachment, and media/buttons
     // (which only ride on DMs) never survive a switch to a comment-only type
-    // or to a platform whose DMs can't carry them.
+    // or to a platform whose DMs can't carry that KIND of attachment (the
+    // backend validates responseType per platform, so an unsupported kind
+    // would 422 the save).
     const usableLink = state.linkUrl.trim() && isUsableHttpUrl(state.linkUrl) ? state.linkUrl.trim() : null;
-    const usableMedia = wantsDM && dmTakesMedia && state.mediaUrl.trim() && isUsableHttpUrl(state.mediaUrl)
+    const usableMedia = wantsDM && mediaKindAllowed && state.mediaUrl.trim() && isUsableHttpUrl(state.mediaUrl)
       ? state.mediaUrl.trim()
       : null;
     return {
@@ -369,9 +402,7 @@ export function useAutomationWizard() {
       mediaUrl: usableMedia,
       // The backend validates the media type against the platform's DM
       // capabilities, keyed by responseType.
-      responseType: usableMedia
-        ? (/\.(mp4|mov|webm)(\?|$)/i.test(usableMedia) ? 'video' : 'image')
-        : 'text',
+      responseType: usableMedia ? (isVideoMediaUrl(usableMedia) ? 'video' : 'image') : 'text',
       // One button, carrying the automation's link — the engine substitutes
       // the per-contact tracked URL because the urls match. DM-only: a
       // button can't ride on a public comment reply, and platforms without
@@ -383,7 +414,7 @@ export function useAutomationWizard() {
       aiInstructions: state.aiInstructions.trim() ? state.aiInstructions.trim() : null,
       active: activate,
     };
-  }, [state, platform, dmTakesMedia, dmTakesButtons]);
+  }, [state, platform, mediaKindAllowed, dmTakesButtons]);
 
   // 'keep' preserves the automation's current active state — the neutral
   // "Save changes" an editor expects. Without it the footer only offered
@@ -445,7 +476,8 @@ export function useAutomationWizard() {
     // Surfaced so the Replies step and Review can reflect the same content/URL
     // requirements the gate enforces, and so Review can re-assert them before
     // Activate rather than silently letting an invalid draft through.
-    hasReplyContent, repliesWantComment, repliesWantDM, dmTakesMedia, dmTakesButtons,
+    hasReplyContent, repliesWantComment, repliesWantDM,
+    dmTakesMedia, dmTakesButtons, dmMediaBlockedReason,
     goNext, goBack, cancel, draftSaved,
     saving, saveError, save,
   };

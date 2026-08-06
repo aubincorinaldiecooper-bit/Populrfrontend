@@ -16,7 +16,10 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 }
 
 export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) {
-  const { state, platform, saveError, canProceedFromCreate, canProceedFromReplies } = wizard;
+  const {
+    state, platform, saveError, canProceedFromCreate, canProceedFromReplies,
+    dmTakesButtons, dmMediaBlockedReason,
+  } = wizard;
   const { accounts } = useApp();
   const cfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const wantsComment = cfg?.replyChannel === 'comment' || cfg?.replyChannel === 'both';
@@ -67,8 +70,12 @@ export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) 
           />
         )}
         {link && <Row label="Link" value={link} />}
-        {wantsDM && state.mediaUrl.trim() && <Row label="Media" value={state.mediaUrl.trim()} />}
-        {wantsDM && link && state.buttonLabel.trim() && <Row label="Button" value={state.buttonLabel.trim()} />}
+        {/* Same capability predicates as buildInput: what save() would drop
+            (kind-blocked media, buttons on a platform whose DMs have none)
+            must not be shown here as content that will be sent. Blocked
+            media additionally blocks saving via the banner below. */}
+        {wantsDM && state.mediaUrl.trim() && !dmMediaBlockedReason && <Row label="Media" value={state.mediaUrl.trim()} />}
+        {wantsDM && dmTakesButtons && link && state.buttonLabel.trim() && <Row label="Button" value={state.buttonLabel.trim()} />}
       </div>
 
       <ActivationPanel state={state} />
@@ -82,7 +89,9 @@ export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) 
           <span>
             {!canProceedFromCreate
               ? 'Pick a connected account before saving — go back to the first step.'
-              : 'This automation is missing required reply info (a trigger keyword, reply content, or a valid link). Go back to the Replies step to finish it.'}
+              : dmMediaBlockedReason
+                ? `${dmMediaBlockedReason} Go back to the Replies step to change it.`
+                : 'This automation is missing required reply info (a trigger keyword, reply content, or a valid link). Go back to the Replies step to finish it.'}
           </span>
         </div>
       )}

@@ -13,7 +13,7 @@ interface TestEntry {
 }
 
 export default function AutomationTestChat({ wizard, onClose }: { wizard: AutomationWizardApi; onClose?: () => void }) {
-  const { state, platform } = wizard;
+  const { state, platform, dmMediaBlockedReason, dmTakesButtons } = wizard;
   const [input, setInput] = useState('');
   const [entries, setEntries] = useState<TestEntry[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -56,8 +56,13 @@ export default function AutomationTestChat({ wizard, onClose }: { wizard: Automa
         commentReplyBody: state.commentReplyBody,
         dmBody: state.dmBody,
         linkUrl: state.linkUrl,
-        mediaUrl: state.mediaUrl,
-        buttonLabel: state.buttonLabel,
+        // The preview must match what buildInput would persist: a payload
+        // the platform can't deliver (kind-blocked media, buttons where DMs
+        // have none) never rides along, or the drawer would show a reply
+        // production won't send. (Blocked media also disables the tester
+        // upstream — this keeps the two in lockstep regardless.)
+        mediaUrl: dmMediaBlockedReason ? '' : state.mediaUrl,
+        buttonLabel: dmTakesButtons ? state.buttonLabel : '',
       });
       if (!mountedRef.current) return;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'done', result } : e));

@@ -196,6 +196,34 @@ describe('useAutomationWizard — the platform follows the selected account', ()
       buttons: null,
     }));
   });
+
+  it("media is judged by its KIND: a video on X (DM images only) blocks with the reason; an image passes and saves as responseType image", async () => {
+    const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    act(() => {
+      result.current.update('name', 'X media');
+      result.current.update('type', 'dm_only');
+      result.current.update('accountId', 'acc_x');
+      result.current.update('triggerKeywords', ['guide']);
+      result.current.update('aiEnabled', false);
+      result.current.update('mediaUrl', 'https://cdn.example.com/clip.mp4');
+    });
+    // Once the matrix lands: not silently dropped — visible, blocking,
+    // correctable, and it suggests the kind X can deliver.
+    await waitFor(() => expect(result.current.dmMediaBlockedReason).toMatch(/can't carry video/));
+    expect(result.current.dmMediaBlockedReason).toMatch(/try an image instead/);
+    expect(result.current.canProceedFromReplies).toBe(false);
+
+    act(() => { result.current.update('mediaUrl', 'https://cdn.example.com/photo.jpg'); });
+    expect(result.current.dmMediaBlockedReason).toBeNull();
+    // The image alone is deliverable content, and persists with the
+    // responseType the backend validates per platform.
+    expect(result.current.canProceedFromReplies).toBe(true);
+    await act(async () => { await result.current.save(false); });
+    expect(mockCreateAutomation).toHaveBeenCalledWith(expect.objectContaining({
+      mediaUrl: 'https://cdn.example.com/photo.jpg',
+      responseType: 'image',
+    }));
+  });
 });
 
 describe('CreateStep — one selector across every connected platform', () => {
