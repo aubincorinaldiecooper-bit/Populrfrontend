@@ -98,17 +98,30 @@ describe('ChannelsPage — independent per-account lifecycle', () => {
       ],
     });
     renderPage();
-    // A: its own reauth state and Reconnect action.
-    expect(screen.getByText('@thelifeofaubin')).toBeInTheDocument();
-    expect(screen.getByText('Reconnect needed')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Reconnect/ })).toHaveLength(1);
-    // B: still plainly connected with its own Disconnect — untouched by A.
-    expect(screen.getByText('@secondaccount')).toBeInTheDocument();
-    expect(screen.getByText('Connected')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Disconnect/ })).toHaveLength(1);
+    // Assertions are scoped to each account's OWN row — a regression that
+    // swapped the two renderings would still satisfy page-global queries
+    // (both usernames, one of each badge, one of each button).
+    const rowOf = (handle: string) => {
+      const row = screen.getByText(handle).closest('div.flex.items-center.gap-3');
+      expect(row).not.toBeNull();
+      return row as HTMLElement;
+    };
+
+    const rowA = rowOf('@thelifeofaubin');
+    expect(within(rowA).getByText('Reconnect needed')).toBeInTheDocument();
+    expect(within(rowA).getByRole('button', { name: /Reconnect/ })).toBeInTheDocument();
+    expect(within(rowA).queryByRole('button', { name: /Disconnect/ })).not.toBeInTheDocument();
+
+    const rowB = rowOf('@secondaccount');
+    expect(within(rowB).getByText('Connected')).toBeInTheDocument();
+    expect(within(rowB).getByRole('button', { name: /Disconnect/ })).toBeInTheDocument();
+    expect(within(rowB).queryByRole('button', { name: /Reconnect/ })).not.toBeInTheDocument();
   });
 
-  it('no connect action ever calls the disconnect endpoint', async () => {
+  it('no connect action on this page reaches the context disconnect action', async () => {
+    // Page-level wiring only — the endpoint-level invariant (the REAL
+    // AppContext connect lifecycle never calling the disconnect API) is
+    // pinned in AppContext.test.tsx against the real provider.
     renderPage();
     // Connect another → modal → Continue here.
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect another' })[0]);
