@@ -37,6 +37,7 @@ function metaFor(id: string) {
 export default function ChannelsPage() {
   const {
     connectedPlatforms, accounts, beginPlatformConnect, refreshConnectedAccounts,
+    completeOAuthReturn, failOAuthReturn,
     disconnectAccount, showToast, openSubscriptionModal,
   } = useApp();
   const [searchParams] = useSearchParams();
@@ -75,23 +76,33 @@ export default function ChannelsPage() {
     const connectError = searchParams.get('connect_error');
     const subscription = searchParams.get('subscription');
     const platform = searchParams.get('platform') ?? searchParams.get('retry') ?? undefined;
+    const connected = searchParams.get('connected');
 
     if (connectError === 'subscription_required') {
       openSubscriptionModal(platform);
     } else if (connectError) {
-      showToast("We couldn't finish connecting that account. Please try again.", 'error');
+      // The callback already confirmed the failure — reflect it onto the
+      // platform card (and toast), as the retired onboarding path did.
+      failOAuthReturn(platform);
     } else if (subscription === 'success') {
       showToast('Subscription active — you can connect your account now.', 'success');
+    } else if (connected) {
+      // A fresh OAuth return. The single refresh above can race Zernio's
+      // eventual consistency and show the new account as not connected with
+      // the one-shot marker already stripped; this runs the same
+      // verification the retired onboarding path did — explicit sync plus
+      // bounded polling — and settles the platform card either way.
+      completeOAuthReturn(connected);
     }
 
-    if (connectError || subscription || searchParams.get('connected')) {
+    if (connectError || subscription || connected) {
       const url = new URL(window.location.href);
       for (const key of ['connected', 'connect_error', 'subscription', 'platform', 'retry']) {
         url.searchParams.delete(key);
       }
       window.history.replaceState(null, '', url.toString());
     }
-  }, [backendConfigured, searchParams, refreshConnectedAccounts, openSubscriptionModal, showToast]);
+  }, [backendConfigured, searchParams, refreshConnectedAccounts, completeOAuthReturn, failOAuthReturn, openSubscriptionModal, showToast]);
 
   useEffect(() => {
     syncFromBackend();

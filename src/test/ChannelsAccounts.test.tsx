@@ -42,7 +42,11 @@ vi.mock('../lib/api', async () => {
   };
 });
 
+const mockCompleteOAuthReturn = vi.fn();
+const mockFailOAuthReturn = vi.fn();
+
 beforeEach(() => {
+  vi.clearAllMocks();
   mockUseApp.mockReturnValue({
     connectedPlatforms: [
       { id: 'instagram', status: 'connected' },
@@ -51,6 +55,8 @@ beforeEach(() => {
     accounts,
     beginPlatformConnect: vi.fn(),
     refreshConnectedAccounts: vi.fn(),
+    completeOAuthReturn: mockCompleteOAuthReturn,
+    failOAuthReturn: mockFailOAuthReturn,
     disconnectAccount: vi.fn(),
     showToast: vi.fn(),
     openSubscriptionModal: vi.fn(),
@@ -91,5 +97,38 @@ describe('ChannelsPage — real accounts, automations framing', () => {
   it('a platform with accounts offers "Connect another" rather than nothing', () => {
     renderPage();
     expect(screen.getAllByRole('button', { name: 'Connect another' }).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('ChannelsPage — OAuth return trip', () => {
+  /* Every OAuth callback lands here (directly, or via the /connect
+   * redirect). A single passive refresh can race Zernio's eventual
+   * consistency and strand the new account as "not connected" with the
+   * one-shot marker already stripped — the ?connected= marker must run the
+   * full verification (explicit sync + bounded polling), exactly as the
+   * retired onboarding path did. */
+
+  it('?connected=<platform> runs the polling verification, not just a refresh', () => {
+    render(
+      <MemoryRouter initialEntries={['/channels?connected=instagram']}>
+        <ChannelsPage />
+      </MemoryRouter>,
+    );
+    expect(mockCompleteOAuthReturn).toHaveBeenCalledWith('instagram');
+  });
+
+  it('a plain visit never triggers the OAuth verification', () => {
+    renderPage();
+    expect(mockCompleteOAuthReturn).not.toHaveBeenCalled();
+  });
+
+  it('?connect_error reflects the failure onto the platform card, not just a toast', () => {
+    render(
+      <MemoryRouter initialEntries={['/channels?connect_error=account_sync_failed&platform=instagram']}>
+        <ChannelsPage />
+      </MemoryRouter>,
+    );
+    expect(mockFailOAuthReturn).toHaveBeenCalledWith('instagram');
+    expect(mockCompleteOAuthReturn).not.toHaveBeenCalled();
   });
 });
