@@ -25,6 +25,7 @@ function wizardState(overrides: Partial<WizardState> = {}): WizardState {
     name: 'My automation',
     type: 'comment_dm',
     accountId: 'acct_1',
+    platform: 'instagram',
     post: null,
     triggerKeywords: ['grow'],
     commentReplyBody: '',

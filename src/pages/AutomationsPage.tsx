@@ -297,7 +297,9 @@ export default function AutomationsPage() {
                   </div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-[#F0EEEA] flex items-center justify-between">
-                  <p className="text-[11px] text-[#9B9B8F]">Instagram</p>
+                  {/* Drafts from before the wizard was channel-aware carry no
+                      platform — they were all Instagram by construction. */}
+                  <p className="text-[11px] text-[#9B9B8F]">{platformMeta(d.state.platform ?? 'instagram').name}</p>
                   <span className="text-[10px] text-[#9B9B8F]">Saved {new Date(d.savedAt).toLocaleDateString()}</span>
                 </div>
               </div>

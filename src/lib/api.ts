@@ -215,7 +215,13 @@ export interface PlatformCapabilities {
   platform: string;
   supportsComments: boolean;
   supportsCommentReplies: boolean;
+  /** Whether the platform lets an automation DM someone BECAUSE they
+   *  commented — distinct from supportsDMs (X has DMs, but not this). */
+  supportsCommentToDM: boolean;
   supportsDMs: boolean;
+  supportsDMImages: boolean;
+  supportsDMVideo: boolean;
+  supportsButtons: boolean;
   readiness: string;
   caveat: string;
   // Create Post fields, merged into this same endpoint's response rather

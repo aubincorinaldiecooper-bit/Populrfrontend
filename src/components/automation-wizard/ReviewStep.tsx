@@ -2,6 +2,8 @@ import { AlertCircle } from 'lucide-react';
 import ReviewSummaryStrip from './ReviewSummaryStrip';
 import ActivationPanel from './ActivationPanel';
 import { AUTOMATION_TYPES, type AutomationWizardApi } from './useAutomationWizard';
+import { useApp } from '../../context/AppContext';
+import { platformMeta } from '../../lib/platformMeta';
 
 /** One labelled line in the reply summary; omitted entirely when empty. */
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
@@ -14,11 +16,24 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 }
 
 export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) {
-  const { state, saveError, canProceedFromCreate, canProceedFromReplies } = wizard;
+  const {
+    state, platform, saveError, canProceedFromCreate, canProceedFromReplies,
+    dmTakesButtons, dmMediaBlockedReason,
+  } = wizard;
+  const { accounts } = useApp();
   const cfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const wantsComment = cfg?.replyChannel === 'comment' || cfg?.replyChannel === 'both';
   const wantsDM = cfg?.replyChannel === 'dm' || cfg?.replyChannel === 'both';
   const link = state.linkUrl.trim();
+
+  // "X — @brand" when the account is loadable; the bare platform name when
+  // only the captured platform is known; nothing when neither is.
+  const account = accounts.find(a => a.id === state.accountId);
+  const accountLabel = account
+    ? `${platformMeta(account.platform).name}${account.username ? ` — @${account.username}` : ''}`
+    : platform
+      ? platformMeta(platform).name
+      : null;
 
   return (
     <div className="max-w-[720px] mx-auto p-6 space-y-4">
@@ -27,7 +42,7 @@ export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) 
         <p className="text-[12px] text-[#6B6B6B]">Confirm your setup and activate when you&apos;re ready.</p>
       </div>
 
-      <ReviewSummaryStrip state={state} />
+      <ReviewSummaryStrip state={state} accountLabel={accountLabel} />
 
       {/* Reply content was never shown on Review, so a resumed draft with a
           dropped link or a missing reply could be saved with no visible sign.
@@ -55,8 +70,12 @@ export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) 
           />
         )}
         {link && <Row label="Link" value={link} />}
-        {wantsDM && state.mediaUrl.trim() && <Row label="Media" value={state.mediaUrl.trim()} />}
-        {wantsDM && link && state.buttonLabel.trim() && <Row label="Button" value={state.buttonLabel.trim()} />}
+        {/* Same capability predicates as buildInput: what save() would drop
+            (kind-blocked media, buttons on a platform whose DMs have none)
+            must not be shown here as content that will be sent. Blocked
+            media additionally blocks saving via the banner below. */}
+        {wantsDM && state.mediaUrl.trim() && !dmMediaBlockedReason && <Row label="Media" value={state.mediaUrl.trim()} />}
+        {wantsDM && dmTakesButtons && link && state.buttonLabel.trim() && <Row label="Button" value={state.buttonLabel.trim()} />}
       </div>
 
       <ActivationPanel state={state} />
@@ -70,7 +89,9 @@ export default function ReviewStep({ wizard }: { wizard: AutomationWizardApi }) 
           <span>
             {!canProceedFromCreate
               ? 'Pick a connected account before saving — go back to the first step.'
-              : 'This automation is missing required reply info (a trigger keyword, reply content, or a valid link). Go back to the Replies step to finish it.'}
+              : dmMediaBlockedReason
+                ? `${dmMediaBlockedReason} Go back to the Replies step to change it.`
+                : 'This automation is missing required reply info (a trigger keyword, reply content, or a valid link). Go back to the Replies step to finish it.'}
           </span>
         </div>
       )}

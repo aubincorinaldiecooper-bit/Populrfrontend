@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, renderHook, act } from '@testing-library/react';
+import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import RepliesStep from '../components/automation-wizard/RepliesStep';
 import { isUsableHttpUrl, useAutomationWizard } from '../components/automation-wizard/useAutomationWizard';
@@ -35,16 +35,21 @@ vi.mock('../context/AppContext', () => ({
 
 function caps(overrides: Partial<PlatformCapabilities>): PlatformCapabilities {
   return {
-    platform: 'instagram', supportsComments: true, supportsCommentReplies: true, supportsDMs: true,
+    platform: 'instagram', supportsComments: true, supportsCommentReplies: true,
+    supportsCommentToDM: true, supportsDMs: true, supportsDMImages: true, supportsDMVideo: true,
+    supportsButtons: true,
     readiness: 'ready', caveat: '', supportedMediaTypes: ['image', 'video'], maxCaptionLength: 2200,
     mediaRequired: true, maxCarouselItems: 10, maxImageSizeMb: 8, maxVideoSizeMb: 100,
     maxVideoDurationSeconds: 90, ...overrides,
   };
 }
 
-function makeWizard(overrides: Partial<WizardState>): AutomationWizardApi {
+/** Mock wizard for pure render tests. `platformCaps` mirrors the hook: the
+ *  wizard fetches the matrix once and every step reads it from there. */
+function makeWizard(overrides: Partial<WizardState>, platformCaps: PlatformCapabilities | null = caps({})): AutomationWizardApi {
   const state: WizardState = {
-    automationId: null, name: 'Test automation', type: 'comment_dm', accountId: 'acc_1', post: null,
+    automationId: null, name: 'Test automation', type: 'comment_dm', accountId: 'acc_1',
+    platform: 'instagram', post: null,
     triggerKeywords: ['guide'], commentReplyBody: '', dmBody: '', linkUrl: '', mediaUrl: '', buttonLabel: '',
     aiEnabled: false, aiInstructions: '', active: false, dirty: false,
     ...overrides,
@@ -56,12 +61,17 @@ function makeWizard(overrides: Partial<WizardState>): AutomationWizardApi {
     : state.type === 'comment_reply'
       ? { comment: true, dm: false }
       : { comment: true, dm: true };
+  const dmTakesMedia = platformCaps ? platformCaps.supportsDMImages || platformCaps.supportsDMVideo : true;
+  const dmTakesButtons = platformCaps?.supportsButtons ?? true;
   const usableLink = state.linkUrl.trim() !== '' && /^https?:\/\//i.test(state.linkUrl.trim());
-  const dmHasContent = state.dmBody.trim() !== '' || usableLink || state.mediaUrl.trim() !== '';
+  const dmHasContent = state.dmBody.trim() !== '' || usableLink || (state.mediaUrl.trim() !== '' && dmTakesMedia);
   const hasReplyContent = state.aiEnabled
     ? state.aiInstructions.trim() !== ''
     : cfg.dm ? dmHasContent : state.commentReplyBody.trim() !== '';
-  return { state, update: vi.fn(), hasReplyContent } as unknown as AutomationWizardApi;
+  return {
+    state, update: vi.fn(), hasReplyContent,
+    platform: state.platform, platformCaps, dmTakesMedia, dmTakesButtons,
+  } as unknown as AutomationWizardApi;
 }
 
 beforeEach(() => {
@@ -105,11 +115,26 @@ describe('RepliesStep — channel and capability gating', () => {
     expect(screen.getByLabelText('DM message')).toBeInTheDocument();
   });
 
-  it('platform capabilities hide fields the platform does not support', async () => {
-    mockFetchCapabilities.mockResolvedValue([caps({ supportsCommentReplies: false })]);
-    render(<RepliesStep wizard={makeWizard({ type: 'comment_dm' })} />);
-    await waitFor(() => expect(screen.queryByLabelText('Public comment reply')).not.toBeInTheDocument());
+  it('platform capabilities hide fields the platform does not support', () => {
+    render(<RepliesStep wizard={makeWizard({ type: 'comment_dm' }, caps({ supportsCommentReplies: false }))} />);
+    expect(screen.queryByLabelText('Public comment reply')).not.toBeInTheDocument();
     expect(screen.getByLabelText('DM message')).toBeInTheDocument();
+  });
+
+  it('text-only DMs (Reddit) get no media field; platforms without DM buttons get no button field', () => {
+    render(
+      <RepliesStep
+        wizard={makeWizard(
+          { type: 'dm_only', platform: 'reddit', linkUrl: 'https://example.com/guide' },
+          caps({ platform: 'reddit', supportsDMImages: false, supportsDMVideo: false, supportsButtons: false })
+        )}
+      />
+    );
+    // The optional section is open (a saved link) — media and button fields
+    // must still not exist: this platform's DMs can't carry either.
+    expect(screen.getByLabelText('Link to send')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Media in the DM')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Send it as a button')).not.toBeInTheDocument();
   });
 });
 
@@ -169,12 +194,13 @@ describe('RepliesStep — Add media or link', () => {
     expect(screen.getByLabelText('Send it as a button')).toBeInTheDocument();
   });
 
-  it('an invalid media URL left by a DM-capable type never strands a comment-only automation', () => {
+  it('an invalid media URL left by a DM-capable type never strands a comment-only automation', async () => {
     // Enter an invalid media URL under comment+DM, then switch the type to
     // comment-only: the media field disappears, so its validation must stop
     // gating Continue — an invisible error would leave nothing to correct.
     const wrapper = ({ children }: { children: React.ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
     const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    await act(async () => {});   // flush the hook's capabilities fetch
     act(() => {
       result.current.update('type', 'comment_dm');
       result.current.update('triggerKeywords', ['guide']);
@@ -191,10 +217,11 @@ describe('RepliesStep — Add media or link', () => {
     expect(result.current.canProceedFromReplies).toBe(true);
   });
 
-  it('a stale/disconnected account id blocks Create — only a connected account passes', () => {
+  it('a stale/disconnected account id blocks Create — only a connected account passes', async () => {
     // The mocked workspace has exactly one connected account, acc_1.
     const wrapper = ({ children }: { children: React.ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
     const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    await act(async () => {});   // flush the hook's capabilities fetch
     act(() => {
       result.current.update('name', 'My automation');
       result.current.update('type', 'dm_only');
@@ -205,9 +232,10 @@ describe('RepliesStep — Add media or link', () => {
     expect(result.current.canProceedFromCreate).toBe(true);
   });
 
-  it('an automation with no reply content cannot proceed (exact or AI mode)', () => {
+  it('an automation with no reply content cannot proceed (exact or AI mode)', async () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
     const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    await act(async () => {});   // flush the hook's capabilities fetch
     // DM-only, exact mode, a keyword but no DM body/link/media → blocked
     // (the empty-DM save the engine now also refuses).
     act(() => {
@@ -229,12 +257,11 @@ describe('RepliesStep — Add media or link', () => {
     expect(result.current.canProceedFromReplies).toBe(true);
   });
 
-  it('a media value stays visible and correctable when capabilities hide the DM fields', async () => {
+  it('a media value stays visible and correctable when capabilities hide the DM fields', () => {
     // Continue is still gated by the invalid value (the type wants a DM),
     // so the field must not vanish with it — the error has to be fixable.
-    mockFetchCapabilities.mockResolvedValue([caps({ supportsDMs: false })]);
-    render(<RepliesStep wizard={makeWizard({ type: 'comment_dm', mediaUrl: 'not-a-url' })} />);
-    await waitFor(() => expect(screen.queryByLabelText('DM message')).not.toBeInTheDocument());
+    render(<RepliesStep wizard={makeWizard({ type: 'comment_dm', mediaUrl: 'not-a-url' }, caps({ supportsDMs: false }))} />);
+    expect(screen.queryByLabelText('DM message')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Media in the DM')).toBeInTheDocument();
     expect(screen.getAllByText('Enter a full link starting with http:// or https://.').length).toBeGreaterThan(0);
   });
