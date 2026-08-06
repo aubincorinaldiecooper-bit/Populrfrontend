@@ -119,6 +119,55 @@ describe('testAutomation — previews the configured replies, not placeholders',
   });
 });
 
+describe('testAutomation — public replies follow the engine link policy', () => {
+  /* Mirrors engineService.ts: links never appear in public comments (the
+   * tracked URL is per-contact and rides the DM as text and button), and the
+   * AI answers publicly exactly when its draft is link-free. */
+
+  it('a comment template with {{link}} previews without any URL — links never go public', async () => {
+    const result = await testAutomation(input({
+      sampleText: 'guide',
+      aiEnabled: false,
+      commentReplyBody: 'Grab it here: {{link}}',
+      dmBody: 'Your copy: {{link}}',
+      linkUrl: 'https://creator.example/guide',
+    }));
+    expect(result.publicReply).toBe('Grab it here');
+    // The DM keeps the link — only the public surface strips it.
+    expect(result.dm).toBe('Your copy: https://creator.example/guide');
+  });
+
+  it('a link-free confident AI draft IS the public reply; a link-bearing one falls back to the static text', async () => {
+    const decisionWith = (replyText: string) => ({
+      ok: true,
+      json: async () => ({
+        available: true,
+        decision: {
+          intent: 'product_question', confidence: 0.95, replyType: 'dm',
+          replyText, linkToSend: null, needsHuman: false, shouldAutoReply: true,
+          reason: 'Covered by the instructions.',
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => decisionWith('It drops Friday at 10am ET!')));
+    try {
+      const linkFree = await testAutomation(input({
+        sampleText: 'guide?', commentReplyBody: 'Check your DMs!',
+      }));
+      expect(linkFree.publicReply).toBe('It drops Friday at 10am ET!');
+
+      vi.stubGlobal('fetch', vi.fn(async () => decisionWith('Here you go: {{link}}')));
+      const linkBearing = await testAutomation(input({
+        sampleText: 'guide?', commentReplyBody: 'Check your DMs!',
+      }));
+      expect(linkBearing.publicReply).toBe('Check your DMs!');
+      expect(linkBearing.dm).toBe('Here you go: {{link}}');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('testAutomation — missing AI preview is not a failure', () => {
   it('AI off: matched, will auto-reply, with an informational note — not needsHuman', async () => {
     const result = await testAutomation(input({ sampleText: 'link please', aiEnabled: false }));

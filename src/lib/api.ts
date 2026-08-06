@@ -1013,7 +1013,23 @@ function localKeywordMatch(text: string, keywords: string[], mode: 'contains' | 
 function renderPreviewTemplate(text: string, link: string | null): string {
   return text
     .replace(/\{\{\s*name\s*\}\}/gi, 'there')
-    .replace(/\{\{\s*link\s*\}\}/gi, link ?? '');
+    .replace(/\{\{\s*link\s*\}\}/gi, link ?? '')
+    // Mirror the engine's seam cleanup for a removed {{link}} ("here: " →
+    // "here") so the preview shows exactly what would go out.
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([.,!?:;])/g, '$1')
+    .replace(/[\s:,-]+$/g, '')
+    .trim();
+}
+
+/** Mirrors the engine's publicSafeAiDraft: the AI answers publicly only when
+ *  its draft carries no link — links never appear in public comments (the
+ *  tracked URL is per-contact and rides the DM as text and button). */
+function publicSafeDraftPreview(draft: string | null): string | null {
+  if (!draft) return null;
+  const trimmed = draft.trim();
+  if (!trimmed || /\{\{\s*link\s*\}\}/i.test(trimmed) || /https?:\/\//i.test(trimmed)) return null;
+  return trimmed;
 }
 
 /** Test-chat wrapper. Does keyword matching locally, then (when AI is on)
@@ -1044,9 +1060,11 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
   const wantsComment = input.replyChannel === 'comment' || input.replyChannel === 'both';
   const wantsDM = input.replyChannel === 'dm' || input.replyChannel === 'both';
   const previewLink = input.linkUrl?.trim() || null;
-  // The engine's own fallback when no comment reply is configured.
+  // The engine's own fallback when no comment reply is configured. Public
+  // comments never carry links — the engine renders {{link}} to nothing on
+  // the public surface — so the comment preview does the same.
   const commentPreview = wantsComment
-    ? renderPreviewTemplate(input.commentReplyBody?.trim() || 'Just sent you a DM! 📩', previewLink)
+    ? renderPreviewTemplate(input.commentReplyBody?.trim() || 'Just sent you a DM! 📩', null)
     : null;
   const dmPreview = wantsDM && input.dmBody?.trim()
     ? renderPreviewTemplate(input.dmBody.trim(), previewLink)
@@ -1156,11 +1174,12 @@ export async function testAutomation(input: AutomationTestInput): Promise<Automa
     confidence: d.confidence,
     needsHuman: false,
     reason: d.reason,
-    // Public reply is the automation's static text in production (see the
-    // engineService leak fix) — previewed as the real configured text, not
-    // a placeholder. AI text is only ever previewed for the DM, with the
-    // configured DM as its fallback.
-    publicReply: commentPreview,
+    // Mirrors the engine: a link-free confident draft IS the public reply;
+    // a draft built around the link stays in the DM and the public reply
+    // falls back to the configured static text (the "check your DMs"
+    // pointer). The DM previews the AI draft with the configured DM as its
+    // fallback.
+    publicReply: wantsComment ? (publicSafeDraftPreview(d.replyText) ?? commentPreview) : null,
     dm: wantsDM ? (d.replyType === 'dm' && d.replyText ? d.replyText : dmPreview) : null,
     dmMediaUrl: wantsDM ? dmMedia : null,
     dmButtonLabel: wantsDM ? dmButton : null,

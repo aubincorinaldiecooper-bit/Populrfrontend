@@ -44,12 +44,13 @@ function Disclosure({
  * all, and media/link/button live in one collapsed optional section.
  *
  * The Exact/AI relationship mirrors the engine (populrbackend
- * engineService.ts) rather than inventing one: an AI draft only ever
- * replaces the DM text — the public comment reply is always sent exactly as
- * written (the draft carries a per-contact tracked URL that must never be
- * posted publicly) — and when the AI can't confidently answer, the engine
- * falls back to the static DM message. So in AI mode the comment field stays
- * a first-class exact message, and the DM body becomes a collapsed fallback.
+ * engineService.ts) rather than inventing one: the AI writes both surfaces,
+ * but links never appear in public comments — the tracked link is
+ * per-contact and rides the DM (text and button) — so a link-carrying AI
+ * answer posts the configured comment text publicly and delivers the full
+ * reply in the DM, and when the AI can't confidently answer at all, both
+ * configured messages go out as written. In AI mode the message fields are
+ * therefore fallbacks, collapsed under one disclosure.
  */
 export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi }) {
   const { state, update } = wizard;
@@ -129,8 +130,8 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
         className={`${FIELD_CLASS} resize-y`}
       />
       <p className="text-[11px] text-[#9B9B8F] mt-1">
-        {state.aiEnabled && showDM
-          ? 'Posted publicly, exactly as written — the AI writes the DM, never this comment.'
+        {state.aiEnabled
+          ? 'Posted when the AI’s answer can’t go public: links never appear in comments, so a link-carrying reply posts this and delivers the link in the DM.'
           : 'Posted publicly under the trigger comment. Left empty, Populr posts the placeholder above.'}
       </p>
     </div>
@@ -139,7 +140,7 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
   const dmField = (
     <div>
       <label htmlFor="wizard-dm-body" className="block text-[12px] font-semibold text-[#111111] mb-1">
-        {state.aiEnabled ? 'Fallback DM message' : 'DM message'}
+        DM message
       </label>
       <textarea
         id="wizard-dm-body"
@@ -215,18 +216,17 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
           ) : (
             <div className="space-y-4">
               {state.aiEnabled ? (
-                <>
+                <Disclosure
+                  title="Fallback messages"
+                  hint="sent when the AI can't answer itself"
+                  defaultOpen={
+                    (showComment && state.commentReplyBody.trim() !== '') ||
+                    (showDM && state.dmBody.trim() !== '')
+                  }
+                >
                   {showComment && commentField}
-                  {showDM && (
-                    <Disclosure
-                      title="Fallback DM message"
-                      hint="sent when the AI can't confidently answer"
-                      defaultOpen={state.dmBody.trim() !== ''}
-                    >
-                      {dmField}
-                    </Disclosure>
-                  )}
-                </>
+                  {showDM && dmField}
+                </Disclosure>
               ) : (
                 <>
                   {showComment && commentField}

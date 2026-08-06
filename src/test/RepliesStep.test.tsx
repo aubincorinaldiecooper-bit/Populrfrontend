@@ -109,26 +109,27 @@ describe('RepliesStep — Exact message vs AI-generated reply', () => {
     expect(screen.getByLabelText('DM message')).toBeInTheDocument();
   });
 
-  it('AI mode prioritizes Instructions and demotes the DM to a collapsed fallback', () => {
+  it('AI mode prioritizes Instructions and demotes both message fields to collapsed fallbacks', () => {
     render(<RepliesStep wizard={makeWizard({ aiEnabled: true })} />);
     expect(screen.getByRole('radio', { name: 'AI-generated reply' })).toBeChecked();
     expect(screen.getByText('Instructions for Populr')).toBeInTheDocument();
     // The fallback disclosure is collapsed by default (no saved fallback text)…
-    expect(screen.queryByLabelText('Fallback DM message')).not.toBeInTheDocument();
-    const disclosure = screen.getByRole('button', { name: /Fallback DM message/ });
-    // …and explains its purpose when opened.
+    expect(screen.queryByLabelText('DM message')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Public comment reply')).not.toBeInTheDocument();
+    const disclosure = screen.getByRole('button', { name: /Fallback messages/ });
+    // …and explains each field's purpose when opened: the comment is what's
+    // posted when the AI's answer can't go public (links never appear in
+    // comments), the DM is what's sent when the AI can't answer at all.
     fireEvent.click(disclosure);
-    expect(screen.getByLabelText('Fallback DM message')).toBeInTheDocument();
-    expect(screen.getByText(/when the AI can’t confidently answer/)).toBeInTheDocument();
-    // The public comment reply stays a first-class exact message — the
-    // engine's AI draft only ever writes the DM.
     expect(screen.getByLabelText('Public comment reply')).toBeInTheDocument();
-    expect(screen.getByText(/the AI writes the DM, never this comment/)).toBeInTheDocument();
+    expect(screen.getByText(/links never appear in comments/)).toBeInTheDocument();
+    expect(screen.getByLabelText('DM message')).toBeInTheDocument();
+    expect(screen.getByText(/when the AI can’t confidently answer/)).toBeInTheDocument();
   });
 
-  it('a saved fallback DM keeps its disclosure open so existing data stays visible', () => {
+  it('a saved fallback message keeps its disclosure open so existing data stays visible', () => {
     render(<RepliesStep wizard={makeWizard({ aiEnabled: true, dmBody: 'Here is the guide: {{link}}' })} />);
-    expect(screen.getByLabelText('Fallback DM message')).toHaveValue('Here is the guide: {{link}}');
+    expect(screen.getByLabelText('DM message')).toHaveValue('Here is the guide: {{link}}');
   });
 });
 
