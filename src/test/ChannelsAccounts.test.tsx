@@ -51,6 +51,7 @@ const mockCompleteOAuthReturn = vi.fn();
 const mockFailOAuthReturn = vi.fn();
 const mockRefreshConnectedAccounts = vi.fn();
 const mockBeginPlatformConnect = vi.fn();
+const mockDisconnectAccount = vi.fn();
 const mockClipboardWrite = vi.fn(async () => {});
 
 beforeEach(() => {
@@ -72,7 +73,7 @@ beforeEach(() => {
     refreshConnectedAccounts: mockRefreshConnectedAccounts,
     completeOAuthReturn: mockCompleteOAuthReturn,
     failOAuthReturn: mockFailOAuthReturn,
-    disconnectAccount: vi.fn(),
+    disconnectAccount: mockDisconnectAccount,
     showToast: vi.fn(),
     openSubscriptionModal: vi.fn(),
   });
@@ -81,6 +82,49 @@ beforeEach(() => {
 function renderPage() {
   return render(<MemoryRouter><ChannelsPage /></MemoryRouter>);
 }
+
+describe('ChannelsPage — independent per-account lifecycle', () => {
+  /* Regression for the multi-account incident: connecting account B made
+   * account A appear to need reconnection. Each account row must carry its
+   * OWN backend-reported status and action, and no connect action may ever
+   * reach the disconnect endpoint. */
+
+  it('a reconnect-required A and a connected B render independent statuses and actions', () => {
+    mockUseApp.mockReturnValue({
+      ...mockUseApp(),
+      accounts: [
+        account({ id: 'ig_a', username: 'thelifeofaubin', status: 'reconnect_required', is_connected: true }),
+        account({ id: 'ig_b', username: 'secondaccount' }),
+      ],
+    });
+    renderPage();
+    // A: its own reauth state and Reconnect action.
+    expect(screen.getByText('@thelifeofaubin')).toBeInTheDocument();
+    expect(screen.getByText('Reconnect needed')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Reconnect/ })).toHaveLength(1);
+    // B: still plainly connected with its own Disconnect — untouched by A.
+    expect(screen.getByText('@secondaccount')).toBeInTheDocument();
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Disconnect/ })).toHaveLength(1);
+  });
+
+  it('no connect action ever calls the disconnect endpoint', async () => {
+    renderPage();
+    // Connect another → modal → Continue here.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Connect another' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Continue here/ }));
+    // Connect another → copy the private-window link.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Connect another' })[0]);
+    await waitFor(() => expect(apiMocks.getPlatformConnectUrl).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /Copy connection link/ }));
+    await waitFor(() => expect(mockClipboardWrite).toHaveBeenCalled());
+    // First-time connect on a platform with no accounts (Facebook card).
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(mockBeginPlatformConnect).toHaveBeenCalled();
+    expect(mockDisconnectAccount).not.toHaveBeenCalled();
+  });
+});
 
 describe('ChannelsPage — beta channel surface', () => {
   /* The beta offers exactly Instagram, Facebook, and X. TikTok, LinkedIn,
