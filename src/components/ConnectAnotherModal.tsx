@@ -81,7 +81,6 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
   // Set when the clipboard write fails (some browsers restrict it) — the
   // link is shown read-only for manual copying instead of being dropped.
   const [manualLink, setManualLink] = useState<string | null>(null);
-  const [redirecting, setRedirecting] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkedEmpty, setCheckedEmpty] = useState(false);
 
@@ -157,9 +156,13 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
     }
   };
 
+  // Hands off to the normal same-tab flow and closes. beginPlatformConnect
+  // reports its own failures on the platform card (error state, subscription
+  // modal) and never throws — keeping this modal open with a spinner would
+  // leave it stuck on "Opening…" forever when the startup call fails.
   const continueHere = () => {
-    setRedirecting(true);
     beginPlatformConnect(platform);
+    onClose();
   };
 
   // While waiting on a private-window connection, keep re-reading the
@@ -227,12 +230,9 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
             <div className="space-y-2">
               <button
                 onClick={continueHere}
-                disabled={redirecting}
-                className="pop-btn-primary w-full justify-center text-[13px] py-2.5 disabled:opacity-60"
+                className="pop-btn-primary w-full justify-center text-[13px] py-2.5"
               >
-                {redirecting
-                  ? <><Loader2 size={14} className="animate-spin" /> Opening {platformName}…</>
-                  : <>Continue here <ArrowRight size={14} /></>}
+                Continue here <ArrowRight size={14} />
               </button>
               <button
                 onClick={() => { void copyLink(); }}
@@ -264,12 +264,9 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
               </button>
               <button
                 onClick={continueHere}
-                disabled={redirecting}
-                className="pop-btn-secondary w-full justify-center text-[13px] py-2.5 disabled:opacity-60"
+                className="pop-btn-secondary w-full justify-center text-[13px] py-2.5"
               >
-                {redirecting
-                  ? <><Loader2 size={14} className="animate-spin" /> Opening {platformName}…</>
-                  : <><RefreshCw size={14} /> Try again</>}
+                <RefreshCw size={14} /> Try again
               </button>
             </div>
           </>

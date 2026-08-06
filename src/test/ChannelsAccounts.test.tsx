@@ -233,11 +233,15 @@ describe('ChannelsPage — Connect another modal', () => {
     expect(within(screen.getByRole('dialog')).queryByText(/Instagram/)).not.toBeInTheDocument();
   });
 
-  it('"Continue here" starts the normal same-tab connect for that platform', () => {
+  it('"Continue here" starts the normal same-tab connect and closes the modal', () => {
     renderPage();
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect another' })[0]);
     fireEvent.click(screen.getByRole('button', { name: /Continue here/ }));
     expect(mockBeginPlatformConnect).toHaveBeenCalledWith('instagram');
+    // The platform card owns the connecting/error/subscription states from
+    // here — a still-open modal would sit stuck if startup fails, since
+    // beginPlatformConnect reports failures on the card and never throws.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('the private-window link is minted fresh for the workspace and returns to /connect/complete', async () => {

@@ -25,6 +25,16 @@ describe('ConnectCompletePage', () => {
     expect(document.body.textContent).not.toContain('zern_acct_123');
   });
 
+  it('account_result=existing is a duplicate outcome, never "Account connected"', () => {
+    // The private window's login can authorize the account the workspace
+    // already had. Declaring success here would leave the signed-in window
+    // waiting for an account that never arrives.
+    renderAt('/connect/complete?connected=instagram&sync=success&account_result=existing');
+    expect(screen.queryByText('Account connected')).not.toBeInTheDocument();
+    expect(screen.getByText(/already connected/)).toBeInTheDocument();
+    expect(screen.getByText(/Sign into the other account in this\s+window/)).toBeInTheDocument();
+  });
+
   it('a failed callback says the link is spent and to copy a fresh one', () => {
     renderAt('/connect/complete?connect_error=account_sync_failed&platform=instagram');
     expect(screen.getByText(/didn't finish/)).toBeInTheDocument();

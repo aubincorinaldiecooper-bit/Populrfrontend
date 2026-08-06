@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router';
 import { Check, AlertCircle } from 'lucide-react';
+import { platformMeta } from '../lib/platformMeta';
 
 /**
  * Public landing target for connection links opened in a private window.
@@ -18,9 +19,17 @@ export default function ConnectCompletePage() {
   const [searchParams] = useSearchParams();
   const connectError = searchParams.get('connect_error');
   const connected = searchParams.get('connected');
+  const accountResult = searchParams.get('account_result');
 
-  const success = !connectError && !!connected;
+  // account_result=existing is a successful *sync* but a failed *intent*:
+  // the login in this window authorized an account the workspace already
+  // had. Declaring success here would leave the signed-in window waiting
+  // forever for an account that never arrives — the exact misleading state
+  // this flow exists to prevent.
+  const duplicate = !connectError && !!connected && accountResult === 'existing';
+  const success = !connectError && !!connected && !duplicate;
   const subscriptionRequired = connectError === 'subscription_required';
+  const platformName = connected ? platformMeta(connected).name : 'the platform';
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] flex items-center justify-center p-4">
@@ -41,6 +50,19 @@ export default function ConnectCompletePage() {
             <p className="text-[13px] text-[#6B6B6B] leading-relaxed">
               You can close this window. Back in your Populr window, the new account will show up
               on Channels within a few seconds.
+            </p>
+          </>
+        )}
+
+        {duplicate && (
+          <>
+            <h1 className="font-geist font-bold text-xl text-[#111111] mb-2">
+              That account was already connected
+            </h1>
+            <p className="text-[13px] text-[#6B6B6B] leading-relaxed">
+              The login in this window authorized a {platformName} account that&apos;s already in
+              your workspace, so nothing new was added. Sign into the other account in this
+              window, then copy a fresh connection link from Populr and open it here again.
             </p>
           </>
         )}
