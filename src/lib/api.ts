@@ -5,7 +5,7 @@
 // accounts. Base URL is baked in at build time via VITE_API_URL.
 // ============================================================
 
-import { getApiAuthToken } from './authClient';
+import { getApiAuthToken, clearApiAuthToken } from './authClient';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
@@ -103,7 +103,18 @@ async function apiFetch<T>(
     // indefinitely. Nothing anywhere inspected the status. Notifying here
     // lets AuthContext end the session once, from one place, so the route
     // gate can do its job.
-    if (res.status === 401) notifyUnauthorized();
+    if (res.status === 401) {
+      // Drop the cached backend JWT first. getApiAuthToken hands back the
+      // cached token until ~30s before its own expiry, so a token the backend
+      // rejects while still "unexpired" by the clock (secret rotation, clock
+      // skew) would otherwise be reused on every subsequent call — the app
+      // stuck erroring under an authenticated shell with no auto-recovery.
+      // Clearing it forces the next call to re-exchange the session cookie for
+      // a fresh token; notifyUnauthorized then re-checks the session and only
+      // signs out if it's genuinely gone.
+      clearApiAuthToken();
+      notifyUnauthorized();
+    }
 
     // Surface the backend's own error/message when it sends one (e.g.
     // { error: "disallowed_return_url", message: "..." }), not just the
@@ -584,8 +595,13 @@ export async function setWorkspacePause(paused: boolean): Promise<boolean> {
 
 export interface DashboardData {
   /** True when this workspace's automations aren't running (its own pause
-   *  switch or the platform stop — the banner doesn't need to know which). */
+   *  switch or the platform stop). */
   globallyPaused: boolean;
+  /** Which kind of pause: 'workspace' is the creator's own toggle (Settings
+   *  can fix it), 'platform' is an operator-level stop they can't undo there,
+   *  null when not paused. Lets the banner avoid pointing a platform-stopped
+   *  creator at a Settings screen that shows "Running". */
+  pauseScope?: 'workspace' | 'platform' | null;
   connectedAccounts: {
     id: string; platform: string; username: string | null;
     displayName: string | null; avatarUrl: string | null;

@@ -58,7 +58,7 @@ export default function CreatePostPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const editPostId = (location.state as { editPostId?: string } | null)?.editPostId ?? null;
-  const { accounts, showToast } = useApp();
+  const { accounts, accountsLoading, accountsError, refreshAccounts, showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
   const connectedAccounts = useMemo(() => accounts.filter(a => a.status === 'connected'), [accounts]);
@@ -444,12 +444,28 @@ export default function CreatePostPage() {
       {/* Step 1: media type + content */}
       {step === 1 && (
         connectedAccounts.length === 0 ? (
-          <Banner
-            status="warning"
-            title="Connect an account first"
-            description="Populr needs at least one connected account to know what you can post and where."
-            endContent={<Button label="Go to Connections" variant="primary" size="sm" onClick={() => navigate('/connections')} />}
-          />
+          // Distinguish "we couldn't check" from "genuinely nothing connected".
+          // The account list is fetched once when the session appears; if that
+          // fetch failed or is still in flight, showing "connect an account"
+          // to a creator who actually has accounts (and blocking them) is the
+          // bug this branch avoids.
+          accountsLoading ? (
+            <Banner status="info" title="Checking your connected accounts…" description="One moment." />
+          ) : accountsError ? (
+            <Banner
+              status="warning"
+              title="Couldn't check your connected accounts"
+              description="Populr couldn't load which accounts are connected. This doesn't change what you've connected — try again."
+              endContent={<Button label="Try again" variant="primary" size="sm" onClick={() => { void refreshAccounts(); }} />}
+            />
+          ) : (
+            <Banner
+              status="warning"
+              title="Connect an account first"
+              description="Populr needs at least one connected account to know what you can post and where."
+              endContent={<Button label="Go to Connections" variant="primary" size="sm" onClick={() => navigate('/connections')} />}
+            />
+          )
         ) : (
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

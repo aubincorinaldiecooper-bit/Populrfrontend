@@ -85,6 +85,13 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
   const [manualLink, setManualLink] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkedEmpty, setCheckedEmpty] = useState(false);
+  // The private-window connection completes in a window this one can't see, so
+  // the wait polls the account list. But some outcomes never produce a new
+  // account — the provider reused the already-connected login (the callback's
+  // `existing` case, shown in the OTHER window), or the link expired, or the
+  // user abandoned it — so the poll is bounded rather than spinning forever.
+  const [waitExpired, setWaitExpired] = useState(false);
+  const [waitToken, setWaitToken] = useState(0);
 
   // When the prefetched link was minted — they're single-use and short-lived
   // server-side, so one that has sat in an open modal too long is re-minted
@@ -98,6 +105,15 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
   const baselineRef = useRef<Map<string, ConnectedAccount['status']> | null>(null);
 
   const privateWindowReturnUrl = `${window.location.origin}/connect/complete`;
+
+  // onClose comes from the parent as an inline arrow, so its identity changes
+  // on every parent render. Holding it in a ref keeps mintLink (and thus the
+  // prefetch effect) stable — otherwise, while the modal polls every 4s in
+  // waiting mode (and on every 3s toast auto-dismiss), each parent re-render
+  // re-created mintLink and the effect minted a brand-new single-use link and
+  // Zernio round-trip indefinitely.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
   // Mint a connection link ahead of the copy click so the clipboard write
   // happens synchronously inside the user gesture (async fetch-then-write
@@ -114,13 +130,13 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
       console.error(`[connect] failed to mint a ${platform} connection link:`, err);
       if (err instanceof ApiError && (err.code === 'subscription_required' || err.status === 402)) {
         openSubscriptionModal(platform);
-        onClose();
+        onCloseRef.current();
         return null;
       }
       setLinkError(true);
       return null;
     }
-  }, [platform, privateWindowReturnUrl, openSubscriptionModal, onClose]);
+  }, [platform, privateWindowReturnUrl, openSubscriptionModal]);
 
   useEffect(() => {
     // Prefetching here (not on the copy click) is what keeps the clipboard
@@ -149,13 +165,16 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
     } catch {
       setManualLink(url);
     }
-    if (mode !== 'waiting') {
-      baselineRef.current = new Map(
-        accounts.filter(a => a.platform === platform).map(a => [a.id, a.status])
-      );
-      setCheckedEmpty(false);
-      setMode('waiting');
-    }
+    // Entering the wait, or restarting it with a fresh link — reset the
+    // baseline, clear the "nothing yet"/expired states, and bump waitToken so
+    // the polling effect re-arms a full new window.
+    baselineRef.current = new Map(
+      accounts.filter(a => a.platform === platform).map(a => [a.id, a.status])
+    );
+    setCheckedEmpty(false);
+    setWaitExpired(false);
+    setWaitToken(t => t + 1);
+    if (mode !== 'waiting') setMode('waiting');
   };
 
   // Hands off to the normal same-tab flow and closes. beginPlatformConnect
@@ -172,9 +191,24 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
   // talk to this one, so polling the backend is the only honest signal.
   useEffect(() => {
     if (mode !== 'waiting') return;
-    const timer = setInterval(() => { void refreshConnectedAccounts(); }, 4000);
+    // ~3 minutes of 4s polls. Past that, an account that was going to appear
+    // already has; keep the door open (Check now / fresh link) but stop the
+    // silent spin and say what likely happened.
+    const MAX_POLLS = 45;
+    let polls = 0;
+    const timer = setInterval(() => {
+      polls += 1;
+      if (polls > MAX_POLLS) {
+        clearInterval(timer);
+        setWaitExpired(true);
+        return;
+      }
+      void refreshConnectedAccounts();
+    }, 4000);
     return () => clearInterval(timer);
-  }, [mode, refreshConnectedAccounts]);
+    // waitToken restarts the poll (and clears the expired state) after a fresh
+    // copy, so a second attempt gets a full new window.
+  }, [mode, waitToken, refreshConnectedAccounts]);
 
   useEffect(() => {
     if (mode !== 'waiting' || !baselineRef.current) return;
@@ -276,16 +310,26 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
 
         {mode === 'waiting' && (
           <>
-            <div className="w-10 h-10 rounded-xl bg-[#E0F5E9] flex items-center justify-center mb-3">
-              <Check size={20} className="text-[#059669]" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${waitExpired ? 'bg-[#FFF3E0]' : 'bg-[#E0F5E9]'}`}>
+              {waitExpired ? <AlertCircle size={20} className="text-[#D97706]" /> : <Check size={20} className="text-[#059669]" />}
             </div>
             <h3 className="font-geist font-bold text-xl text-[#111111] mb-2 pr-8">
-              {manualLink ? 'Copy the connection link' : 'Link copied'}
+              {waitExpired ? 'No new account yet' : manualLink ? 'Copy the connection link' : 'Link copied'}
             </h3>
             <p className="text-[13px] text-[#6B6B6B] leading-relaxed mb-4">
-              Open it in a private window or another browser profile, sign into the other{' '}
-              {platformName} account, and approve the connection. This page updates as soon as the
-              new account arrives.
+              {waitExpired ? (
+                <>
+                  We haven&apos;t detected a new {platformName} account. If the other window said the
+                  account was already connected, {platformName} reused your current login — sign into
+                  the other account in a private window, then copy a fresh link and try again.
+                </>
+              ) : (
+                <>
+                  Open it in a private window or another browser profile, sign into the other{' '}
+                  {platformName} account, and approve the connection. This page updates as soon as the
+                  new account arrives.
+                </>
+              )}
             </p>
             {manualLink && (
               <input
@@ -296,11 +340,13 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
                 className="w-full mb-4 px-3 py-2 text-[12px] text-[#111111] bg-[#FAFAF8] border border-[#F0EEEA] rounded-lg"
               />
             )}
-            <div className="flex items-center gap-2 text-[12px] text-[#9B9B8F] mb-5">
-              <Loader2 size={13} className="animate-spin" />
-              Watching for the new account…
-              {checkedEmpty && !checking && <span>Nothing new yet.</span>}
-            </div>
+            {!waitExpired && (
+              <div className="flex items-center gap-2 text-[12px] text-[#9B9B8F] mb-5">
+                <Loader2 size={13} className="animate-spin" />
+                Watching for the new account…
+                {checkedEmpty && !checking && <span>Nothing new yet.</span>}
+              </div>
+            )}
             <div className="space-y-2">
               <button
                 onClick={() => { void checkNow(); }}

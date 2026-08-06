@@ -198,8 +198,15 @@ export function useAutomationWizard() {
     state.type === 'dm_only' ? ['create', 'replies', 'review'] : ['create', 'post', 'replies', 'review'];
   const currentStep = steps[Math.min(stepIndex, steps.length - 1)];
 
-  const canProceedFromCreate = state.name.trim() !== '' && state.type !== null && !!state.accountId;
+  // The account must be one that's actually connected right now. A draft or
+  // edit can carry an accountId whose account was since disconnected; the old
+  // truthy check let Continue through, PostStep tried to load posts for a dead
+  // account, and Activate failed at the backend with no in-wizard way to
+  // switch. CreateStep clears/reselects a stale id; this keeps Continue honest.
+  const accountConnected = !!state.accountId && instagramAccounts.some(a => a.id === state.accountId);
+  const canProceedFromCreate = state.name.trim() !== '' && state.type !== null && accountConnected;
   const canProceedFromPost = state.type === 'dm_only' || !!state.post;
+
   // URL validity gates progression so an invalid link/media value can't ride
   // through to save — the Replies step shows the matching inline error.
   // Media rides only on DMs, so an invalid media URL left behind after
@@ -208,8 +215,25 @@ export function useAutomationWizard() {
   // dropped by buildInput below.
   const repliesCfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const repliesWantDM = repliesCfg?.replyChannel === 'dm' || repliesCfg?.replyChannel === 'both';
+  const repliesWantComment = repliesCfg?.replyChannel === 'comment' || repliesCfg?.replyChannel === 'both';
+
+  // A DM-bearing reply has content if it has text, a usable link, or media
+  // (a button rides on the link). A comment-only reply needs comment text.
+  const usableLinkPresent = state.linkUrl.trim() !== '' && isUsableHttpUrl(state.linkUrl);
+  const dmHasContent =
+    state.dmBody.trim() !== '' || usableLinkPresent || state.mediaUrl.trim() !== '';
+  // The automation must have SOMETHING to send, or it would save and activate
+  // only to send an empty/no-op reply (the engine now skips an empty DM). In
+  // AI mode the instructions are the reply, so they're what's required.
+  const hasReplyContent = state.aiEnabled
+    ? state.aiInstructions.trim() !== ''
+    : repliesWantDM
+      ? dmHasContent
+      : state.commentReplyBody.trim() !== '';
+
   const canProceedFromReplies =
     state.triggerKeywords.length > 0 &&
+    hasReplyContent &&
     isUsableHttpUrl(state.linkUrl) &&
     (!repliesWantDM || isUsableHttpUrl(state.mediaUrl));
 
@@ -268,11 +292,16 @@ export function useAutomationWizard() {
     };
   }, [state]);
 
-  const save = useCallback(async (activate: boolean): Promise<Automation> => {
+  // 'keep' preserves the automation's current active state — the neutral
+  // "Save changes" an editor expects. Without it the footer only offered
+  // "Save as paused" / "Activate", so editing a live automation and clicking
+  // the (reasonably read as "save") paused button silently deactivated it.
+  const save = useCallback(async (activate: boolean | 'keep'): Promise<Automation> => {
     setSaving(true);
     setSaveError(null);
+    const shouldActivate = activate === 'keep' ? state.active : activate;
     try {
-      const input = buildInput(activate);
+      const input = buildInput(shouldActivate);
       if (!input) throw new Error('Choose an automation type before saving.');
       const automation = state.automationId
         ? await updateAutomation(state.automationId, input)
@@ -281,7 +310,10 @@ export function useAutomationWizard() {
       // Now durably on the backend — the local draft's only job was
       // bridging the gap until this point, so its slot is retired.
       if (!editAutomation) deleteWizardDraft(draftId);
-      showToast(activate ? 'Automation activated' : 'Automation saved as paused', 'success');
+      showToast(
+        activate === 'keep' ? 'Changes saved' : shouldActivate ? 'Automation activated' : 'Automation saved as paused',
+        'success'
+      );
       navigate('/automations');
       return automation;
     } catch (err) {
@@ -292,7 +324,7 @@ export function useAutomationWizard() {
     } finally {
       setSaving(false);
     }
-  }, [buildInput, draftId, editAutomation, navigate, showToast, state.automationId]);
+  }, [buildInput, draftId, editAutomation, navigate, showToast, state.automationId, state.active]);
 
   const cancel = useCallback(() => {
     // Edits to an existing automation aren't draft-persisted, so closing
@@ -310,6 +342,10 @@ export function useAutomationWizard() {
     instagramAccounts,
     steps, currentStep, stepIndex,
     canProceed, canProceedFromCreate, canProceedFromPost, canProceedFromReplies,
+    // Surfaced so the Replies step and Review can reflect the same content/URL
+    // requirements the gate enforces, and so Review can re-assert them before
+    // Activate rather than silently letting an invalid draft through.
+    hasReplyContent, repliesWantComment, repliesWantDM,
     goNext, goBack, cancel, draftSaved,
     saving, saveError, save,
   };

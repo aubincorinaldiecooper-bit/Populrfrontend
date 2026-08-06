@@ -19,16 +19,40 @@ const BLACK = "#111111";
  * We deliberately do NOT trust localStorage as evidence of a session —
  * the server's getSession() is the sole source of truth.
  */
+/** Map a provider/magic-link callback error to one of LoginPage's specific
+ *  error codes, so the accurate copy ("that link has expired") is reachable
+ *  via the callback path instead of the generic "couldn't restore your
+ *  session." Returns null when the error isn't one we have specific copy for. */
+function mapCallbackError(error: string | null, description: string | null): string | null {
+  if (!error) return null;
+  const haystack = `${error} ${description ?? ""}`.toLowerCase();
+  if (haystack.includes("expire")) return "expired_link";
+  if (haystack.includes("used") || haystack.includes("already")) return "used_link";
+  if (haystack.includes("invalid") || haystack.includes("token")) return "invalid_link";
+  return "session_failed";
+}
+
 export default function AuthCompletePage() {
   const { session, loading, refresh } = useAuth();
   const navigate = useNavigate();
   const refreshedOnce = useRef(false);
+  // Captured BEFORE the params are stripped: whether this arrival actually
+  // carried a callback (so a plain, signed-out visit isn't reported as a
+  // failed sign-in), and any specific error the callback delivered.
+  const arrivalRef = useRef<{ hadCallback: boolean; mappedError: string | null }>({
+    hadCallback: false,
+    mappedError: null,
+  });
 
   // On mount, strip any OAuth/magic-link query params from the visible
   // URL so a reload doesn't re-trigger anything unexpectedly, then force
   // a fresh session lookup (the cookie may have arrived only just now).
   useEffect(() => {
     const url = new URL(window.location.href);
+    arrivalRef.current = {
+      hadCallback: ["code", "state", "token", "error"].some(p => url.searchParams.has(p)),
+      mappedError: mapCallbackError(url.searchParams.get("error"), url.searchParams.get("error_description")),
+    };
     let dirty = false;
     for (const param of ["code", "state", "token", "callbackURL", "error", "error_description"]) {
       if (url.searchParams.has(param)) {
@@ -51,11 +75,20 @@ export default function AuthCompletePage() {
     if (session) {
       // Land where the user was actually headed before the auth bounce.
       navigate(consumeReturnTo() ?? "/", { replace: true });
-    } else {
-      // No session after the callback resolved → treat as a failed
-      // restoration and bounce back to /login with a safe error code.
-      // The LoginPage renders human copy for this code.
+      return;
+    }
+    const { hadCallback, mappedError } = arrivalRef.current;
+    if (mappedError) {
+      // The callback told us exactly what went wrong — forward the specific code.
+      navigate(`/login?error=${mappedError}`, { replace: true });
+    } else if (hadCallback) {
+      // A real sign-in attempt that produced no session — a genuine failure.
       navigate("/login?error=session_failed", { replace: true });
+    } else {
+      // No callback markers at all — a stale tab, bookmark, or back button
+      // after sign-out. Route to /login cleanly; the user never attempted a
+      // sign-in here, so "sign-in failed" would be a lie.
+      navigate("/login", { replace: true });
     }
   }, [loading, session, navigate]);
 

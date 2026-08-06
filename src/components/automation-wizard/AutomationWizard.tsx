@@ -10,7 +10,17 @@ import ReviewStep from './ReviewStep';
 
 export default function AutomationWizard() {
   const wizard = useAutomationWizard();
-  const { state, isEditing, currentStep, steps, stepIndex, canProceed, saving, draftSaved, goNext, goBack, cancel, save } = wizard;
+  const {
+    state, isEditing, currentStep, steps, stepIndex, canProceed,
+    canProceedFromCreate, canProceedFromPost, canProceedFromReplies,
+    saving, draftSaved, goNext, goBack, cancel, save,
+  } = wizard;
+
+  // Re-assert every step's validity before Save/Activate. A draft resumed
+  // straight onto Review restores its stepIndex and bypasses the per-step
+  // gates, so without this an invalid link/media or missing reply could be
+  // saved with the problem silently dropped by buildInput.
+  const canActivate = canProceedFromCreate && canProceedFromPost && canProceedFromReplies;
 
   useEffect(() => {
     // Only edit mode has anything to lose on unload: new automations
@@ -65,12 +75,15 @@ export default function AutomationWizard() {
       <WizardFooter
         isFirstStep={stepIndex === 0}
         isReview={currentStep === 'review'}
+        isEditing={isEditing}
         canProceed={canProceed}
+        canActivate={canActivate}
         saving={saving}
         onBack={stepIndex === 0 ? cancel : goBack}
         onContinue={goNext}
         onSavePaused={() => save(false)}
         onActivate={() => save(true)}
+        onSaveChanges={() => save('keep')}
       />
     </div>
   );

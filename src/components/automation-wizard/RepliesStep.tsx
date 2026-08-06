@@ -14,16 +14,24 @@ const URL_ERROR = 'Enter a full link starting with http:// or https://.';
 const FIELD_CLASS =
   'w-full bg-white border border-[#E8E4DF] rounded-xl px-3.5 py-2.5 text-[13px] placeholder:text-[#9B9B8F] outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/40';
 
-/** Plain-text disclosure — a border-top and a chevron, not another card. */
+/** Plain-text disclosure — a border-top and a chevron, not another card.
+ *  Uncontrolled by default; pass `open`/`onToggle` to control it (used for the
+ *  Fallback section, whose open state must survive the AI/Exact remount). */
 function Disclosure({
-  title, hint, defaultOpen, children,
-}: { title: string; hint?: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(!!defaultOpen);
+  title, hint, defaultOpen, open: openProp, onToggle, children,
+}: {
+  title: string; hint?: string; defaultOpen?: boolean;
+  open?: boolean; onToggle?: () => void; children: React.ReactNode;
+}) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(!!defaultOpen);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : uncontrolledOpen;
+  const setOpen = () => (controlled ? onToggle?.() : setUncontrolledOpen(o => !o));
   return (
     <div className="border-t border-[#F0EEEA] pt-3">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={setOpen}
         aria-expanded={open}
         className="flex items-center gap-1.5 text-[12px] font-semibold text-[#111111] w-full text-left"
       >
@@ -92,6 +100,13 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
   const linkUsable = !linkInvalid && state.linkUrl.trim() !== '';
 
   const [testOpen, setTestOpen] = useState(false);
+  // Held here (not inside the Disclosure) so the user's collapse/expand of the
+  // AI-mode Fallback section survives flipping Exact↔AI, which unmounts and
+  // remounts that disclosure. Seeded open when there's already saved fallback
+  // text worth showing.
+  const [fallbackOpen, setFallbackOpen] = useState(
+    () => state.commentReplyBody.trim() !== '' || state.dmBody.trim() !== ''
+  );
   useEffect(() => {
     if (!testOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTestOpen(false); };
@@ -105,16 +120,21 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
   const hasReplyContent = state.aiEnabled
     ? state.aiInstructions.trim() !== ''
     : (showComment && state.commentReplyBody.trim() !== '') || (showDM && state.dmBody.trim() !== '');
+  // Invalid URLs are blocked from Continue, so the tester must not preview
+  // them either — it would render/embed a "reply" production would never send.
+  const urlsValid = !linkInvalid && !mediaInvalid;
   const canTest =
     backendConfigured && !!state.type && !!state.accountId &&
-    state.triggerKeywords.length > 0 && hasReplyContent;
+    state.triggerKeywords.length > 0 && hasReplyContent && urlsValid;
   const testHint = !backendConfigured
     ? "Populr isn't connected to a backend yet."
     : state.triggerKeywords.length === 0
       ? 'Add a trigger keyword first.'
       : !hasReplyContent
         ? (state.aiEnabled ? 'Write instructions for Populr first.' : 'Write a reply message first.')
-        : undefined;
+        : !urlsValid
+          ? 'Fix the link or media URL first.'
+          : undefined;
 
   const commentField = (
     <div>
@@ -219,10 +239,8 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
                 <Disclosure
                   title="Fallback messages"
                   hint="sent when the AI can't answer itself"
-                  defaultOpen={
-                    (showComment && state.commentReplyBody.trim() !== '') ||
-                    (showDM && state.dmBody.trim() !== '')
-                  }
+                  open={fallbackOpen}
+                  onToggle={() => setFallbackOpen(o => !o)}
                 >
                   {showComment && commentField}
                   {showDM && dmField}

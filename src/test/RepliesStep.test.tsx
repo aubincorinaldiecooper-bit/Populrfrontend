@@ -166,12 +166,54 @@ describe('RepliesStep — Add media or link', () => {
     act(() => {
       result.current.update('type', 'comment_dm');
       result.current.update('triggerKeywords', ['guide']);
+      result.current.update('aiEnabled', false);
+      // Reply content present so the ONLY thing under test is the media gate.
+      result.current.update('commentReplyBody', 'Check your DMs!');
+      result.current.update('dmBody', 'Here you go!');
       result.current.update('mediaUrl', 'not-a-url');
     });
     expect(result.current.canProceedFromReplies).toBe(false);
     act(() => {
       result.current.update('type', 'comment_reply');
     });
+    expect(result.current.canProceedFromReplies).toBe(true);
+  });
+
+  it('a stale/disconnected account id blocks Create — only a connected account passes', () => {
+    // The mocked workspace has exactly one connected account, acc_1.
+    const wrapper = ({ children }: { children: React.ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
+    const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    act(() => {
+      result.current.update('name', 'My automation');
+      result.current.update('type', 'dm_only');
+      result.current.update('accountId', 'acc_gone');   // not in the connected list
+    });
+    expect(result.current.canProceedFromCreate).toBe(false);
+    act(() => { result.current.update('accountId', 'acc_1'); });
+    expect(result.current.canProceedFromCreate).toBe(true);
+  });
+
+  it('an automation with no reply content cannot proceed (exact or AI mode)', () => {
+    const wrapper = ({ children }: { children: React.ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
+    const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    // DM-only, exact mode, a keyword but no DM body/link/media → blocked
+    // (the empty-DM save the engine now also refuses).
+    act(() => {
+      result.current.update('type', 'dm_only');
+      result.current.update('triggerKeywords', ['guide']);
+      result.current.update('aiEnabled', false);
+    });
+    expect(result.current.canProceedFromReplies).toBe(false);
+    act(() => { result.current.update('dmBody', 'Here you go!'); });
+    expect(result.current.canProceedFromReplies).toBe(true);
+
+    // AI mode requires instructions, not a message body.
+    act(() => {
+      result.current.update('aiEnabled', true);
+      result.current.update('dmBody', '');
+    });
+    expect(result.current.canProceedFromReplies).toBe(false);
+    act(() => { result.current.update('aiInstructions', 'Answer questions about the guide.'); });
     expect(result.current.canProceedFromReplies).toBe(true);
   });
 
