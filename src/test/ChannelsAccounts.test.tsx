@@ -44,9 +44,11 @@ vi.mock('../lib/api', async () => {
 
 const mockCompleteOAuthReturn = vi.fn();
 const mockFailOAuthReturn = vi.fn();
+const mockRefreshConnectedAccounts = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCompleteOAuthReturn.mockResolvedValue(undefined);
   mockUseApp.mockReturnValue({
     connectedPlatforms: [
       { id: 'instagram', status: 'connected' },
@@ -54,7 +56,7 @@ beforeEach(() => {
     ],
     accounts,
     beginPlatformConnect: vi.fn(),
-    refreshConnectedAccounts: vi.fn(),
+    refreshConnectedAccounts: mockRefreshConnectedAccounts,
     completeOAuthReturn: mockCompleteOAuthReturn,
     failOAuthReturn: mockFailOAuthReturn,
     disconnectAccount: vi.fn(),
@@ -115,6 +117,27 @@ describe('ChannelsPage — OAuth return trip', () => {
       </MemoryRouter>,
     );
     expect(mockCompleteOAuthReturn).toHaveBeenCalledWith('instagram');
+    // The passive refresh must stay out of the verifier's way: resolving
+    // last with the pre-sync list would overwrite the verified account.
+    expect(mockRefreshConnectedAccounts).not.toHaveBeenCalled();
+  });
+
+  it('the one-shot marker survives until verification settles', async () => {
+    let settle!: () => void;
+    mockCompleteOAuthReturn.mockReturnValue(new Promise<void>(r => { settle = r; }));
+    const replaceSpy = vi.spyOn(window.history, 'replaceState');
+    render(
+      <MemoryRouter initialEntries={['/channels?connected=instagram']}>
+        <ChannelsPage />
+      </MemoryRouter>,
+    );
+
+    // Mid-poll the URL is untouched — a reload here re-enters verification
+    // instead of downgrading to the single passive refresh.
+    expect(replaceSpy).not.toHaveBeenCalled();
+    settle();
+    await vi.waitFor(() => expect(replaceSpy).toHaveBeenCalled());
+    replaceSpy.mockRestore();
   });
 
   it('a plain visit never triggers the OAuth verification', () => {

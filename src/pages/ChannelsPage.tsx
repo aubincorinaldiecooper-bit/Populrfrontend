@@ -67,7 +67,6 @@ export default function ChannelsPage() {
   // connected". Also clears the one-shot markers the callback leaves behind.
   const syncFromBackend = useCallback(() => {
     if (!backendConfigured) return;
-    refreshConnectedAccounts();
 
     // The OAuth callback and the subscription checkout both return here with
     // one-shot query markers. Onboarding has always acted on these; this page
@@ -78,29 +77,39 @@ export default function ChannelsPage() {
     const platform = searchParams.get('platform') ?? searchParams.get('retry') ?? undefined;
     const connected = searchParams.get('connected');
 
-    if (connectError === 'subscription_required') {
-      openSubscriptionModal(platform);
-    } else if (connectError) {
-      // The callback already confirmed the failure — reflect it onto the
-      // platform card (and toast), as the retired onboarding path did.
-      failOAuthReturn(platform);
-    } else if (subscription === 'success') {
-      showToast('Subscription active — you can connect your account now.', 'success');
-    } else if (connected) {
-      // A fresh OAuth return. The single refresh above can race Zernio's
-      // eventual consistency and show the new account as not connected with
-      // the one-shot marker already stripped; this runs the same
-      // verification the retired onboarding path did — explicit sync plus
-      // bounded polling — and settles the platform card either way.
-      completeOAuthReturn(connected);
-    }
+    // On an OAuth return the verifier owns the accounts list — a concurrent
+    // passive GET could capture the pre-sync list and resolve last,
+    // overwriting the verified account with stale state. Everywhere else,
+    // the passive refresh is what re-reads memory-held connection state
+    // after a full page load.
+    if (!connected) refreshConnectedAccounts();
 
-    if (connectError || subscription || connected) {
+    const stripMarkers = () => {
       const url = new URL(window.location.href);
       for (const key of ['connected', 'connect_error', 'subscription', 'platform', 'retry']) {
         url.searchParams.delete(key);
       }
       window.history.replaceState(null, '', url.toString());
+    };
+
+    if (connectError === 'subscription_required') {
+      openSubscriptionModal(platform);
+      stripMarkers();
+    } else if (connectError) {
+      // The callback already confirmed the failure — reflect it onto the
+      // platform card (and toast), as the retired onboarding path did.
+      failOAuthReturn(platform);
+      stripMarkers();
+    } else if (subscription === 'success') {
+      showToast('Subscription active — you can connect your account now.', 'success');
+      stripMarkers();
+    } else if (connected) {
+      // A fresh OAuth return: run the same verification the retired
+      // onboarding path did — explicit sync plus bounded polling — and
+      // settle the platform card either way. The marker is stripped only
+      // once verification settles, so a reload mid-poll re-enters this
+      // path instead of downgrading to the single passive refresh.
+      completeOAuthReturn(connected).finally(stripMarkers);
     }
   }, [backendConfigured, searchParams, refreshConnectedAccounts, completeOAuthReturn, failOAuthReturn, openSubscriptionModal, showToast]);
 
