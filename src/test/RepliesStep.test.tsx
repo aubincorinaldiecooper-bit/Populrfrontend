@@ -49,7 +49,19 @@ function makeWizard(overrides: Partial<WizardState>): AutomationWizardApi {
     aiEnabled: false, aiInstructions: '', active: false, dirty: false,
     ...overrides,
   };
-  return { state, update: vi.fn() } as unknown as AutomationWizardApi;
+  // Mirror the hook's exposed content predicate (RepliesStep now reads it from
+  // the wizard rather than recomputing it locally).
+  const cfg = state.type === 'dm_only'
+    ? { comment: false, dm: true }
+    : state.type === 'comment_reply'
+      ? { comment: true, dm: false }
+      : { comment: true, dm: true };
+  const usableLink = state.linkUrl.trim() !== '' && /^https?:\/\//i.test(state.linkUrl.trim());
+  const dmHasContent = state.dmBody.trim() !== '' || usableLink || state.mediaUrl.trim() !== '';
+  const hasReplyContent = state.aiEnabled
+    ? state.aiInstructions.trim() !== ''
+    : cfg.dm ? dmHasContent : state.commentReplyBody.trim() !== '';
+  return { state, update: vi.fn(), hasReplyContent } as unknown as AutomationWizardApi;
 }
 
 beforeEach(() => {

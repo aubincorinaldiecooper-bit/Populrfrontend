@@ -136,7 +136,7 @@ function hasDraftContent(state: WizardState): boolean {
 export function useAutomationWizard() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { showToast, accounts } = useApp();
+  const { showToast, accounts, accountsLoading, accountsError } = useApp();
   const navState = location.state as { automation?: Automation; draftId?: string } | null;
   const editAutomation = navState?.automation ?? null;
   // Only honored for new automations: editing an existing one always hydrates
@@ -198,12 +198,17 @@ export function useAutomationWizard() {
     state.type === 'dm_only' ? ['create', 'replies', 'review'] : ['create', 'post', 'replies', 'review'];
   const currentStep = steps[Math.min(stepIndex, steps.length - 1)];
 
-  // The account must be one that's actually connected right now. A draft or
-  // edit can carry an accountId whose account was since disconnected; the old
-  // truthy check let Continue through, PostStep tried to load posts for a dead
-  // account, and Activate failed at the backend with no in-wizard way to
-  // switch. CreateStep clears/reselects a stale id; this keeps Continue honest.
-  const accountConnected = !!state.accountId && instagramAccounts.some(a => a.id === state.accountId);
+  // Whether the account list is trustworthy right now: a successful load, not
+  // a pending/failed one. Only a proven list can declare an account
+  // disconnected — otherwise a fetch failure (accounts left at []) would treat
+  // a valid existing accountId as dead and block Save with no way forward.
+  const accountsKnown = !accountsLoading && !accountsError;
+  // The account must be one that's actually connected right now — but if we
+  // don't yet have a trustworthy list, preserve the selected id rather than
+  // calling it disconnected. A draft/edit id that's genuinely gone is only
+  // treated as such once a successful load proves it.
+  const accountConnected =
+    !!state.accountId && (instagramAccounts.some(a => a.id === state.accountId) || !accountsKnown);
   const canProceedFromCreate = state.name.trim() !== '' && state.type !== null && accountConnected;
   const canProceedFromPost = state.type === 'dm_only' || !!state.post;
 

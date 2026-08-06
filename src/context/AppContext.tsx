@@ -101,17 +101,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   // Stale-write guard for the authoritative `accounts` list. Every read takes
-  // a monotonically increasing ticket BEFORE it awaits; only the most-recently
-  // issued read may write. Without this, the app-mount refresh (issued first)
-  // could resolve AFTER completeOAuthReturn's verified write and clobber the
-  // just-connected account back to its pre-sync snapshot — the resolve-last
-  // race the ChannelsPage passive-refresh skip only partially covered (it
-  // guarded that page's own refresh, not the provider's mount refresh).
+  // a monotonically increasing ticket BEFORE it awaits; only the LATEST ISSUED
+  // read may touch account state — a read is stale the moment a newer one is
+  // issued, whether or not that newer one has resolved (or failed). Comparing
+  // against a "last applied" counter instead let an older success land after a
+  // newer failure, since a failure never advanced the counter. Without any of
+  // this, the app-mount refresh (issued first) could resolve AFTER
+  // completeOAuthReturn's verified write and clobber the just-connected
+  // account back to its pre-sync snapshot.
   const accountsSeq = useRef(0);
-  const appliedAccountsSeq = useRef(0);
+  const isLatestAccountsRead = (seq: number) => seq === accountsSeq.current;
   const applyAccountsWrite = useCallback((seq: number, updater: (prev: AppState) => AppState): boolean => {
-    if (seq < appliedAccountsSeq.current) return false;
-    appliedAccountsSeq.current = seq;
+    if (seq !== accountsSeq.current) return false;
     setState(updater);
     return true;
   }, []);
@@ -132,13 +133,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('[accounts] failed to load connected accounts:', err);
       const message = err instanceof Error && err.message ? err.message : 'Could not load connected accounts.';
-      // Don't let an older, failed read stamp an error over a newer read that
-      // already succeeded.
-      if (seq >= appliedAccountsSeq.current) {
+      // Only the latest issued read may surface an error — a stale read's
+      // failure must not stamp over a newer read's state.
+      if (isLatestAccountsRead(seq)) {
         setState(prev => ({ ...prev, accountsError: message }));
       }
     } finally {
-      setState(prev => ({ ...prev, accountsLoading: false }));
+      // Same rule for the spinner: an older read settling must not clear the
+      // loading state while a newer read is still pending.
+      if (isLatestAccountsRead(seq)) {
+        setState(prev => ({ ...prev, accountsLoading: false }));
+      }
     }
   }, [applyAccountsWrite]);
 

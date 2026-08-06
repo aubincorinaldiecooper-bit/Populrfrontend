@@ -106,6 +106,30 @@ describe('AppContext — accounts stale-write guard', () => {
     await act(async () => { resolveOld([]); await oldRead; });
     expect(screen.getByTestId('status')).toHaveTextContent('connected');
   });
+
+  it('a newer read that FAILS still supersedes an older read that later succeeds', async () => {
+    // Codex's case: the latest issued read is what counts, even when it fails.
+    // Order of resolution: newer fails first, older succeeds last — the older
+    // success must NOT land (it's stale), and the newer failure's error stands.
+    mockAccounts = [];
+    let resolveOld!: (v: ConnectedAccount[]) => void;
+    const oldRead = new Promise<ConnectedAccount[]>(r => { resolveOld = r; });
+    apiSpies.fetchConnectedAccounts
+      .mockImplementationOnce(async () => [])                                   // mount read
+      .mockImplementationOnce(() => oldRead)                                    // older, resolves LAST (success)
+      .mockImplementationOnce(async () => { throw new Error('newer failed'); }); // newer, fails FIRST
+
+    render(<AuthProvider><AppProvider><Harness /></AppProvider></AuthProvider>);
+    await waitFor(() => expect(apiSpies.fetchConnectedAccounts).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('refresh')); // older (pending)
+    fireEvent.click(screen.getByText('refresh')); // newer (rejects)
+    await waitFor(() => expect(apiSpies.fetchConnectedAccounts).toHaveBeenCalledTimes(3));
+
+    // Let the older read succeed with a real account — it must be dropped.
+    await act(async () => { resolveOld([igAccount({ id: 'acc_stale' })]); await oldRead.catch(() => {}); });
+    expect(screen.getByTestId('status')).not.toHaveTextContent('connected');
+  });
 });
 
 describe('AppContext — refreshConnectedAccounts', () => {

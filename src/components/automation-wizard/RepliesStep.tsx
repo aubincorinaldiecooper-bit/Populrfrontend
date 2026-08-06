@@ -61,7 +61,7 @@ function Disclosure({
  * therefore fallbacks, collapsed under one disclosure.
  */
 export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi }) {
-  const { state, update } = wizard;
+  const { state, update, hasReplyContent } = wizard;
   const { accounts } = useApp();
   const cfg = state.type ? AUTOMATION_TYPES[state.type] : null;
   const wantsComment = cfg?.replyChannel === 'comment' || cfg?.replyChannel === 'both';
@@ -114,12 +114,11 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
     return () => window.removeEventListener('keydown', onKey);
   }, [testOpen]);
 
-  // The tester needs enough to actually run: a trigger to match and reply
-  // content to preview (instructions in AI mode; at least one message in
-  // exact mode). Anything less would open a tester that can only dead-end.
-  const hasReplyContent = state.aiEnabled
-    ? state.aiInstructions.trim() !== ''
-    : (showComment && state.commentReplyBody.trim() !== '') || (showDM && state.dmBody.trim() !== '');
+  // hasReplyContent comes from the wizard hook — the SAME predicate the
+  // save/activate gate uses — so the tester's eligibility never disagrees with
+  // what can actually be saved. An exact DM carrying only a valid link or
+  // media is production-valid, so it must be testable too, not rejected with
+  // "write a message first."
   // Invalid URLs are blocked from Continue, so the tester must not preview
   // them either — it would render/embed a "reply" production would never send.
   const urlsValid = !linkInvalid && !mediaInvalid;
