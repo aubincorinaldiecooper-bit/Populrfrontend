@@ -17,6 +17,16 @@ import type { ConnectedAccount } from '../lib/api';
 
 let mockAccounts: ConnectedAccount[] = [];
 
+// Spied at the API (endpoint) boundary so tests can assert which endpoints
+// the REAL AppContext lifecycle actually reaches. getPlatformConnectUrl
+// rejects by default: the success path assigns window.location.href, which
+// jsdom can't navigate — the rejection exercises the real error handling
+// while keeping the full code path in play.
+const apiSpies = vi.hoisted(() => ({
+  disconnectAccount: vi.fn(async () => { throw new Error('disconnect endpoint must not be reached by connect flows'); }),
+  getPlatformConnectUrl: vi.fn(async (): Promise<string> => { throw new Error('redirect suppressed in jsdom'); }),
+}));
+
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
   return {
@@ -24,15 +34,18 @@ vi.mock('../lib/api', async () => {
     isBackendConfigured: () => true,
     fetchConnectedAccounts: () => Promise.resolve(mockAccounts),
     syncConnectedAccounts: () => Promise.resolve({ synced: 0, skipped: 0, accounts: [] }),
+    getPlatformConnectUrl: apiSpies.getPlatformConnectUrl,
+    disconnectAccount: apiSpies.disconnectAccount,
   };
 });
 
 function Harness() {
-  const { connectedPlatforms, refreshConnectedAccounts, completeOAuthReturn, toasts } = useApp();
+  const { connectedPlatforms, refreshConnectedAccounts, completeOAuthReturn, beginPlatformConnect, toasts } = useApp();
   const instagram = connectedPlatforms.find(p => p.id === 'instagram');
   return (
     <div>
       <button onClick={() => { void refreshConnectedAccounts(); }}>refresh</button>
+      <button onClick={() => beginPlatformConnect('instagram')}>begin-connect</button>
       <button onClick={() => { void completeOAuthReturn('instagram', { accountId: 'acc_ig_2' }); }}>verify-second</button>
       <button onClick={() => { void completeOAuthReturn('instagram', { accountId: 'acc_ig_2', restored: true }); }}>verify-restored</button>
       <span data-testid="status">{instagram?.status ?? 'missing'}</span>
@@ -135,5 +148,28 @@ describe('AppContext — completeOAuthReturn with a specific account id', () => 
     );
     fireEvent.click(screen.getByText('verify-restored'));
     await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('@second_ig reconnected.'));
+  });
+
+  it('the REAL connect lifecycle never reaches the disconnect endpoint', async () => {
+    /* Endpoint-level regression for the multi-account incident: this runs
+     * the production beginPlatformConnect and completeOAuthReturn (no
+     * mocked context), with spies at the API boundary — a regression that
+     * wired any connect path to the disconnect API would trip the spy. */
+    mockAccounts = twoAccounts();
+    render(
+      <AuthProvider>
+        <AppProvider>
+          <Harness />
+        </AppProvider>
+      </AuthProvider>
+    );
+
+    fireEvent.click(screen.getByText('begin-connect'));
+    await waitFor(() => expect(apiSpies.getPlatformConnectUrl).toHaveBeenCalledWith('instagram', expect.any(String)));
+
+    fireEvent.click(screen.getByText('verify-second'));
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('@second_ig connected.'));
+
+    expect(apiSpies.disconnectAccount).not.toHaveBeenCalled();
   });
 });
