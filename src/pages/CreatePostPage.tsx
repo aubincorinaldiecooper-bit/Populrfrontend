@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import useEmblaCarousel from 'embla-carousel-react';
 import {
   Image as ImageIcon, Video as VideoIcon, GalleryHorizontal, Type as TypeIcon,
-  Upload, X as XIcon, GripVertical, Instagram, Music, Linkedin, AlertCircle,
+  Upload, X as XIcon, GripVertical, AlertCircle,
   ChevronLeft, ChevronRight, Loader2, Check, ArrowRight, RefreshCw,
 } from 'lucide-react';
 import { Card } from '@astryxdesign/core/Card';
@@ -20,6 +20,7 @@ import {
   publishDraftPost, fetchPost,
 } from '../lib/api';
 import type { PostMediaItem, PostMediaType, PostWithDetails, PlatformCapabilities } from '../lib/api';
+import { platformMeta } from '../lib/platformMeta';
 
 const MEDIA_TYPES: { id: PostMediaType; label: string; icon: typeof ImageIcon; description: string }[] = [
   { id: 'image', label: 'Image', icon: ImageIcon, description: 'Share one image across supported platforms.' },
@@ -28,16 +29,17 @@ const MEDIA_TYPES: { id: PostMediaType; label: string; icon: typeof ImageIcon; d
   { id: 'text', label: 'Text', icon: TypeIcon, description: 'Publish a text-only update where supported.' },
 ];
 
-const PLATFORMS = [
-  { id: 'instagram', name: 'Instagram', icon: Instagram, color: '#E4405F' },
-  { id: 'tiktok', name: 'TikTok', icon: Music, color: '#000000' },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: '#0A66C2' },
-];
+// Publishing targets are the workspace's connected accounts — the page has
+// no standalone platform list. Names, icons, and colors all come from the
+// shared platform meta, so accounts on platforms hidden for the beta still
+// label correctly and `twitter` renders as "X".
 
 type Step = 1 | 2 | 3;
 
 function platformLabel(p: string): string {
-  return PLATFORMS.find(x => x.id === p)?.name ?? (p.charAt(0).toUpperCase() + p.slice(1));
+  // platformMeta, not PLATFORMS: a draft targeting a platform hidden after
+  // the beta cut must still label it properly, not fall back to a raw id.
+  return platformMeta(p).name;
 }
 
 function formatBytes(n: number): string {
@@ -375,9 +377,9 @@ export default function CreatePostPage() {
           {post.targets.map(t => (
             <Card key={t.id} padding={4} className="flex items-center gap-3">
               {(() => {
-                const P = PLATFORMS.find(p => p.id === t.platform);
-                const Icon = P?.icon ?? Instagram;
-                return <Icon size={20} style={{ color: P?.color }} />;
+                const P = platformMeta(t.platform);
+                const Icon = P.icon;
+                return <Icon size={20} style={{ color: P.color }} />;
               })()}
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-[#111111]">{platformLabel(t.platform)}</p>
@@ -471,9 +473,9 @@ export default function CreatePostPage() {
                     {uniquePlatforms.length > 0 && (
                       <div className="flex items-center gap-1.5 mt-3">
                         {uniquePlatforms.map(p => {
-                          const P = PLATFORMS.find(x => x.id === p);
-                          const Icon2 = P?.icon;
-                          return Icon2 ? <Icon2 key={p} size={14} style={{ color: P?.color }} /> : null;
+                          const P = platformMeta(p);
+                          const Icon2 = P.icon;
+                          return <Icon2 key={p} size={14} style={{ color: P.color }} />;
                         })}
                       </div>
                     )}
@@ -564,8 +566,8 @@ export default function CreatePostPage() {
             {connectedAccounts
               .filter(a => capabilities[a.platform]?.supportedMediaTypes?.includes(mediaType ?? 'text'))
               .map(a => {
-                const P = PLATFORMS.find(p => p.id === a.platform);
-                const Icon = P?.icon ?? Instagram;
+                const P = platformMeta(a.platform);
+                const Icon = P.icon;
                 const selected = selectedAccountIds.includes(a.id);
                 const caps = capabilities[a.platform];
                 return (
@@ -603,8 +605,8 @@ export default function CreatePostPage() {
                 <p className="pop-meta mb-2">Not available for this post type</p>
                 <div className="space-y-2 opacity-60">
                   {unavailable.map(a => {
-                    const P = PLATFORMS.find(p => p.id === a.platform);
-                    const Icon = P?.icon ?? Instagram;
+                    const P = platformMeta(a.platform);
+                    const Icon = P.icon;
                     return (
                       <div key={a.id} className="pop-card-compact flex items-center gap-3">
                         <Icon size={18} style={{ color: P?.color }} />

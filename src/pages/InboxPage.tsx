@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
 import { ListSkeleton } from '../components/Skeleton';
+import { platformMeta } from '../lib/platformMeta';
 import {
   isBackendConfigured, fetchInbox, sendInboxReply, setInboxNeedsReply, ApiError,
 } from '../lib/api';
@@ -227,7 +228,8 @@ export default function InboxPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[13px] font-semibold text-[#111111]">{personLabel}</span>
                   <PlatformDot platform={item.platform} size={7} />
-                  <span className="text-[11px] text-[#9B9B8F] capitalize">{item.platform} {item.channel === 'dm' ? 'DM' : 'comment'}</span>
+                  {/* Display name, not the internal id — `twitter` must read as "X". */}
+                  <span className="text-[11px] text-[#9B9B8F]">{platformMeta(item.platform).name} {item.channel === 'dm' ? 'DM' : 'comment'}</span>
                   <span className="text-[11px] text-[#9B9B8F]">· {timeAgo(item.created_at)}</span>
                   {item.needs_reply && reason && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706] ml-auto">

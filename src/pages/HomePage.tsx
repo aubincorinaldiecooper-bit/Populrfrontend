@@ -9,6 +9,7 @@ import PlatformDot from '../components/PlatformDot';
 import { StatGridSkeleton, ListSkeleton } from '../components/Skeleton';
 import { isBackendConfigured, fetchDashboard } from '../lib/api';
 import type { DashboardData } from '../lib/api';
+import { platformMeta } from '../lib/platformMeta';
 
 /**
  * Home answers two questions in one glance, in this order:
@@ -310,7 +311,7 @@ export default function HomePage() {
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <PlatformDot platform={post.platform} size={6} />
                             <p className="text-[11px] text-[#9B9B8F]">
-                              {post.account_username ? `@${post.account_username}` : post.platform} · {post.contacts} contact{post.contacts === 1 ? '' : 's'}
+                              {post.account_username ? `@${post.account_username}` : platformMeta(post.platform).name} · {post.contacts} contact{post.contacts === 1 ? '' : 's'}
                             </p>
                           </div>
                         </div>

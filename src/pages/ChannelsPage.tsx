@@ -1,40 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  Instagram, Music, Linkedin, Twitter, MessageCircle, Loader2, Check, AlertCircle, ArrowRight,
-  RefreshCw, Link2Off,
+  Loader2, Check, AlertCircle, ArrowRight, RefreshCw, Link2Off,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import ConnectAnotherModal from '../components/ConnectAnotherModal';
 import type { ConnectAnotherInitialMode } from '../components/ConnectAnotherModal';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
 import type { PlatformCapabilities, ConnectedAccount } from '../lib/api';
+import { BETA_PLATFORMS, isBetaPlatform, platformMeta } from '../lib/platformMeta';
 
-// The platforms Populr offers to connect. Same three the product leads with;
-// anything already connected on another platform still renders below (see
+// The beta connection surface (Instagram, Facebook, X) comes from the shared
+// platform meta — the single source of truth for names/icons/offering.
+// Anything already connected on a hidden platform still renders below (see
 // `rows`), so an account can never become invisible — and therefore
-// unmanageable — just because it isn't on this list.
-const OFFERED_PLATFORMS = [
-  { id: 'instagram', name: 'Instagram', icon: Instagram, color: '#E4405F' },
-  { id: 'tiktok', name: 'TikTok', icon: Music, color: '#000000' },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: '#0A66C2' },
-];
+// unmanageable — just because its platform left the offered list.
+const OFFERED_PLATFORMS = BETA_PLATFORMS.map(id => ({ id, ...platformMeta(id) }));
 
-// lucide-react has no TikTok or Reddit glyph; Music and MessageCircle stand
-// in, matching the substitution Onboarding already makes.
-const PLATFORM_META: Record<string, { name: string; icon: LucideIcon; color: string }> = {
-  instagram: { name: 'Instagram', icon: Instagram, color: '#E4405F' },
-  tiktok: { name: 'TikTok', icon: Music, color: '#000000' },
-  linkedin: { name: 'LinkedIn', icon: Linkedin, color: '#0A66C2' },
-  twitter: { name: 'Twitter', icon: Twitter, color: '#1DA1F2' },
-  reddit: { name: 'Reddit', icon: MessageCircle, color: '#FF4500' },
-};
-
-function metaFor(id: string) {
-  return PLATFORM_META[id] ?? { name: id.charAt(0).toUpperCase() + id.slice(1), icon: MessageCircle, color: '#6B6B6B' };
-}
+const metaFor = platformMeta;
 
 export default function ChannelsPage() {
   const {
@@ -223,6 +207,10 @@ export default function ChannelsPage() {
           const cp = connectedPlatforms.find(c => c.id === p.id);
           const platformStatus = cp?.status ?? 'idle';
           const accts = visibleAccounts.filter(a => a.platform === p.id);
+          // Hidden (non-beta) platforms appear here only because real
+          // accounts exist on them — those stay fully manageable
+          // (Disconnect/Reconnect), but no NEW connections are offered.
+          const offered = isBetaPlatform(p.id);
           const caps = capabilities[p.id];
           // Only meaningful once an account exists — otherwise a platform
           // nobody has connected advertises its limitations unprompted.
@@ -268,7 +256,7 @@ export default function ChannelsPage() {
                   )}
                 </div>
                 <div className="flex-shrink-0">
-                  {accts.length === 0 && platformStatus === 'idle' && (
+                  {accts.length === 0 && platformStatus === 'idle' && offered && (
                     <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-primary text-[12px] py-2 px-3">
                       Connect
                     </button>
@@ -284,7 +272,7 @@ export default function ChannelsPage() {
                       <RefreshCw size={13} /> Try again
                     </button>
                   )}
-                  {accts.length > 0 && !connectBusy && platformStatus !== 'error' && (
+                  {accts.length > 0 && !connectBusy && platformStatus !== 'error' && offered && (
                     // Not a straight redirect: providers reuse the login the
                     // browser already holds, so the modal explains that and
                     // offers the private-window link before anything happens.
