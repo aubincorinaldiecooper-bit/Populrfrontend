@@ -14,6 +14,7 @@ import type { Automation, AutomationEvent } from '../lib/api';
 import { AUTOMATION_TYPES, automationToTypeCard } from '../components/automation-wizard/useAutomationWizard';
 import { ListSkeleton } from '../components/Skeleton';
 import { listWizardDrafts, deleteWizardDraft, type WizardDraft } from '../components/automation-wizard/wizardDrafts';
+import { platformMeta } from '../lib/platformMeta';
 
 type StatusTab = 'all' | 'active' | 'paused' | 'drafts';
 
@@ -364,7 +365,8 @@ export default function AutomationsPage() {
                 </div>
               </div>
               <div className="mt-2 pt-2 border-t border-[#F0EEEA] flex items-center justify-between">
-                <p className="text-[11px] text-[#9B9B8F] capitalize">{a.platform}</p>
+                {/* Display name, not the internal id — `twitter` must read as "X". */}
+                <p className="text-[11px] text-[#9B9B8F]">{platformMeta(a.platform).name}</p>
                 <span className="text-[10px] text-[#9B9B8F]">Updated {new Date(a.updated_at).toLocaleDateString()}</span>
               </div>
             </div>
