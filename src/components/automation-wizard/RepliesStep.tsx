@@ -80,6 +80,11 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
 
   const showComment = wantsComment && (caps?.supportsCommentReplies ?? true);
   const showDM = wantsDM && (caps?.supportsDMs ?? true);
+  // A media value the user can't see is a media value they can't correct:
+  // when capabilities hide the DM fields but a (possibly invalid) media URL
+  // is already in state — which still gates Continue — its field stays
+  // visible so the error can actually be fixed or the value cleared.
+  const showMediaField = showDM || (wantsDM && state.mediaUrl.trim() !== '');
 
   const linkInvalid = !isUsableHttpUrl(state.linkUrl);
   const mediaInvalid = !isUsableHttpUrl(state.mediaUrl);
@@ -244,7 +249,7 @@ export default function RepliesStep({ wizard }: { wizard: AutomationWizardApi })
           hint="optional"
           defaultOpen={!!(state.mediaUrl.trim() || state.linkUrl.trim() || state.buttonLabel.trim())}
         >
-          {showDM && (
+          {showMediaField && (
             <div>
               <label htmlFor="wizard-media-url" className="block text-[12px] font-semibold text-[#111111] mb-1">
                 Media in the DM

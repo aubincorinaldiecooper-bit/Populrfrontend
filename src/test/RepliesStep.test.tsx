@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, renderHook, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import RepliesStep from '../components/automation-wizard/RepliesStep';
-import { isUsableHttpUrl } from '../components/automation-wizard/useAutomationWizard';
+import { isUsableHttpUrl, useAutomationWizard } from '../components/automation-wizard/useAutomationWizard';
 import type { AutomationWizardApi, WizardState } from '../components/automation-wizard/useAutomationWizard';
 import type { PlatformCapabilities } from '../lib/api';
 
@@ -28,6 +29,7 @@ vi.mock('../lib/api', async () => {
 vi.mock('../context/AppContext', () => ({
   useApp: () => ({
     accounts: [{ id: 'acc_1', platform: 'instagram', username: 'main_ig', status: 'connected', is_connected: true }],
+    showToast: vi.fn(),
   }),
 }));
 
@@ -152,6 +154,34 @@ describe('RepliesStep — Add media or link', () => {
   it('the button-label field appears only once a valid link exists', () => {
     render(<RepliesStep wizard={makeWizard({ linkUrl: 'https://example.com/guide' })} />);
     expect(screen.getByLabelText('Send it as a button')).toBeInTheDocument();
+  });
+
+  it('an invalid media URL left by a DM-capable type never strands a comment-only automation', () => {
+    // Enter an invalid media URL under comment+DM, then switch the type to
+    // comment-only: the media field disappears, so its validation must stop
+    // gating Continue — an invisible error would leave nothing to correct.
+    const wrapper = ({ children }: { children: React.ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
+    const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    act(() => {
+      result.current.update('type', 'comment_dm');
+      result.current.update('triggerKeywords', ['guide']);
+      result.current.update('mediaUrl', 'not-a-url');
+    });
+    expect(result.current.canProceedFromReplies).toBe(false);
+    act(() => {
+      result.current.update('type', 'comment_reply');
+    });
+    expect(result.current.canProceedFromReplies).toBe(true);
+  });
+
+  it('a media value stays visible and correctable when capabilities hide the DM fields', async () => {
+    // Continue is still gated by the invalid value (the type wants a DM),
+    // so the field must not vanish with it — the error has to be fixable.
+    mockFetchCapabilities.mockResolvedValue([caps({ supportsDMs: false })]);
+    render(<RepliesStep wizard={makeWizard({ type: 'comment_dm', mediaUrl: 'not-a-url' })} />);
+    await waitFor(() => expect(screen.queryByLabelText('DM message')).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Media in the DM')).toBeInTheDocument();
+    expect(screen.getAllByText('Enter a full link starting with http:// or https://.').length).toBeGreaterThan(0);
   });
 });
 

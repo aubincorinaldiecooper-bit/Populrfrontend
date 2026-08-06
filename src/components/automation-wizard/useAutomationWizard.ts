@@ -202,10 +202,16 @@ export function useAutomationWizard() {
   const canProceedFromPost = state.type === 'dm_only' || !!state.post;
   // URL validity gates progression so an invalid link/media value can't ride
   // through to save — the Replies step shows the matching inline error.
+  // Media rides only on DMs, so an invalid media URL left behind after
+  // switching to a comment-only type is ignored here (its field is hidden —
+  // an invisible error would strand Continue with nothing to correct) and
+  // dropped by buildInput below.
+  const repliesCfg = state.type ? AUTOMATION_TYPES[state.type] : null;
+  const repliesWantDM = repliesCfg?.replyChannel === 'dm' || repliesCfg?.replyChannel === 'both';
   const canProceedFromReplies =
     state.triggerKeywords.length > 0 &&
     isUsableHttpUrl(state.linkUrl) &&
-    isUsableHttpUrl(state.mediaUrl);
+    (!repliesWantDM || isUsableHttpUrl(state.mediaUrl));
 
   const canProceed = (() => {
     if (currentStep === 'create') return canProceedFromCreate;
@@ -224,10 +230,14 @@ export function useAutomationWizard() {
   const buildInput = useCallback((activate: boolean): AutomationInput | null => {
     if (!state.type || !state.accountId) return null;
     const cfg = AUTOMATION_TYPES[state.type];
+    const wantsDM = cfg.replyChannel === 'dm' || cfg.replyChannel === 'both';
     // Belt-and-braces behind the Replies step's progression gate: an invalid
-    // URL is never persisted as a usable link/attachment.
+    // URL is never persisted as a usable link/attachment, and media/buttons
+    // (which only ride on DMs) never survive a switch to a comment-only type.
     const usableLink = state.linkUrl.trim() && isUsableHttpUrl(state.linkUrl) ? state.linkUrl.trim() : null;
-    const usableMedia = state.mediaUrl.trim() && isUsableHttpUrl(state.mediaUrl) ? state.mediaUrl.trim() : null;
+    const usableMedia = wantsDM && state.mediaUrl.trim() && isUsableHttpUrl(state.mediaUrl)
+      ? state.mediaUrl.trim()
+      : null;
     return {
       name: state.name.trim(),
       accountId: state.accountId,
@@ -247,8 +257,9 @@ export function useAutomationWizard() {
         ? (/\.(mp4|mov|webm)(\?|$)/i.test(usableMedia) ? 'video' : 'image')
         : 'text',
       // One button, carrying the automation's link — the engine substitutes
-      // the per-contact tracked URL because the urls match.
-      buttons: state.buttonLabel.trim() && usableLink
+      // the per-contact tracked URL because the urls match. DM-only: a
+      // button can't ride on a public comment reply.
+      buttons: wantsDM && state.buttonLabel.trim() && usableLink
         ? [{ label: state.buttonLabel.trim(), url: usableLink }]
         : null,
       aiEnabled: state.aiEnabled,
