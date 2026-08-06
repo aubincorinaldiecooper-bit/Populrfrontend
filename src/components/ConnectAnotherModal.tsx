@@ -37,10 +37,12 @@ interface Props {
   onClose: () => void;
 }
 
-/** "an Instagram account" / "a TikTok account" — the copy templates take the
- *  platform name mid-sentence, so the article has to follow it. */
+/** "an Instagram account" / "a Facebook account" / "an X account" — the
+ *  copy templates take the platform name mid-sentence, so the article has
+ *  to follow it. X is spelled with a vowel sound ("ex"), like any letter
+ *  name that starts one. */
 function article(name: string): 'a' | 'an' {
-  return /^[aeiou]/i.test(name) ? 'an' : 'a';
+  return /^([aeiou]|[fhlmnrsx]\b)/i.test(name) ? 'an' : 'a';
 }
 
 /**

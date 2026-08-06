@@ -10,10 +10,11 @@
 // only genuinely-shared constants remain here.
 // ============================================================
 
-export type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'linkedin' | 'reddit';
+export type Platform = 'instagram' | 'facebook' | 'tiktok' | 'youtube' | 'twitter' | 'linkedin' | 'reddit';
 
 export const platformColors: Record<Platform, string> = {
   instagram: 'bg-gradient-to-br from-pink-500 to-orange-500',
+  facebook: 'bg-[#1877F2]',
   tiktok: 'bg-black',
   youtube: 'bg-red-600',
   twitter: 'bg-black',
@@ -45,12 +46,17 @@ export interface OnboardingPlatform {
   errorMessage?: string;
 }
 
-// Populr's supported connection surface: Instagram, TikTok, LinkedIn,
-// Twitter/X, and Reddit.
+// Connection-state scaffolding, one entry per platform the app can track —
+// NOT the user-facing offering (that's BETA_PLATFORMS in lib/platformMeta:
+// Instagram, Facebook, X for the current beta). Hidden platforms keep
+// entries here so an account connected before the beta cut still gets
+// status tracking and a proper display name. `twitter` stays the internal
+// id; users only ever see "X".
 export const defaultOnboardingPlatforms: OnboardingPlatform[] = [
   { id: 'instagram', name: 'Instagram', icon: 'instagram', status: 'idle' },
+  { id: 'facebook', name: 'Facebook', icon: 'facebook', status: 'idle' },
+  { id: 'twitter', name: 'X', icon: 'twitter', status: 'idle' },
   { id: 'tiktok', name: 'TikTok', icon: 'tiktok', status: 'idle' },
   { id: 'linkedin', name: 'LinkedIn', icon: 'linkedin', status: 'idle' },
-  { id: 'twitter', name: 'Twitter', icon: 'twitter', status: 'idle' },
   { id: 'reddit', name: 'Reddit', icon: 'reddit', status: 'idle' },
 ];

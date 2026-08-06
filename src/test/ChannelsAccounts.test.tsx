@@ -82,6 +82,57 @@ function renderPage() {
   return render(<MemoryRouter><ChannelsPage /></MemoryRouter>);
 }
 
+describe('ChannelsPage — beta channel surface', () => {
+  /* The beta offers exactly Instagram, Facebook, and X. TikTok, LinkedIn,
+   * and Reddit are hidden — not deleted — and the internal id `twitter`
+   * must surface to users only as "X". */
+
+  it('offers exactly Instagram, Facebook, and X', () => {
+    renderPage();
+    expect(screen.getByText('Instagram')).toBeInTheDocument();
+    expect(screen.getByText('Facebook')).toBeInTheDocument();
+    expect(screen.getByText('X')).toBeInTheDocument();
+    expect(screen.queryByText('TikTok')).not.toBeInTheDocument();
+    expect(screen.queryByText('LinkedIn')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reddit')).not.toBeInTheDocument();
+  });
+
+  it('never shows the word "Twitter" — the twitter id renders as X', () => {
+    renderPage();
+    expect(screen.queryByText(/Twitter/)).not.toBeInTheDocument();
+    // The internal-id account still renders, under the X card.
+    expect(screen.getByText('@birdacct')).toBeInTheDocument();
+  });
+
+  it('two X accounts render as separate rows with their own Disconnect', () => {
+    mockUseApp.mockReturnValue({
+      ...mockUseApp(),
+      accounts: [
+        account({ id: 'x_1', platform: 'twitter', username: 'more.feed' }),
+        account({ id: 'x_2', platform: 'twitter', username: 'justforlaughs' }),
+      ],
+    });
+    renderPage();
+    expect(screen.getByText('@more.feed')).toBeInTheDocument();
+    expect(screen.getByText('@justforlaughs')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Disconnect/ })).toHaveLength(2);
+  });
+
+  it('an existing account on a hidden platform stays manageable but gets no new-connect actions', () => {
+    mockUseApp.mockReturnValue({
+      ...mockUseApp(),
+      accounts: [account({ id: 'tt_1', platform: 'tiktok', username: 'oldtok' })],
+    });
+    renderPage();
+    // The account is not stranded: its row renders with Disconnect...
+    expect(screen.getByText('TikTok')).toBeInTheDocument();
+    expect(screen.getByText('@oldtok')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Disconnect/ })).toBeInTheDocument();
+    // ...but the beta offers no new TikTok connections.
+    expect(screen.queryByRole('button', { name: 'Connect another' })).not.toBeInTheDocument();
+  });
+});
+
 describe('ChannelsPage — real accounts, automations framing', () => {
   it('renders every account, including a second one on the same platform', () => {
     renderPage();
@@ -226,8 +277,10 @@ describe('ChannelsPage — Connect another modal', () => {
     unmount();
 
     renderPage();
+    // Second "Connect another" is the X card (facebook has no accounts, so
+    // it offers plain Connect instead).
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect another' })[1]);
-    expect(screen.getByText(/You already have a Twitter account connected/)).toBeInTheDocument();
+    expect(screen.getByText(/You already have an X account connected/)).toBeInTheDocument();
     expect(screen.queryByText(/private window/)).not.toBeInTheDocument();
     // Scoped to the dialog — the page behind it legitimately says "Instagram".
     expect(within(screen.getByRole('dialog')).queryByText(/Instagram/)).not.toBeInTheDocument();
