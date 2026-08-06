@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Send, RotateCcw, Loader2, AlertCircle, ArrowDown } from 'lucide-react';
+import { Send, RotateCcw, Loader2, AlertCircle, ArrowDown, X } from 'lucide-react';
 import { testAutomation, isBackendConfigured } from '../../lib/api';
 import type { AutomationTestResult } from '../../lib/api';
 import { AUTOMATION_TYPES, type AutomationWizardApi } from './useAutomationWizard';
@@ -12,7 +12,7 @@ interface TestEntry {
   error?: string;
 }
 
-export default function AutomationTestChat({ wizard }: { wizard: AutomationWizardApi }) {
+export default function AutomationTestChat({ wizard, onClose }: { wizard: AutomationWizardApi; onClose?: () => void }) {
   const { state } = wizard;
   const [input, setInput] = useState('');
   const [entries, setEntries] = useState<TestEntry[]>([]);
@@ -67,9 +67,16 @@ export default function AutomationTestChat({ wizard }: { wizard: AutomationWizar
           <p className="text-[11px] font-semibold text-[#111111] uppercase tracking-wider">Test chat</p>
           <p className="text-[10px] text-[#9B9B8F] mt-0.5">Nothing here is sent or saved.</p>
         </div>
-        <button onClick={reset} className="p-1.5 hover:bg-[#FAFAF8] rounded-lg transition-all" title="Reset" aria-label="Reset test chat">
-          <RotateCcw size={14} className="text-[#6B6B6B]" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={reset} className="p-1.5 hover:bg-[#FAFAF8] rounded-lg transition-all" title="Reset" aria-label="Reset test chat">
+            <RotateCcw size={14} className="text-[#6B6B6B]" />
+          </button>
+          {onClose && (
+            <button onClick={onClose} className="p-1.5 hover:bg-[#FAFAF8] rounded-lg transition-all" aria-label="Close test chat">
+              <X size={14} className="text-[#6B6B6B]" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3" aria-live="polite">

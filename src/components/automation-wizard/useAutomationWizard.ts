@@ -41,6 +41,21 @@ export function automationToTypeCard(a: Pick<Automation, 'trigger_type' | 'reply
 
 export type WizardStepKey = 'create' | 'post' | 'replies' | 'review';
 
+/** A link the automation can actually send: an absolute http(s) URL. Empty
+ *  counts as "not provided" (these fields are optional); anything else —
+ *  bare words, typos, javascript: — gets an inline error in the Replies
+ *  step, blocks progression there, and is never persisted as usable. */
+export function isUsableHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export interface WizardState {
   automationId: string | null;
   name: string;
@@ -185,7 +200,12 @@ export function useAutomationWizard() {
 
   const canProceedFromCreate = state.name.trim() !== '' && state.type !== null && !!state.accountId;
   const canProceedFromPost = state.type === 'dm_only' || !!state.post;
-  const canProceedFromReplies = state.triggerKeywords.length > 0;
+  // URL validity gates progression so an invalid link/media value can't ride
+  // through to save — the Replies step shows the matching inline error.
+  const canProceedFromReplies =
+    state.triggerKeywords.length > 0 &&
+    isUsableHttpUrl(state.linkUrl) &&
+    isUsableHttpUrl(state.mediaUrl);
 
   const canProceed = (() => {
     if (currentStep === 'create') return canProceedFromCreate;
@@ -204,6 +224,10 @@ export function useAutomationWizard() {
   const buildInput = useCallback((activate: boolean): AutomationInput | null => {
     if (!state.type || !state.accountId) return null;
     const cfg = AUTOMATION_TYPES[state.type];
+    // Belt-and-braces behind the Replies step's progression gate: an invalid
+    // URL is never persisted as a usable link/attachment.
+    const usableLink = state.linkUrl.trim() && isUsableHttpUrl(state.linkUrl) ? state.linkUrl.trim() : null;
+    const usableMedia = state.mediaUrl.trim() && isUsableHttpUrl(state.mediaUrl) ? state.mediaUrl.trim() : null;
     return {
       name: state.name.trim(),
       accountId: state.accountId,
@@ -215,17 +239,17 @@ export function useAutomationWizard() {
       allPosts: !cfg.needsPost,
       commentReplyBody: state.commentReplyBody.trim() ? state.commentReplyBody.trim() : null,
       messageBody: state.dmBody.trim() ? state.dmBody.trim() : null,
-      linkUrl: state.linkUrl.trim() ? state.linkUrl.trim() : null,
-      mediaUrl: state.mediaUrl.trim() ? state.mediaUrl.trim() : null,
+      linkUrl: usableLink,
+      mediaUrl: usableMedia,
       // The backend validates the media type against the platform's DM
       // capabilities, keyed by responseType.
-      responseType: state.mediaUrl.trim()
-        ? (/\.(mp4|mov|webm)(\?|$)/i.test(state.mediaUrl.trim()) ? 'video' : 'image')
+      responseType: usableMedia
+        ? (/\.(mp4|mov|webm)(\?|$)/i.test(usableMedia) ? 'video' : 'image')
         : 'text',
       // One button, carrying the automation's link — the engine substitutes
       // the per-contact tracked URL because the urls match.
-      buttons: state.buttonLabel.trim() && state.linkUrl.trim()
-        ? [{ label: state.buttonLabel.trim(), url: state.linkUrl.trim() }]
+      buttons: state.buttonLabel.trim() && usableLink
+        ? [{ label: state.buttonLabel.trim(), url: usableLink }]
         : null,
       aiEnabled: state.aiEnabled,
       aiInstructions: state.aiInstructions.trim() ? state.aiInstructions.trim() : null,
