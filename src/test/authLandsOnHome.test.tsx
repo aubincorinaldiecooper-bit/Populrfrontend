@@ -57,11 +57,34 @@ describe('auth completion — no onboarding gate', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/contacts', { replace: true });
   });
 
-  it('no session after the callback → back to login with an error code', async () => {
+  it('a real callback (markers present) with no session → session_failed', async () => {
+    window.history.replaceState(null, '', '/auth/complete?code=abc&state=xyz');
     mockUseAuth.mockReturnValue({ session: null, user: null, loading: false, refresh: vi.fn() });
     render(<AuthCompletePage />);
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
     expect(mockNavigate).toHaveBeenCalledWith('/login?error=session_failed', { replace: true });
+  });
+
+  it('a specific callback error maps to the accurate LoginPage copy', async () => {
+    window.history.replaceState(null, '', '/auth/complete?error=token_expired&error_description=The%20link%20expired');
+    mockUseAuth.mockReturnValue({ session: null, user: null, loading: false, refresh: vi.fn() });
+    render(<AuthCompletePage />);
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    // "expire" wins over "token" — the user sees "that link has expired".
+    expect(mockNavigate).toHaveBeenCalledWith('/login?error=expired_link', { replace: true });
+  });
+
+  it('a plain signed-out visit (no callback markers) routes to /login WITHOUT a scary error', async () => {
+    // A stale tab / bookmark / back-button-after-signout. The user never
+    // attempted a sign-in here, so "sign-in failed" would be a lie.
+    window.history.replaceState(null, '', '/auth/complete');
+    mockUseAuth.mockReturnValue({ session: null, user: null, loading: false, refresh: vi.fn() });
+    render(<AuthCompletePage />);
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
+    expect(mockNavigate).not.toHaveBeenCalledWith('/login?error=session_failed', expect.anything());
   });
 });

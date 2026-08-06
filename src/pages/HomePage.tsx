@@ -157,16 +157,22 @@ export default function HomePage() {
       {!loading && !error && data && (
         <div className="space-y-5">
           {/* Paused: the single most important status there is — nothing
-              below it is happening while this banner shows. */}
+              below it is happening while this banner shows. A platform-level
+              operator stop isn't the creator's to undo, so it doesn't route
+              to Settings (which would show "Running" and contradict this). */}
           {data.globallyPaused && (
             <div className="pop-card p-4 flex items-center gap-3 border-l-4 border-[#D97706]">
               <Pause size={16} className="text-[#D97706] flex-shrink-0" />
               <p className="text-[13px] text-[#111111] flex-1">
-                Your automations are paused — nothing is being sent automatically.
+                {data.pauseScope === 'platform'
+                  ? 'Automations are paused platform-wide by Populr right now — nothing is being sent. This will resume automatically.'
+                  : 'Your automations are paused — nothing is being sent automatically.'}
               </p>
-              <Link to="/settings" className="pop-btn-tertiary text-[12px] py-1.5 px-3 flex-shrink-0">
-                Go to Settings
-              </Link>
+              {data.pauseScope !== 'platform' && (
+                <Link to="/settings" className="pop-btn-tertiary text-[12px] py-1.5 px-3 flex-shrink-0">
+                  Go to Settings
+                </Link>
+              )}
             </div>
           )}
 

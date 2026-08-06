@@ -19,6 +19,11 @@ export default function AutomationTestChat({ wizard, onClose }: { wizard: Automa
   const endRef = useRef<HTMLDivElement>(null);
   const backendConfigured = isBackendConfigured();
 
+  // Closing the drawer unmounts this; a test request in flight then resolves
+  // against nothing. Guard the late setState so it's dropped cleanly.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries]);
@@ -52,8 +57,10 @@ export default function AutomationTestChat({ wizard, onClose }: { wizard: Automa
         mediaUrl: state.mediaUrl,
         buttonLabel: state.buttonLabel,
       });
+      if (!mountedRef.current) return;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'done', result } : e));
     } catch (err) {
+      if (!mountedRef.current) return;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'error', error: err instanceof Error ? err.message : 'Test failed.' } : e));
     }
   };

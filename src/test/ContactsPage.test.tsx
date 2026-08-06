@@ -133,6 +133,21 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
     ));
   });
 
+  it('the "Needs reply" tab filters by the needs_reply FLAG, not the stage column', async () => {
+    // A warm/hot contact flagged for reply keeps its stage, so a
+    // stage=needs_reply query would hide it. The tab must use the same flag
+    // the "Waiting on you" urgency chip uses.
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+
+    await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Needs reply' }));
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ needsReply: true, stage: undefined, offset: 0 })
+    ));
+  });
+
   it('workspace tags render as chips; picking one filters, picking it again clears', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();

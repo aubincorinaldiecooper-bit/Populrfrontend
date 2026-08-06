@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { OnboardingPlatform } from '../data';
 import { defaultOnboardingPlatforms } from '../data';
 import {
@@ -6,6 +6,7 @@ import {
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
 } from '../lib/api';
 import type { ConnectedAccount } from '../lib/api';
+import { useAuth } from './AuthContext';
 
 export interface Toast {
   id: string;
@@ -97,9 +98,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     subscriptionModal: null,
   });
 
+  const { user } = useAuth();
 
-
-
+  // Stale-write guard for the authoritative `accounts` list. Every read takes
+  // a monotonically increasing ticket BEFORE it awaits; only the LATEST ISSUED
+  // read may touch account state — a read is stale the moment a newer one is
+  // issued, whether or not that newer one has resolved (or failed). Comparing
+  // against a "last applied" counter instead let an older success land after a
+  // newer failure, since a failure never advanced the counter. Without any of
+  // this, the app-mount refresh (issued first) could resolve AFTER
+  // completeOAuthReturn's verified write and clobber the just-connected
+  // account back to its pre-sync snapshot.
+  const accountsSeq = useRef(0);
+  const isLatestAccountsRead = (seq: number) => seq === accountsSeq.current;
+  const applyAccountsWrite = useCallback((seq: number, updater: (prev: AppState) => AppState): boolean => {
+    if (seq !== accountsSeq.current) return false;
+    setState(updater);
+    return true;
+  }, []);
 
 
 
@@ -109,16 +125,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // that governs the rest of this app's real-data surfaces.
   const refreshAccounts = useCallback(async () => {
     if (!isBackendConfigured()) return;
+    const seq = ++accountsSeq.current;
     setState(prev => ({ ...prev, accountsLoading: true, accountsError: null }));
     try {
       const accounts = await fetchConnectedAccounts();
-      setState(prev => ({ ...prev, accounts, accountsLoading: false }));
+      applyAccountsWrite(seq, prev => ({ ...prev, accounts, accountsError: null }));
     } catch (err) {
       console.error('[accounts] failed to load connected accounts:', err);
       const message = err instanceof Error && err.message ? err.message : 'Could not load connected accounts.';
-      setState(prev => ({ ...prev, accountsLoading: false, accountsError: message }));
+      // Only the latest issued read may surface an error — a stale read's
+      // failure must not stamp over a newer read's state.
+      if (isLatestAccountsRead(seq)) {
+        setState(prev => ({ ...prev, accountsError: message }));
+      }
+    } finally {
+      // Same rule for the spinner: an older read settling must not clear the
+      // loading state while a newer read is still pending.
+      if (isLatestAccountsRead(seq)) {
+        setState(prev => ({ ...prev, accountsLoading: false }));
+      }
     }
-  }, []);
+  }, [applyAccountsWrite]);
 
   // Disconnect goes through the real backend endpoint and only updates local
   // state once Zernio has actually confirmed the revoke — never optimistic,
@@ -232,9 +259,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // the same backend response instead of drifting out of sync.
   const refreshConnectedAccounts = useCallback(() => {
     if (!isBackendConfigured()) return Promise.resolve();
+    const seq = ++accountsSeq.current;
     return fetchConnectedAccounts()
       .then(accounts => {
-        setState(prev => ({
+        applyAccountsWrite(seq, prev => ({
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p => {
             const match = accounts.find(a => a.platform === p.id);
@@ -258,7 +286,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .catch(err => {
         console.error('[connect] failed to refresh connected accounts:', err);
       });
-  }, []);
+  }, [applyAccountsWrite]);
 
   // The return trip from Zernio's hosted OAuth only proves the *authorization*
   // step happened — it says nothing about whether the account actually made
@@ -306,6 +334,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       for (let attempt = 0; attempt < OAUTH_SYNC_MAX_ATTEMPTS; attempt++) {
         if (attempt > 0) await delay(OAUTH_SYNC_RETRY_MS);
 
+        // Ticket claimed before the read so this verified write outranks any
+        // account refresh issued earlier (e.g. the app-mount refresh) that
+        // might otherwise resolve later and overwrite it.
+        const seq = ++accountsSeq.current;
         let accounts: ConnectedAccount[];
         try {
           accounts = await fetchConnectedAccounts();
@@ -320,7 +352,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : a.platform === id && a.is_connected === true && a.status === 'connected'
         );
         if (match) {
-          setState(prev => ({
+          applyAccountsWrite(seq, prev => ({
             ...prev,
             accounts,
             connectedPlatforms: prev.connectedPlatforms.map(p =>
@@ -360,8 +392,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } finally {
       oauthReturnInFlight.delete(id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showToast]);
+  }, [showToast, applyAccountsWrite]);
 
   // The backend's callback already confirmed sync failure (connect_error=
   // account_sync_failed) before redirecting here — no polling needed, this
@@ -380,13 +411,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast(OAUTH_SYNC_ERROR_MESSAGE, 'error');
   }, [showToast]);
 
-  // On application load, fetch the authoritative connected-account list —
-  // it's server-persisted, not client state, so a fresh tab/browser/session
-  // must never show stale or empty data before this resolves.
+  // Fetch the authoritative connected-account list whenever an authenticated
+  // session appears — app load, sign-in, or a session restored after the
+  // token exchange. Keyed on the user id (not a bare mount) for two reasons:
+  // a mount-only fetch ran once for the SPA's whole lifetime and never
+  // recovered if that first call failed or raced the session/token exchange
+  // (leaving a real creator's accounts stuck at [] and a false "connect an
+  // account" wall); and gating on auth avoids firing the request before
+  // there's a session to authorize it. The stale-write guard above keeps a
+  // slow earlier fetch from clobbering a newer one.
+  const authedUserId = user?.id ?? null;
   useEffect(() => {
+    if (!authedUserId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshAccounts();
-  }, [refreshAccounts]);
+  }, [authedUserId, refreshAccounts]);
 
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));

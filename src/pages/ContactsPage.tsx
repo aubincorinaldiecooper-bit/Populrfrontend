@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Search, ArrowLeft, AlertCircle, X, Plus, Reply, Clock, Tag,
 } from 'lucide-react';
@@ -62,27 +62,45 @@ export default function ContactsPage() {
 
   const [detailId, setDetailId] = useState<string | null>(null);
 
+  // Monotonic request id: search is un-debounced (one fetch per keystroke), so
+  // without this a slower earlier response could resolve last and show results
+  // for the wrong query. Only the most-recently-issued load may write.
+  const loadSeq = useRef(0);
+
   const load = useCallback(() => {
     if (!backendConfigured) return;
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
+    // The "Needs reply" tab is the needs_reply FLAG, not the stage column: a
+    // warm/hot contact flagged for a reply keeps its stage, so filtering by
+    // stage='needs_reply' hid exactly the contacts the tab is about (and
+    // disagreed with the "Waiting on you" urgency chip, which uses the flag).
+    const needsReply = urgentOnly || stageTab === 'needs_reply';
+    const stage = stageTab === 'all' || stageTab === 'needs_reply' ? undefined : stageTab;
     fetchContacts({
       search: search || undefined,
-      stage: stageTab === 'all' ? undefined : stageTab,
-      needsReply: urgentOnly ? true : undefined,
+      stage,
+      needsReply: needsReply ? true : undefined,
       sort: sortRecent ? 'recent' : undefined,
       tag: activeTag || undefined,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     })
       .then(res => {
+        if (seq !== loadSeq.current) return; // a newer load superseded this one
         setContacts(res.contacts);
         setTotal(res.total);
         // Workspace-wide, not page-scoped — safe to keep across filters.
         setAllTags(res.allTags ?? []);
       })
-      .catch(err => setError(err instanceof Error ? err.message : 'Could not load contacts.'))
-      .finally(() => setLoading(false));
+      .catch(err => {
+        if (seq !== loadSeq.current) return;
+        setError(err instanceof Error ? err.message : 'Could not load contacts.');
+      })
+      .finally(() => {
+        if (seq === loadSeq.current) setLoading(false);
+      });
   }, [backendConfigured, search, stageTab, urgentOnly, sortRecent, activeTag, page]);
 
   useEffect(() => {

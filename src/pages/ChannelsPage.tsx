@@ -133,6 +133,24 @@ export default function ChannelsPage() {
   // same platform, the old platform-keyed lookup (`accounts.find(a =>
   // a.platform === ...)`) disconnected whichever happened to come back
   // first — possibly not the one the user clicked.
+  // Reconnecting a specific expired account still goes through a platform-level
+  // OAuth, which the provider can resolve to whichever account the browser is
+  // signed into — not necessarily the expired one. When the platform has
+  // another connected account, that ambiguity is real, so route through the
+  // private-window guidance (the same modal "Connect another" uses) instead of
+  // a bare redirect that could silently re-auth the wrong account. When it's
+  // the only account, there's nothing to confuse it with — reconnect directly.
+  const handleReconnect = (account: ConnectedAccount) => {
+    const otherConnected = accounts.some(
+      a => a.platform === account.platform && a.id !== account.id && a.is_connected
+    );
+    if (otherConnected) {
+      setConnectAnother({ platform: account.platform, mode: 'confirm' });
+    } else {
+      beginPlatformConnect(account.platform);
+    }
+  };
+
   const handleDisconnect = async (account: ConnectedAccount) => {
     const label = account.username ? `@${account.username}` : metaFor(account.platform).name;
     if (!window.confirm(
@@ -330,7 +348,7 @@ export default function ChannelsPage() {
                               reads as though something were broken and pushes
                               the user through a pointless OAuth round-trip. */}
                           {needsReauth ? (
-                            <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-secondary text-[12px] py-1.5 px-3">
+                            <button onClick={() => handleReconnect(a)} className="pop-btn-secondary text-[12px] py-1.5 px-3">
                               <RefreshCw size={13} /> Reconnect
                             </button>
                           ) : (
