@@ -38,7 +38,12 @@ interface AppContextType extends AppState {
   // Onboarding platform connection
   beginPlatformConnect: (id: string) => void;
   refreshConnectedAccounts: () => Promise<void>;
-  completeOAuthReturn: (id: string) => Promise<void>;
+  // opts.accountId narrows verification to one specific account — the one
+  // the backend callback said this OAuth return added (account_result=new)
+  // or revived (restored). Without it, verification is platform-level, which
+  // with multiple accounts on a platform would declare success the moment
+  // ANY of them is connected — exactly wrong for "connect another".
+  completeOAuthReturn: (id: string, opts?: { accountId?: string; restored?: boolean }) => Promise<void>;
   failOAuthReturn: (id: string | undefined) => void;
   openSubscriptionModal: (platform?: string) => void;
   closeSubscriptionModal: () => void;
@@ -264,7 +269,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // to 7 more ~1s apart) until a matching, genuinely connected account shows
   // up, or gives up and surfaces a retryable error. The `connected=<platform>`
   // URL marker is never trusted on its own.
-  const completeOAuthReturn = useCallback(async (id: string) => {
+  const completeOAuthReturn = useCallback(async (id: string, opts?: { accountId?: string; restored?: boolean }) => {
     if (oauthReturnInFlight.has(id)) return;
     oauthReturnInFlight.add(id);
     try {
@@ -309,7 +314,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           continue;
         }
 
-        const match = accounts.find(a => a.platform === id && a.is_connected === true && a.status === 'connected');
+        const match = accounts.find(a =>
+          opts?.accountId
+            ? a.id === opts.accountId && a.is_connected === true && a.status === 'connected'
+            : a.platform === id && a.is_connected === true && a.status === 'connected'
+        );
         if (match) {
           setState(prev => ({
             ...prev,
@@ -326,7 +335,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ),
           }));
           const label = defaultOnboardingPlatforms.find(p => p.id === id)?.name ?? id;
-          showToast(`${label} connected.`, 'success');
+          // With multiple accounts on one platform, "Instagram connected."
+          // no longer says which one — name the account when we can.
+          const handle = match.username ? `@${match.username}` : match.display_name;
+          showToast(
+            opts?.restored
+              ? `${handle ?? label} reconnected.`
+              : handle
+                ? `${handle} connected.`
+                : `${label} connected.`,
+            'success'
+          );
           return;
         }
       }

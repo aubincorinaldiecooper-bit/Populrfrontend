@@ -7,6 +7,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
+import ConnectAnotherModal from '../components/ConnectAnotherModal';
+import type { ConnectAnotherInitialMode } from '../components/ConnectAnotherModal';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
 import type { PlatformCapabilities, ConnectedAccount } from '../lib/api';
 
@@ -47,6 +49,10 @@ export default function ChannelsPage() {
   const [capabilities, setCapabilities] = useState<Record<string, PlatformCapabilities>>({});
   const [capabilitiesError, setCapabilitiesError] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  // "Connect another" modal — opened in 'confirm' mode from the button, or
+  // in 'duplicate' mode when an OAuth return comes back classified as
+  // account_result=existing (the provider reused the already-connected login).
+  const [connectAnother, setConnectAnother] = useState<{ platform: string; mode: ConnectAnotherInitialMode } | null>(null);
 
   useEffect(() => {
     if (!backendConfigured) return;
@@ -76,17 +82,24 @@ export default function ChannelsPage() {
     const subscription = searchParams.get('subscription');
     const platform = searchParams.get('platform') ?? searchParams.get('retry') ?? undefined;
     const connected = searchParams.get('connected');
-
-    // On an OAuth return the verifier owns the accounts list — a concurrent
+    // The callback's classification of what this OAuth return actually did:
+    // 'new' or 'restored' arrive with the specific account id to verify;
+    // 'existing' means the provider reused the already-connected login and
+    // nothing changed — a success redirect that must NOT read as success.
+    const accountResult = searchParams.get('account_result');
+    const accountId = searchParams.get('account') ?? undefined;
+    // When the verifier runs it owns the accounts list — a concurrent
     // passive GET could capture the pre-sync list and resolve last,
     // overwriting the verified account with stale state. Everywhere else,
     // the passive refresh is what re-reads memory-held connection state
-    // after a full page load.
+    // after a full page load. The 'existing' outcome runs no verifier
+    // either — its refresh happens in its own branch below, sequenced
+    // before the duplicate explainer opens.
     if (!connected) refreshConnectedAccounts();
 
     const stripMarkers = () => {
       const url = new URL(window.location.href);
-      for (const key of ['connected', 'connect_error', 'subscription', 'platform', 'retry']) {
+      for (const key of ['connected', 'connect_error', 'subscription', 'platform', 'retry', 'sync', 'account_result', 'account']) {
         url.searchParams.delete(key);
       }
       window.history.replaceState(null, '', url.toString());
@@ -103,13 +116,28 @@ export default function ChannelsPage() {
     } else if (subscription === 'success') {
       showToast('Subscription active — you can connect your account now.', 'success');
       stripMarkers();
+    } else if (connected && accountResult === 'existing') {
+      // No new account, no misleading success toast — say what happened and
+      // hand the user the private-window path to the account they meant.
+      // The explainer opens once the passive refresh settles, so it sits
+      // over current rows rather than a stale list.
+      refreshConnectedAccounts().finally(() => {
+        setConnectAnother({ platform: connected, mode: 'duplicate' });
+      });
+      stripMarkers();
     } else if (connected) {
       // A fresh OAuth return: run the same verification the retired
       // onboarding path did — explicit sync plus bounded polling — and
-      // settle the platform card either way. The marker is stripped only
-      // once verification settles, so a reload mid-poll re-enters this
-      // path instead of downgrading to the single passive refresh.
-      completeOAuthReturn(connected).finally(stripMarkers);
+      // settle the platform card either way. When the callback named the
+      // specific account this return added or revived, verify THAT id: with
+      // two accounts on a platform, platform-level matching would declare
+      // success off the pre-existing one. The marker is stripped only once
+      // verification settles, so a reload mid-poll re-enters this path
+      // instead of downgrading to the single passive refresh.
+      const verification = accountId
+        ? completeOAuthReturn(connected, { accountId, restored: accountResult === 'restored' })
+        : completeOAuthReturn(connected);
+      verification.finally(stripMarkers);
     }
   }, [backendConfigured, searchParams, refreshConnectedAccounts, completeOAuthReturn, failOAuthReturn, openSubscriptionModal, showToast]);
 
@@ -257,7 +285,13 @@ export default function ChannelsPage() {
                     </button>
                   )}
                   {accts.length > 0 && !connectBusy && platformStatus !== 'error' && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-tertiary text-[12px] py-2 px-3">
+                    // Not a straight redirect: providers reuse the login the
+                    // browser already holds, so the modal explains that and
+                    // offers the private-window link before anything happens.
+                    <button
+                      onClick={() => setConnectAnother({ platform: p.id, mode: 'confirm' })}
+                      className="pop-btn-tertiary text-[12px] py-2 px-3"
+                    >
                       Connect another
                     </button>
                   )}
@@ -350,6 +384,15 @@ export default function ChannelsPage() {
           Create an automation <ArrowRight size={14} />
         </button>
       </div>
+
+      {connectAnother && (
+        <ConnectAnotherModal
+          platform={connectAnother.platform}
+          platformName={metaFor(connectAnother.platform).name}
+          initialMode={connectAnother.mode}
+          onClose={() => setConnectAnother(null)}
+        />
+      )}
     </div>
   );
 }

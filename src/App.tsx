@@ -8,6 +8,7 @@ import Layout from './components/Layout';
 import LoadingState from './components/LoadingState';
 import LoginPage from './pages/LoginPage';
 import AuthCompletePage from './pages/AuthCompletePage';
+import ConnectCompletePage from './pages/ConnectCompletePage';
 import ToastContainer from './components/ToastContainer';
 import SubscriptionModal from './components/SubscriptionModal';
 
@@ -67,6 +68,12 @@ function AppContent() {
   // it decides where to route).
   if (location.pathname === '/login') return <LoginPage />;
   if (location.pathname === '/auth/complete') return <AuthCompletePage />;
+  // Public like the two above: this is where a "connect another account"
+  // link opened in a private window lands after its OAuth callback. That
+  // window has no Populr session — gating it would swap the outcome message
+  // for a login screen. The page renders only the callback's one-shot
+  // outcome markers, never account or workspace data.
+  if (location.pathname === '/connect/complete') return <ConnectCompletePage />;
 
   // Below here, every route is auth-protected. While the initial session
   // lookup is in flight, show a lightweight loader instead of flashing

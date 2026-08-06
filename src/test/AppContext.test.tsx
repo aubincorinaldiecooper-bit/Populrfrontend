@@ -23,16 +23,20 @@ vi.mock('../lib/api', async () => {
     ...actual,
     isBackendConfigured: () => true,
     fetchConnectedAccounts: () => Promise.resolve(mockAccounts),
+    syncConnectedAccounts: () => Promise.resolve({ synced: 0, skipped: 0, accounts: [] }),
   };
 });
 
 function Harness() {
-  const { connectedPlatforms, refreshConnectedAccounts } = useApp();
+  const { connectedPlatforms, refreshConnectedAccounts, completeOAuthReturn, toasts } = useApp();
   const instagram = connectedPlatforms.find(p => p.id === 'instagram');
   return (
     <div>
       <button onClick={() => { void refreshConnectedAccounts(); }}>refresh</button>
+      <button onClick={() => { void completeOAuthReturn('instagram', { accountId: 'acc_ig_2' }); }}>verify-second</button>
+      <button onClick={() => { void completeOAuthReturn('instagram', { accountId: 'acc_ig_2', restored: true }); }}>verify-restored</button>
       <span data-testid="status">{instagram?.status ?? 'missing'}</span>
+      <span data-testid="toasts">{toasts.map(t => t.message).join('|')}</span>
     </div>
   );
 }
@@ -85,5 +89,51 @@ describe('AppContext — refreshConnectedAccounts', () => {
     }];
     fireEvent.click(screen.getByText('refresh'));
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('idle'));
+  });
+});
+
+describe('AppContext — completeOAuthReturn with a specific account id', () => {
+  /* "Connect another" verification must target the account the callback said
+   * was added, not the platform. Platform-level matching declares success the
+   * moment ANY account on the platform is connected — with an account already
+   * live, that's instantly, regardless of whether the new one ever arrived.
+   * The toast naming the SECOND account's handle is the discriminator: the
+   * platform-level match would find the first account and name that one. */
+
+  function twoAccounts(): ConnectedAccount[] {
+    const base = {
+      display_name: null, avatar_url: null, is_connected: true,
+      status: 'connected' as const, connected_at: new Date().toISOString(),
+    };
+    return [
+      { id: 'acc_ig_1', platform: 'instagram', username: 'main_ig', ...base },
+      { id: 'acc_ig_2', platform: 'instagram', username: 'second_ig', ...base },
+    ];
+  }
+
+  it('verifies the named account and toasts ITS handle, not the pre-existing one', async () => {
+    mockAccounts = twoAccounts();
+    render(
+      <AuthProvider>
+        <AppProvider>
+          <Harness />
+        </AppProvider>
+      </AuthProvider>
+    );
+    fireEvent.click(screen.getByText('verify-second'));
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('@second_ig connected.'));
+  });
+
+  it('a restored account is announced as reconnected, not newly connected', async () => {
+    mockAccounts = twoAccounts();
+    render(
+      <AuthProvider>
+        <AppProvider>
+          <Harness />
+        </AppProvider>
+      </AuthProvider>
+    );
+    fireEvent.click(screen.getByText('verify-restored'));
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('@second_ig reconnected.'));
   });
 });
