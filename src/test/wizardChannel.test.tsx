@@ -60,9 +60,13 @@ function caps(platform: string, overrides: Partial<PlatformCapabilities>): Platf
 }
 
 // Mirrors the backend's PLATFORM_CAPABILITIES for the platforms under test.
+// X ships text-only this iteration: comment replies + text DMs, no media,
+// no buttons, no comment-triggered DMs.
 const MATRIX: PlatformCapabilities[] = [
   caps('instagram', {}),
-  caps('twitter', { supportsCommentToDM: false, supportsDMVideo: false, supportsButtons: false }),
+  caps('twitter', {
+    supportsCommentToDM: false, supportsDMImages: false, supportsDMVideo: false, supportsButtons: false,
+  }),
   caps('linkedin', {
     supportsCommentToDM: false, supportsDMs: false, supportsDMImages: false,
     supportsDMVideo: false, supportsButtons: false, readiness: 'Comment replies',
@@ -197,7 +201,7 @@ describe('useAutomationWizard — the platform follows the selected account', ()
     }));
   });
 
-  it("media is judged by its KIND: a video on X (DM images only) blocks with the reason; an image passes and saves as responseType image", async () => {
+  it('X takes no DM attachment at all: a leftover one blocks with the reason and is never persisted', async () => {
     const { result } = renderHook(() => useAutomationWizard(), { wrapper });
     act(() => {
       result.current.update('name', 'X media');
@@ -205,18 +209,52 @@ describe('useAutomationWizard — the platform follows the selected account', ()
       result.current.update('accountId', 'acc_x');
       result.current.update('triggerKeywords', ['guide']);
       result.current.update('aiEnabled', false);
+      result.current.update('dmBody', 'Here you go!');
+      // Carried over from an Instagram draft, where it was valid.
+      result.current.update('mediaUrl', 'https://cdn.example.com/photo.jpg');
+    });
+    // Once the matrix lands: not silently dropped — visible, blocking, and
+    // correctable, since X can't deliver either kind.
+    await waitFor(() => expect(result.current.dmMediaBlockedReason).toMatch(/can't carry images/));
+    expect(result.current.dmMediaBlockedReason).toMatch(/remove the attachment/);
+    expect(result.current.canProceedFromReplies).toBe(false);
+
+    act(() => { result.current.update('mediaUrl', ''); });
+    expect(result.current.dmMediaBlockedReason).toBeNull();
+    expect(result.current.canProceedFromReplies).toBe(true);
+    await act(async () => { await result.current.save(false); });
+    expect(mockCreateAutomation).toHaveBeenCalledWith(expect.objectContaining({
+      mediaUrl: null,
+      responseType: 'text',
+    }));
+  });
+
+  it('media is judged by its KIND, not by "any media at all"', async () => {
+    // No shipped platform currently takes one kind but not the other, so
+    // this uses a synthetic capability row. It guards the rule itself: the
+    // wizard must not collapse image and video support into one permission
+    // (that's how an .mp4 got saved as responseType 'video' to a platform
+    // whose API only accepts images, which the backend then 422s).
+    mockFetchCapabilities.mockResolvedValue(
+      MATRIX.map(c =>
+        c.platform === 'instagram' ? caps('instagram', { supportsDMImages: true, supportsDMVideo: false }) : c
+      )
+    );
+    const { result } = renderHook(() => useAutomationWizard(), { wrapper });
+    act(() => {
+      result.current.update('name', 'Kind check');
+      result.current.update('type', 'dm_only');
+      result.current.update('accountId', 'acc_ig');
+      result.current.update('triggerKeywords', ['guide']);
+      result.current.update('aiEnabled', false);
       result.current.update('mediaUrl', 'https://cdn.example.com/clip.mp4');
     });
-    // Once the matrix lands: not silently dropped — visible, blocking,
-    // correctable, and it suggests the kind X can deliver.
     await waitFor(() => expect(result.current.dmMediaBlockedReason).toMatch(/can't carry video/));
     expect(result.current.dmMediaBlockedReason).toMatch(/try an image instead/);
     expect(result.current.canProceedFromReplies).toBe(false);
 
     act(() => { result.current.update('mediaUrl', 'https://cdn.example.com/photo.jpg'); });
     expect(result.current.dmMediaBlockedReason).toBeNull();
-    // The image alone is deliverable content, and persists with the
-    // responseType the backend validates per platform.
     expect(result.current.canProceedFromReplies).toBe(true);
     await act(async () => { await result.current.save(false); });
     expect(mockCreateAutomation).toHaveBeenCalledWith(expect.objectContaining({
