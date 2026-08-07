@@ -49,7 +49,10 @@ export const NODE_LABEL: Record<FlowNodeType, string> = {
   condition: 'If',
   send: 'Send',
   wait: 'Wait',
-  action: 'Action',
+  // "Action" named the category, not the thing — it told a creator nothing
+  // about what the step would do. "Then do" reads as the start of a sentence
+  // its own settings finish: Then do → add a tag.
+  action: 'Then do',
 };
 
 export const NODE_KINDS = {
@@ -225,8 +228,85 @@ export function newNodeId(type: FlowNodeType, graph: FlowGraph): string {
  *  Lives here rather than beside the canvas component so a component file
  *  exports only components (fast refresh). */
 export const STEP_OPTIONS: { type: FlowNodeType; label: string; hint: string }[] = [
-  { type: 'condition', label: 'If', hint: 'Branch on a question' },
-  { type: 'send', label: 'Send', hint: 'A DM or a public reply' },
-  { type: 'wait', label: 'Wait', hint: 'Pause before the next step' },
-  { type: 'action', label: 'Action', hint: 'Tag, stage, or notify you' },
+  { type: 'send', label: 'Send', hint: 'Message them — a DM or a public reply' },
+  { type: 'wait', label: 'Wait', hint: 'Pause before the next step runs' },
+  { type: 'condition', label: 'If', hint: 'Ask a question and split the path' },
+  { type: 'action', label: 'Then do', hint: 'Tag them, move their stage, or tell you' },
+];
+
+/**
+ * What each "Then do" option does, in one line.
+ *
+ * These descriptions are the whole reason the builder uses its own dropdown
+ * rather than a native select: "Add a tag" doesn't explain why you'd want one,
+ * and the moment of choosing is exactly when that's worth saying.
+ */
+export const ACTION_OPTIONS: { value: string; label: string; description: string }[] = [
+  {
+    value: 'add_tag',
+    label: 'Add a tag',
+    description: 'Labels them in Contacts so you can filter for this group later.',
+  },
+  {
+    value: 'remove_tag',
+    label: 'Remove a tag',
+    description: 'Takes a label off — useful once they\'ve converted or replied.',
+  },
+  {
+    value: 'set_stage',
+    label: 'Move them to a stage',
+    description: 'Advances them through your funnel: cold → interested → warm → hot.',
+  },
+  {
+    value: 'notify_creator',
+    label: 'Tell me about them',
+    description: 'Puts them in Needs Reply so you can follow up personally.',
+  },
+];
+
+/** The trigger's two starting points, with what each one means. */
+export const TRIGGER_OPTIONS: { value: string; label: string; description: string }[] = [
+  {
+    value: 'comment',
+    label: 'Someone comments on a post',
+    description: 'Runs when a new comment lands on the post you pick.',
+  },
+  {
+    value: 'dm',
+    label: 'Someone sends a DM',
+    description: 'Runs when a new direct message arrives.',
+  },
+];
+
+/** What an If step can ask about. */
+export const CONDITION_OPTIONS: { value: string; label: string; description: string }[] = [
+  {
+    value: 'text_contains',
+    label: 'What they said',
+    description: 'Splits on whether their message contains certain words.',
+  },
+  {
+    value: 'replied',
+    label: 'Whether they replied',
+    description: 'Splits on whether they\'ve messaged you back yet.',
+  },
+  {
+    value: 'has_tag',
+    label: 'Whether they have a tag',
+    description: 'Splits on a label already on their contact.',
+  },
+];
+
+/** How a Send step goes out. */
+export const SEND_OPTIONS: { value: string; label: string; description: string }[] = [
+  {
+    value: 'dm',
+    label: 'A direct message',
+    description: 'Private. Can carry a tracked link only they see.',
+  },
+  {
+    value: 'comment_reply',
+    label: 'A public reply',
+    description: 'Visible under the post. Never carries a tracked link.',
+  },
 ];

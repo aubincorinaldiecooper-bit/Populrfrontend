@@ -33,6 +33,9 @@ export interface AIComposerProps {
   /** True when the canvas is empty — swaps in the centred first-run prompt. */
   empty: boolean;
   historyCount: number;
+  /** Pixels of panel occupying the left edge, so the composer can stay clear
+   *  of it instead of floating over the controls it covers. */
+  insetLeft?: number;
   onSubmit: (prompt: string) => void;
   onUndo: () => void;
   onDismissCard: () => void;
@@ -41,7 +44,7 @@ export interface AIComposerProps {
 
 export default function AIComposer({
   selectedNode, composing, changeCard, canUndo, aiConfigured, empty,
-  historyCount, onSubmit, onUndo, onDismissCard, onOpenHistory,
+  historyCount, insetLeft = 0, onSubmit, onUndo, onDismissCard, onOpenHistory,
 }: AIComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -75,7 +78,14 @@ export default function AIComposer({
     : 'Ask Populr to build or change anything…';
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center px-4 pb-5">
+    <div
+      className="pointer-events-none absolute right-0 bottom-0 z-30 flex flex-col items-center
+        px-4 pb-5 transition-[left] duration-150"
+      // Below the inspector's own breakpoint the panel overlays the canvas
+      // entirely, so shifting would push the composer off screen; there it
+      // stays centred and the inspector's bottom padding does the work.
+      style={{ left: typeof window !== 'undefined' && window.innerWidth < 640 ? 0 : insetLeft }}
+    >
       {empty && !changeCard && (
         <div className="pointer-events-auto mb-5 text-center max-w-md">
           <h2 className="text-[22px] font-semibold text-[#111111] tracking-tight">

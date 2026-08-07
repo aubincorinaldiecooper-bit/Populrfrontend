@@ -272,3 +272,40 @@ describe('activation', () => {
     expect(result.current.problems[0].nodeId).toBe('send');
   });
 });
+
+describe('undo targets the change it was offered for', () => {
+  it('restores a captured snapshot even after a later edit', async () => {
+    const { result } = await mountBuilder();
+
+    // What the delete toast captures at the moment it is raised.
+    const snapshot = result.current.graph;
+    const snapshotName = result.current.name;
+    act(() => result.current.deleteNode('send'));
+    expect(result.current.graph.nodes).toHaveLength(2);
+
+    // The creator keeps working during the toast's seven seconds. A generic
+    // undo would now pop THIS edit and leave the step deleted.
+    act(() => result.current.updateNodeConfig('tag', { tag: 'later_edit' }));
+
+    act(() => result.current.commitGraph(snapshot, { nextName: snapshotName }));
+
+    expect(result.current.graph.nodes).toHaveLength(3);
+    expect(result.current.graph.nodes.some(n => n.id === 'send')).toBe(true);
+    // And the unrelated edit is what got rolled back with it, not left behind
+    // in a graph that no longer matches what the toast promised.
+    expect(result.current.graph.nodes.find(n => n.id === 'tag')!.config.tag).toBe('warm_lead');
+  });
+
+  it('the generic undo still pops the newest change, which is why the toast cannot use it', async () => {
+    const { result } = await mountBuilder();
+
+    act(() => result.current.deleteNode('send'));
+    act(() => result.current.updateNodeConfig('tag', { tag: 'later_edit' }));
+    act(() => result.current.undo());
+
+    // Newest change reverted; the deleted step is still gone. Exactly the
+    // behaviour a delete toast must not have.
+    expect(result.current.graph.nodes.find(n => n.id === 'tag')!.config.tag).toBe('warm_lead');
+    expect(result.current.graph.nodes.some(n => n.id === 'send')).toBe(false);
+  });
+});

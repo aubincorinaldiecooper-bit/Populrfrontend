@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
+import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
 import NodeInspector from '../components/automation-builder/NodeInspector';
 import AIComposer from '../components/automation-builder/AIComposer';
@@ -12,11 +13,11 @@ import TestPanel from '../components/automation-builder/TestPanel';
 import ReviewPanel from '../components/automation-builder/ReviewPanel';
 import HistoryDrawer from '../components/automation-builder/HistoryDrawer';
 import {
-  fetchCapabilities, fetchConnectedAccounts, fetchFlowBuilderMeta, fetchPostsLibrary,
+  fetchCapabilities, fetchConnectedAccounts, fetchFlowBuilderMeta,
   isBackendConfigured, testFlow,
-  type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities, type PostLibraryItem,
+  type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities,
 } from '../lib/api';
-import { STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
+import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
 
 /**
@@ -41,11 +42,10 @@ export default function AutomationBuilderPage() {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
     saveState, savedAt, composing, changeCard, setChangeCard, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
-    connectNodes, rename, compose, undo, canUndo, activate, pause,
+    connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
 
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
-  const [posts, setPosts] = useState<PostLibraryItem[]>([]);
   // The whole capability matrix, fetched once; the trigger's platform picks
   // the row every Send step is judged against.
   const [allCapabilities, setAllCapabilities] = useState<PlatformCapabilities[]>([]);
@@ -62,11 +62,16 @@ export default function AutomationBuilderPage() {
 
   const nameRef = useRef<HTMLInputElement>(null);
 
+  // Stable across renders so the posts hook doesn't re-run on every paint.
+  const postsError = useCallback(
+    (message: string) => showToast(message, 'error', { durationMs: 7000 }),
+    [showToast],
+  );
+
   // ------------------------------------------------------------ reference data
   useEffect(() => {
     if (!isBackendConfigured()) return;
     void fetchConnectedAccounts().then(setAccounts).catch(() => setAccounts([]));
-    void fetchPostsLibrary({ limit: 200 }).then(setPosts).catch(() => setPosts([]));
     void fetchCapabilities().then(setAllCapabilities).catch(() => setAllCapabilities([]));
     void fetchFlowBuilderMeta()
       .then(meta => { setAiConfigured(meta.aiConfigured); setWorkspaceTags(meta.tags); })
@@ -86,6 +91,19 @@ export default function AutomationBuilderPage() {
     () => allCapabilities.find(c => c.platform === triggerPlatform) ?? null,
     [allCapabilities, triggerPlatform],
   );
+
+  // The account the When step watches. Posts are fetched FOR that account
+  // rather than fetched wholesale and filtered here: the workspace can hold
+  // several connected Instagram accounts, and asking the server for one
+  // account's posts removes any chance of another account's showing up
+  // because of a stale filter or a row attributed to the wrong account.
+  const triggerAccountId = useMemo(() => {
+    const trigger = triggerNodes(graph)[0];
+    return trigger ? readTrigger(trigger).accountId : null;
+  }, [graph]);
+
+  const { posts, loading: postsLoading, refresh: refreshPosts } =
+    useAccountPosts(triggerAccountId, postsError);
 
   // Re-fit whenever the shape of the graph changes, so a newly generated flow
   // lands comfortably in view rather than off-screen. Derived, not an effect:
@@ -345,11 +363,31 @@ export default function AutomationBuilderPage() {
             node={selectedNode}
             accounts={accounts}
             posts={posts}
+            postsLoading={postsLoading}
+            onRefreshPosts={refreshPosts}
             capabilities={capabilities}
             workspaceTags={workspaceTags}
             problems={nodeProblems}
             onChange={patch => updateNodeConfig(selectedNode.id, patch)}
-            onDelete={() => deleteNode(selectedNode.id)}
+            onDelete={() => {
+              const label = NODE_LABEL[selectedNode.type];
+              // Captured HERE, and restored verbatim. Calling the generic undo
+              // would pop whatever is newest on the shared stack — so a
+              // creator who edits something else (or deletes a second step)
+              // during the toast's seven seconds would have that unrelated
+              // edit reverted while the step this toast names stayed deleted.
+              const restored = graph;
+              const restoredName = name;
+              deleteNode(selectedNode.id);
+              // No confirm dialog: the step is already restorable, and an
+              // offer to undo is faster to read than a modal is to dismiss.
+              showToast(`${label} step removed`, 'success', {
+                action: {
+                  label: 'Undo',
+                  onClick: () => commitGraph(restored, { nextName: restoredName }),
+                },
+              });
+            }}
             onClose={() => setSelectedNodeId(null)}
           />
         )}
@@ -415,6 +453,10 @@ export default function AutomationBuilderPage() {
         )}
 
         <AIComposer
+          // Shifted clear of the inspector when one is open: centred on the
+          // whole viewport it sat on top of the last settings control and the
+          // Remove-step button, which is where a creator reaches next.
+          insetLeft={selectedNode ? 300 : 0}
           selectedNode={selectedNode}
           composing={composing}
           changeCard={changeCard}

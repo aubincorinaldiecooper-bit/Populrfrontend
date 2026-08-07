@@ -84,6 +84,7 @@ export function useFlowBuilder(flowId: string | null) {
     // Loading from the backend, not deriving state — the same fetch-on-mount
     // convention the rest of the app's pages use.
     if (!flowId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }

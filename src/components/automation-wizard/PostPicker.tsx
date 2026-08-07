@@ -116,6 +116,14 @@ export default function PostPicker({
                     )}
                   </div>
                   <div className="p-2.5">
+                    {/* The owning account, on every card. Posts are already
+                        fetched for one account, but a sync can attribute a
+                        post to the wrong one — and without the handle here a
+                        creator has no way to notice they're being offered
+                        somebody else's post. */}
+                    {post.account_username && (
+                      <p className="text-[10px] text-[#9B9B8F] mb-1 truncate">@{post.account_username}</p>
+                    )}
                     <p className="text-[11px] text-[#111111] line-clamp-2 leading-snug">
                       {post.caption || 'Untitled post'}
                     </p>
