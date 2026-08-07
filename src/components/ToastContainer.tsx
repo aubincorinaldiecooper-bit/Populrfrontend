@@ -34,6 +34,18 @@ export default function ToastContainer() {
           >
             <Icon size={16} className="flex-shrink-0" />
             <p className="text-[13px] font-medium flex-1">{toast.message}</p>
+            {toast.action && (
+              // Dismissed on click: the toast has done its job the moment the
+              // offer is taken, and leaving it up implies the undo didn't land.
+              <button
+                onClick={() => { toast.action!.onClick(); removeToast(toast.id); }}
+                className="flex-shrink-0 text-[12px] font-semibold underline underline-offset-2
+                  hover:opacity-70 transition-opacity focus-visible:outline-none
+                  focus-visible:ring-2 focus-visible:ring-current rounded px-0.5"
+              >
+                {toast.action.label}
+              </button>
+            )}
             <button
               onClick={() => removeToast(toast.id)}
               aria-label="Dismiss notification"

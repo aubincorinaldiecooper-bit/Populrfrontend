@@ -13,10 +13,10 @@ import ReviewPanel from '../components/automation-builder/ReviewPanel';
 import HistoryDrawer from '../components/automation-builder/HistoryDrawer';
 import {
   fetchCapabilities, fetchConnectedAccounts, fetchFlowBuilderMeta, fetchPostsLibrary,
-  isBackendConfigured, testFlow,
+  isBackendConfigured, syncPostsLibrary, testFlow,
   type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities, type PostLibraryItem,
 } from '../lib/api';
-import { STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
+import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
 
 /**
@@ -46,6 +46,7 @@ export default function AutomationBuilderPage() {
 
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [posts, setPosts] = useState<PostLibraryItem[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
   // The whole capability matrix, fetched once; the trigger's platform picks
   // the row every Send step is judged against.
   const [allCapabilities, setAllCapabilities] = useState<PlatformCapabilities[]>([]);
@@ -66,7 +67,6 @@ export default function AutomationBuilderPage() {
   useEffect(() => {
     if (!isBackendConfigured()) return;
     void fetchConnectedAccounts().then(setAccounts).catch(() => setAccounts([]));
-    void fetchPostsLibrary({ limit: 200 }).then(setPosts).catch(() => setPosts([]));
     void fetchCapabilities().then(setAllCapabilities).catch(() => setAllCapabilities([]));
     void fetchFlowBuilderMeta()
       .then(meta => { setAiConfigured(meta.aiConfigured); setWorkspaceTags(meta.tags); })
@@ -86,6 +86,54 @@ export default function AutomationBuilderPage() {
     () => allCapabilities.find(c => c.platform === triggerPlatform) ?? null,
     [allCapabilities, triggerPlatform],
   );
+
+  // The account the When step watches. Posts are fetched FOR that account
+  // rather than fetched wholesale and filtered here: the workspace can hold
+  // several connected Instagram accounts, and asking the server for one
+  // account's posts removes any chance of another account's showing up
+  // because of a stale filter or a row attributed to the wrong account.
+  const triggerAccountId = useMemo(() => {
+    const trigger = triggerNodes(graph)[0];
+    return trigger ? readTrigger(trigger).accountId : null;
+  }, [graph]);
+
+  const loadPosts = useCallback((accountId: string | null) => {
+    if (!accountId || !isBackendConfigured()) {
+      setPosts([]);
+      return;
+    }
+    setPostsLoading(true);
+    fetchPostsLibrary({ accountId, limit: 200 })
+      // Belt and braces: the endpoint already scopes by account, and this
+      // drops anything that somehow still doesn't belong to it rather than
+      // showing a creator someone else's post as a choice.
+      .then(list => setPosts(list.filter(p => p.account_id === accountId)))
+      .catch(() => setPosts([]))
+      .finally(() => setPostsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    // Fetching for a newly chosen account — synchronising with an external
+    // system is what an effect is for, and the load state it sets is the
+    // fetch's own, not derived from render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadPosts(triggerAccountId);
+  }, [triggerAccountId, loadPosts]);
+
+  const refreshPosts = useCallback(async (accountId: string) => {
+    setPostsLoading(true);
+    try {
+      // Re-sync from the platform first: a post list that looks wrong is
+      // usually a stale or mis-attributed sync, and re-running it is the only
+      // thing that can actually correct the stored rows.
+      await syncPostsLibrary(accountId);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not refresh posts.', 'error');
+    } finally {
+      setPostsLoading(false);
+      loadPosts(accountId);
+    }
+  }, [loadPosts, showToast]);
 
   // Re-fit whenever the shape of the graph changes, so a newly generated flow
   // lands comfortably in view rather than off-screen. Derived, not an effect:
@@ -345,11 +393,21 @@ export default function AutomationBuilderPage() {
             node={selectedNode}
             accounts={accounts}
             posts={posts}
+            postsLoading={postsLoading}
+            onRefreshPosts={refreshPosts}
             capabilities={capabilities}
             workspaceTags={workspaceTags}
             problems={nodeProblems}
             onChange={patch => updateNodeConfig(selectedNode.id, patch)}
-            onDelete={() => deleteNode(selectedNode.id)}
+            onDelete={() => {
+              const label = NODE_LABEL[selectedNode.type];
+              deleteNode(selectedNode.id);
+              // No confirm dialog: the step is already restorable, and an
+              // offer to undo is faster to read than a modal is to dismiss.
+              showToast(`${label} step removed`, 'success', {
+                action: { label: 'Undo', onClick: undo },
+              });
+            }}
             onClose={() => setSelectedNodeId(null)}
           />
         )}
@@ -415,6 +473,10 @@ export default function AutomationBuilderPage() {
         )}
 
         <AIComposer
+          // Shifted clear of the inspector when one is open: centred on the
+          // whole viewport it sat on top of the last settings control and the
+          // Remove-step button, which is where a creator reaches next.
+          insetLeft={selectedNode ? 300 : 0}
           selectedNode={selectedNode}
           composing={composing}
           changeCard={changeCard}

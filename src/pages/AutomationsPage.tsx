@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { Search, Play, Pause, Zap, Plus, AlertCircle, Trash2, Loader2, GitBranch } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   NODE_LABEL, readTrigger, triggerNodes, type FlowGraph, type FlowNodeType,
 } from '../lib/flowSchema';
 import { platformMeta } from '../lib/platformMeta';
+import { timeAgo } from '../lib/timeAgo';
 
 /**
  * Automations — the list.
@@ -31,6 +32,9 @@ import { platformMeta } from '../lib/platformMeta';
  */
 
 type StatusTab = 'all' | 'live' | 'draft' | 'paused';
+
+/** How long Undo stays on offer before a delete is actually sent. */
+const UNDO_WINDOW_MS = 7000;
 
 /** A one-line "what does this do", read from the graph. */
 function summarize(graph: FlowGraph): string {
@@ -71,6 +75,19 @@ export default function AutomationsPage() {
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
   const [creating, setCreating] = useState(false);
+  // Deletions waiting out their undo window, so leaving the page can commit
+  // them instead of silently abandoning the request.
+  const pendingDeletes = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => () => {
+    // Unmounting mid-window: fire the deletes the creator asked for rather
+    // than dropping them, and drop the timers so nothing runs after teardown.
+    for (const [id, timer] of pendingDeletes.current) {
+      clearTimeout(timer);
+      void deleteFlow(id).catch(() => undefined);
+    }
+    pendingDeletes.current.clear();
+  }, []);
 
   const load = useCallback(() => {
     if (!backendConfigured) return;
@@ -156,19 +173,57 @@ export default function AutomationsPage() {
     }
   };
 
-  const remove = async (flow: AutomationFlow) => {
-    if (!window.confirm(
-      flow.status === 'live'
-        ? `Delete “${flow.name}”? It will stop running and any scheduled follow-ups are cancelled.`
-        : `Delete “${flow.name}”? This can't be undone.`
+  /**
+   * Delete, with a real way back.
+   *
+   * The row disappears at once and the server call is held for the length of
+   * the undo offer, so Undo genuinely restores the automation — id, run
+   * history and all — rather than rebuilding a lookalike. Nothing is lost if
+   * the tab closes mid-window: the delete simply never happens, which is the
+   * safe direction to fail in.
+   *
+   * A live automation still asks first. It is actively messaging real people,
+   * and stopping that deserves a deliberate answer rather than a toast you
+   * might not look at.
+   */
+  const remove = (flow: AutomationFlow) => {
+    if (flow.status === 'live' && !window.confirm(
+      `Delete “${flow.name}”? It's live — it will stop running and any scheduled follow-ups are cancelled.`
     )) return;
-    try {
-      await deleteFlow(flow.id);
-      setFlows(prev => prev.filter(f => f.id !== flow.id));
-      showToast('Automation deleted', 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not delete this automation.', 'error');
-    }
+
+    setFlows(prev => prev.filter(f => f.id !== flow.id));
+    let undone = false;
+
+    const timer = setTimeout(async () => {
+      if (undone) return;
+      pendingDeletes.current.delete(flow.id);
+      try {
+        await deleteFlow(flow.id);
+      } catch (err) {
+        // The delete failed after the row was already gone from the list, so
+        // put it back rather than leave the two out of step.
+        setFlows(prev => [flow, ...prev.filter(f => f.id !== flow.id)]);
+        showToast(err instanceof Error ? err.message : 'Could not delete this automation.', 'error');
+      }
+    }, UNDO_WINDOW_MS);
+
+    pendingDeletes.current.set(flow.id, timer);
+
+    showToast(`“${flow.name}” deleted`, 'success', {
+      durationMs: UNDO_WINDOW_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          undone = true;
+          clearTimeout(timer);
+          pendingDeletes.current.delete(flow.id);
+          setFlows(prev =>
+            prev.some(f => f.id === flow.id)
+              ? prev
+              : [...prev, flow].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+        },
+      },
+    });
   };
 
   if (!backendConfigured) {
@@ -325,7 +380,7 @@ export default function AutomationsPage() {
                     {steps > 0 && ` · ${steps} step${steps === 1 ? '' : 's'}`}
                   </p>
                   <span className="text-[10px] text-[#9B9B8F]">
-                    Updated {new Date(flow.updatedAt).toLocaleDateString()}
+                    Updated {timeAgo(flow.updatedAt)}
                   </span>
                 </div>
               </div>

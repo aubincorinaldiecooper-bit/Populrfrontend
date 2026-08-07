@@ -12,6 +12,18 @@ export interface Toast {
   id: string;
   message: string;
   type: 'success' | 'error' | 'info';
+  /**
+   * An offer to take it back. Undo is only honest if the toast outlives the
+   * moment of surprise, so a toast carrying an action gets a longer default
+   * life than a plain confirmation.
+   */
+  action?: { label: string; onClick: () => void };
+}
+
+export interface ToastOptions {
+  action?: { label: string; onClick: () => void };
+  /** Milliseconds on screen. Defaults to 3s, or 7s when there's an action. */
+  durationMs?: number;
 }
 
 interface AppState {
@@ -52,7 +64,7 @@ interface AppContextType extends AppState {
   refreshAccounts: () => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   // Toast
-  showToast: (message: string, type: Toast['type']) => void;
+  showToast: (message: string, type?: Toast['type'], options?: ToastOptions) => void;
   removeToast: (id: string) => void;
   setLoading: (loading: boolean) => void;
 }
@@ -174,12 +186,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   // Toast
-  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
-    const id = `toast-${Date.now()}`;
-    setState(prev => ({ ...prev, toasts: [...prev.toasts, { id, message, type }] }));
+  const showToast = useCallback((
+    message: string,
+    type: Toast['type'] = 'info',
+    options?: ToastOptions,
+  ) => {
+    // Date.now() alone collided when two toasts were raised in the same
+    // millisecond (deleting a step raises one, the save that follows can raise
+    // another), and React then rendered two children with the same key.
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setState(prev => ({
+      ...prev,
+      toasts: [...prev.toasts, { id, message, type, action: options?.action }],
+    }));
     setTimeout(() => {
       setState(prev => ({ ...prev, toasts: prev.toasts.filter(t => t.id !== id) }));
-    }, 3000);
+    }, options?.durationMs ?? (options?.action ? 7000 : 3000));
   }, []);
 
   const removeToast = useCallback((id: string) => {
