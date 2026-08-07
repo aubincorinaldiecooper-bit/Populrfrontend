@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
+import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
 import NodeInspector from '../components/automation-builder/NodeInspector';
 import AIComposer from '../components/automation-builder/AIComposer';
@@ -12,9 +13,9 @@ import TestPanel from '../components/automation-builder/TestPanel';
 import ReviewPanel from '../components/automation-builder/ReviewPanel';
 import HistoryDrawer from '../components/automation-builder/HistoryDrawer';
 import {
-  fetchCapabilities, fetchConnectedAccounts, fetchFlowBuilderMeta, fetchPostsLibrary,
-  isBackendConfigured, syncPostsLibrary, testFlow,
-  type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities, type PostLibraryItem,
+  fetchCapabilities, fetchConnectedAccounts, fetchFlowBuilderMeta,
+  isBackendConfigured, testFlow,
+  type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities,
 } from '../lib/api';
 import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
@@ -41,12 +42,10 @@ export default function AutomationBuilderPage() {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
     saveState, savedAt, composing, changeCard, setChangeCard, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
-    connectNodes, rename, compose, undo, canUndo, activate, pause,
+    connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
 
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
-  const [posts, setPosts] = useState<PostLibraryItem[]>([]);
-  const [postsLoading, setPostsLoading] = useState(false);
   // The whole capability matrix, fetched once; the trigger's platform picks
   // the row every Send step is judged against.
   const [allCapabilities, setAllCapabilities] = useState<PlatformCapabilities[]>([]);
@@ -62,6 +61,12 @@ export default function AutomationBuilderPage() {
   const [addMenu, setAddMenu] = useState<{ nodeId: string; branch: 'next' | 'yes' | 'no' } | null>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
+
+  // Stable across renders so the posts hook doesn't re-run on every paint.
+  const postsError = useCallback(
+    (message: string) => showToast(message, 'error', { durationMs: 7000 }),
+    [showToast],
+  );
 
   // ------------------------------------------------------------ reference data
   useEffect(() => {
@@ -97,43 +102,8 @@ export default function AutomationBuilderPage() {
     return trigger ? readTrigger(trigger).accountId : null;
   }, [graph]);
 
-  const loadPosts = useCallback((accountId: string | null) => {
-    if (!accountId || !isBackendConfigured()) {
-      setPosts([]);
-      return;
-    }
-    setPostsLoading(true);
-    fetchPostsLibrary({ accountId, limit: 200 })
-      // Belt and braces: the endpoint already scopes by account, and this
-      // drops anything that somehow still doesn't belong to it rather than
-      // showing a creator someone else's post as a choice.
-      .then(list => setPosts(list.filter(p => p.account_id === accountId)))
-      .catch(() => setPosts([]))
-      .finally(() => setPostsLoading(false));
-  }, []);
-
-  useEffect(() => {
-    // Fetching for a newly chosen account — synchronising with an external
-    // system is what an effect is for, and the load state it sets is the
-    // fetch's own, not derived from render.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadPosts(triggerAccountId);
-  }, [triggerAccountId, loadPosts]);
-
-  const refreshPosts = useCallback(async (accountId: string) => {
-    setPostsLoading(true);
-    try {
-      // Re-sync from the platform first: a post list that looks wrong is
-      // usually a stale or mis-attributed sync, and re-running it is the only
-      // thing that can actually correct the stored rows.
-      await syncPostsLibrary(accountId);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not refresh posts.', 'error');
-    } finally {
-      setPostsLoading(false);
-      loadPosts(accountId);
-    }
-  }, [loadPosts, showToast]);
+  const { posts, loading: postsLoading, refresh: refreshPosts } =
+    useAccountPosts(triggerAccountId, postsError);
 
   // Re-fit whenever the shape of the graph changes, so a newly generated flow
   // lands comfortably in view rather than off-screen. Derived, not an effect:
@@ -401,11 +371,21 @@ export default function AutomationBuilderPage() {
             onChange={patch => updateNodeConfig(selectedNode.id, patch)}
             onDelete={() => {
               const label = NODE_LABEL[selectedNode.type];
+              // Captured HERE, and restored verbatim. Calling the generic undo
+              // would pop whatever is newest on the shared stack — so a
+              // creator who edits something else (or deletes a second step)
+              // during the toast's seven seconds would have that unrelated
+              // edit reverted while the step this toast names stayed deleted.
+              const restored = graph;
+              const restoredName = name;
               deleteNode(selectedNode.id);
               // No confirm dialog: the step is already restorable, and an
               // offer to undo is faster to read than a modal is to dismiss.
               showToast(`${label} step removed`, 'success', {
-                action: { label: 'Undo', onClick: undo },
+                action: {
+                  label: 'Undo',
+                  onClick: () => commitGraph(restored, { nextName: restoredName }),
+                },
               });
             }}
             onClose={() => setSelectedNodeId(null)}
