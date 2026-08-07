@@ -1,3 +1,18 @@
+/**
+ * RETIRED — no route renders this any more.
+ *
+ * The node builder (src/pages/AutomationBuilderPage.tsx) replaced the
+ * four-step wizard: it edits every automation, including the flat ones this
+ * wizard created, which the backend reads as one-trigger-one-send graphs
+ * (populrbackend src/flows/legacyImport.ts). /automations/new now redirects to
+ * the builder, so nothing reaches this component.
+ *
+ * Kept rather than deleted in the same change that introduced the builder, so
+ * the switch is reversible by restoring one route while the new runtime beds
+ * in. KeywordInput and PostPicker in this directory are NOT dead — the
+ * builder's inspector reuses both. Delete the rest once the builder has a
+ * release behind it.
+ */
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useAutomationWizard } from './useAutomationWizard';
