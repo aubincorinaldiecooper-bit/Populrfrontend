@@ -6,6 +6,7 @@
 // ============================================================
 
 import { getApiAuthToken, clearApiAuthToken } from './authClient';
+import type { FlowGraph } from './flowSchema';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
@@ -52,6 +53,13 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code?: string,
     public readonly details?: string[],
+    /**
+     * Per-step problems from the flow builder's activation check. Kept
+     * structured rather than flattened into `details` because the canvas needs
+     * to point at the step each problem belongs to — a list of sentences can't
+     * do that.
+     */
+    public readonly problems?: { nodeId: string | null; message: string }[],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -122,13 +130,19 @@ async function apiFetch<T>(
     // a misconfigured allowlist being visible without devtools.
     const parsed = await res
       .json()
-      .then((body: { error?: string; message?: string; details?: string[] }) => body)
+      .then((body: {
+        error?: string;
+        message?: string;
+        details?: string[];
+        problems?: { nodeId: string | null; message: string }[];
+      }) => body)
       .catch(() => undefined);
     throw new ApiError(
       parsed?.message || parsed?.error || `Populr API ${path} failed with ${res.status}`,
       res.status,
       parsed?.error,
       Array.isArray(parsed?.details) ? parsed.details : undefined,
+      Array.isArray(parsed?.problems) ? parsed.problems : undefined,
     );
   }
   if (res.status === 204) return undefined as T;
@@ -1221,4 +1235,165 @@ export async function updateContactTag(id: string, tag: string, remove = false):
     method: 'POST', body: patch,
   });
   return updated.contact.tags;
+}
+
+// ============================================================
+// Automation flows — the multi-step automation builder.
+//
+// Talks to populrbackend's /api/flows, which owns validation and execution:
+// every graph written here is re-validated server-side, and the AI composer
+// returns operations the server has already parsed and applied. The client's
+// job is to never construct something the server would reject, not to be the
+// authority on what's valid.
+// ============================================================
+
+
+export type FlowStatus = 'draft' | 'live' | 'paused';
+
+export interface AutomationFlow {
+  id: string;
+  name: string;
+  status: FlowStatus;
+  accountId: string | null;
+  platform: string | null;
+  graph: FlowGraph;
+  version: number;
+  /** Set when this flow was read in from a pre-builder automation. */
+  legacyAutomationId: string | null;
+  activatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A blocking problem Review shows, tied to the step it belongs to. */
+export interface FlowProblem {
+  nodeId: string | null;
+  message: string;
+}
+
+export interface FlowSimulationStep {
+  nodeId: string;
+  nodeType: string;
+  status: 'ok' | 'failed' | 'skipped';
+  detail: string;
+  branch?: 'next' | 'yes' | 'no';
+  output?: Record<string, unknown> | null;
+}
+
+export interface FlowSimulationResult {
+  matched: boolean;
+  reason: string | null;
+  steps: FlowSimulationStep[];
+}
+
+export interface FlowComposeResult {
+  applied: boolean;
+  summary: string;
+  source: 'model' | 'fallback';
+  operations: unknown[];
+  touchedNodeIds?: string[];
+  previousGraph?: FlowGraph;
+  flow: AutomationFlow | null;
+}
+
+export async function fetchFlows(): Promise<AutomationFlow[]> {
+  const data = await apiFetch<{ count: number; flows: AutomationFlow[] }>('/api/flows');
+  return data.flows;
+}
+
+export async function fetchFlow(id: string): Promise<AutomationFlow> {
+  const data = await apiFetch<{ flow: AutomationFlow }>(`/api/flows/${id}`);
+  return data.flow;
+}
+
+export async function createFlow(input: { name?: string; graph?: FlowGraph } = {}): Promise<AutomationFlow> {
+  const data = await apiFetch<{ flow: AutomationFlow }>('/api/flows', { method: 'POST', body: input });
+  return data.flow;
+}
+
+/** PATCH /api/flows/:id — the builder's autosave. */
+export async function updateFlow(
+  id: string,
+  patch: { name?: string; graph?: FlowGraph },
+): Promise<AutomationFlow> {
+  const data = await apiFetch<{ flow: AutomationFlow }>(`/api/flows/${id}`, { method: 'PATCH', body: patch });
+  return data.flow;
+}
+
+export async function deleteFlow(id: string): Promise<void> {
+  await apiFetch(`/api/flows/${id}`, { method: 'DELETE' });
+}
+
+/** GET /api/flows/:id/validation — what Review reads. */
+export async function fetchFlowValidation(id: string): Promise<{ ok: boolean; problems: FlowProblem[] }> {
+  return apiFetch(`/api/flows/${id}/validation`);
+}
+
+/**
+ * POST /api/flows/:id/activate. A flow that isn't ready comes back as a 400
+ * carrying `problems`; ApiError.details flattens those messages, but the
+ * caller usually wants them tied to their nodes, so the raw list is rethrown
+ * as FlowNotReadyError.
+ */
+export class FlowNotReadyError extends Error {
+  constructor(public readonly problems: FlowProblem[]) {
+    super('This automation isn\'t ready to activate yet.');
+    this.name = 'FlowNotReadyError';
+  }
+}
+
+export async function activateFlow(id: string): Promise<{ flow: AutomationFlow; legacyPaused: boolean }> {
+  try {
+    return await apiFetch(`/api/flows/${id}/activate`, { method: 'POST' });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 400 && Array.isArray(err.problems)) {
+      throw new FlowNotReadyError(err.problems);
+    }
+    throw err;
+  }
+}
+
+export async function pauseFlow(id: string): Promise<{ flow: AutomationFlow; cancelledRuns: number }> {
+  return apiFetch(`/api/flows/${id}/pause`, { method: 'POST' });
+}
+
+/** POST /api/flows/:id/test — a dry run through the real executors. */
+export async function testFlow(
+  id: string,
+  input: { channel: 'comment' | 'dm'; text: string; replied?: boolean; handle?: string; tags?: string[] },
+): Promise<FlowSimulationResult> {
+  return apiFetch(`/api/flows/${id}/test`, { method: 'POST', body: input });
+}
+
+/** POST /api/flows/:id/compose — natural language in, validated operations out. */
+export async function composeFlow(
+  id: string,
+  input: { prompt: string; selectedNodeId?: string | null },
+): Promise<FlowComposeResult> {
+  return apiFetch(`/api/flows/${id}/compose`, { method: 'POST', body: input });
+}
+
+export interface FlowActivityStep {
+  id: string;
+  run_id: string;
+  node_id: string;
+  node_type: string;
+  status: 'ok' | 'failed' | 'skipped';
+  detail: string | null;
+  branch: string | null;
+  contact_handle: string | null;
+  contact_name: string | null;
+  run_status: string;
+  created_at: string;
+}
+
+export async function fetchFlowActivity(id: string): Promise<{ steps: FlowActivityStep[] }> {
+  return apiFetch(`/api/flows/${id}/activity`);
+}
+
+/** Reference data the builder needs on open: whether the model-backed composer
+ *  is configured (it changes the composer's copy) and the workspace's existing
+ *  tags (so tag fields suggest rather than invite near-duplicates). */
+export async function fetchFlowBuilderMeta(): Promise<{ aiConfigured: boolean; tags: string[] }> {
+  return apiFetch('/api/flows/meta/status');
 }

@@ -20,7 +20,6 @@ import InboxPage from './pages/InboxPage';
 import SettingsPage from './pages/SettingsPage';
 
 // Hidden pages (contextual, not in main nav)
-import AutomationWizard from './components/automation-wizard/AutomationWizard';
 
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const ContentPage = lazy(() => import('./pages/ContentPage'));
@@ -28,6 +27,9 @@ const PostDetailPage = lazy(() => import('./pages/PostDetailPage'));
 const CreatePostPage = lazy(() => import('./pages/CreatePostPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'));
+// The automation builder: a full-viewport canvas, so it's lazy like the other
+// heavy pages (it pulls in the graph library).
+const AutomationBuilderPage = lazy(() => import('./pages/AutomationBuilderPage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 /**
@@ -114,7 +116,16 @@ function AppContent() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/segments" element={<Navigate to="/contacts" replace />} />
         <Route path="/automations" element={<Suspense fallback={<LoadingState />}><AutomationsPage /></Suspense>} />
-        <Route path="/automations/new" element={<AutomationWizard />} />
+        {/* The four-step wizard is retired: the builder is the only editor
+            now, and every automation built in the wizard is readable as a
+            flow (populrbackend flows/legacyImport.ts), so nothing is
+            stranded behind the old route. Anyone holding a bookmark or a
+            stale tab lands on the list, which offers the builder. */}
+        <Route path="/automations/new" element={<Navigate to="/automations?new=1" replace />} />
+        <Route
+          path="/automations/:flowId"
+          element={<Suspense fallback={<LoadingState />}><AutomationBuilderPage /></Suspense>}
+        />
         <Route path="/contacts" element={<Suspense fallback={<LoadingState />}><ContactsPage /></Suspense>} />
         <Route path="/create" element={<Suspense fallback={<LoadingState />}><CreatePostPage /></Suspense>} />
         <Route path="/content" element={<Suspense fallback={<LoadingState />}><ContentPage /></Suspense>} />
