@@ -192,9 +192,13 @@ export default function AutomationBuilderPage() {
 
   // Add the first step to an empty canvas — the manual alternative to asking.
   const startManually = useCallback(() => {
+    // Pre-bind the first CONNECTED account, not merely the first row — a
+    // disconnected account can't run an automation, and the picker no longer
+    // offers it, so pre-binding it would select something unpickable.
+    const firstConnected = accounts.find(a => a.status === 'connected') ?? null;
     const id = addNode('trigger', null, 'next', {
       kind: 'comment', allPosts: true, matchMode: 'any',
-      accountId: accounts[0]?.id ?? null, platform: accounts[0]?.platform ?? null,
+      accountId: firstConnected?.id ?? null, platform: firstConnected?.platform ?? null,
     });
     setSelectedNodeId(id);
   }, [addNode, accounts, setSelectedNodeId]);

@@ -238,3 +238,58 @@ describe('relative time', () => {
     expect(timeAgo('not a date')).toBe('');
   });
 });
+
+describe('the account picker', () => {
+  // The bug report's exact dropdown: one connected Instagram account and a
+  // trail of needs-reconnecting rows — LinkedIn, Reddit, X, and a stale
+  // duplicate of the same Instagram handle left over from a reconnect.
+  const account = (
+    id: string, platform: string, username: string, status: ConnectedAccount['status'],
+  ): ConnectedAccount => ({
+    id, platform, username, display_name: username, avatar_url: null,
+    is_connected: status === 'connected', status, connected_at: null,
+  });
+  const roster = [
+    account('ig_live', 'instagram', 'thesupersecretclubb', 'connected'),
+    account('li_1', 'linkedin', 'Aubin Cooper', 'reconnect_required'),
+    account('rd_1', 'reddit', 'Aubinthegr3at', 'reconnect_required'),
+    account('x_1', 'x', 'Aubin250193', 'reconnect_required'),
+    account('ig_stale', 'instagram', 'thesupersecretclubb', 'reconnect_required'),
+  ];
+  const trigger = (accountId: string | null): FlowNode => ({
+    id: 'trigger', type: 'trigger', position: { x: 0, y: 0 },
+    config: { kind: 'comment', accountId, platform: accountId ? 'instagram' : null, allPosts: true, matchMode: 'any' },
+  });
+
+  it('offers only connected accounts', () => {
+    inspector(trigger(null), vi.fn(), { accounts: roster });
+    fireEvent.click(screen.getByLabelText('Account'));
+
+    // Exactly one option: the connected Instagram. Not the four
+    // needs-reconnecting rows, and not the stale duplicate of the same handle.
+    expect(screen.getAllByText('@thesupersecretclubb')).toHaveLength(1);
+    expect(screen.queryByText('@Aubin Cooper')).not.toBeInTheDocument();
+    expect(screen.queryByText('@Aubinthegr3at')).not.toBeInTheDocument();
+    expect(screen.queryByText('@Aubin250193')).not.toBeInTheDocument();
+    expect(screen.queryByText(/needs reconnecting/)).not.toBeInTheDocument();
+  });
+
+  it('still shows the account a flow is already bound to, marked, so the binding is not denied', () => {
+    inspector(trigger('li_1'), vi.fn(), { accounts: roster });
+
+    // The closed control names the bound account and warns about it…
+    expect(screen.getByText('This account needs reconnecting before the automation can run.')).toBeInTheDocument();
+
+    // …and the open list carries it (annotated) alongside the connected one,
+    // so the creator can see what is bound and pick something that runs.
+    fireEvent.click(screen.getByLabelText('Account'));
+    expect(screen.getAllByText('@Aubin Cooper').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('@thesupersecretclubb')).toHaveLength(1);
+    expect(screen.queryByText('@Aubinthegr3at')).not.toBeInTheDocument();
+  });
+
+  it('points at Channels when nothing is connected', () => {
+    inspector(trigger(null), vi.fn(), { accounts: roster.filter(a => a.status !== 'connected' && a.id !== 'li_1') });
+    expect(screen.getByText('No connected accounts. Reconnect one under Channels first.')).toBeInTheDocument();
+  });
+});

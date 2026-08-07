@@ -239,6 +239,15 @@ function TriggerInspector({
   const account = accounts.find(a => a.id === cfg.accountId) ?? null;
   const selectedPost = posts.find(p => String(p.id) === cfg.postId) ?? null;
 
+  // Only connected accounts are offered: an automation on a disconnected
+  // account cannot run, so listing it is an invitation to build something
+  // dead. The one exception is the account this flow is ALREADY bound to —
+  // hiding that would make the picker deny a binding that still exists, so
+  // it stays listed (annotated) until the creator picks something else.
+  const selectable = accounts.filter(
+    a => a.status === 'connected' || a.id === cfg.accountId,
+  );
+
   return (
     <>
       <Section>
@@ -247,7 +256,7 @@ function TriggerInspector({
           value={cfg.accountId ?? ''}
           placeholder="Choose an account…"
           ariaLabel="Account"
-          options={accounts.map(a => ({
+          options={selectable.map(a => ({
             value: a.id,
             label: `@${a.username ?? a.display_name ?? a.id}`,
             description: platformMeta(a.platform).name,
@@ -267,6 +276,11 @@ function TriggerInspector({
         {account && account.status !== 'connected' && (
           <p className="mt-1.5 text-[11px] text-[#B45309]">
             This account needs reconnecting before the automation can run.
+          </p>
+        )}
+        {selectable.length === 0 && (
+          <p className="mt-1.5 text-[11px] text-[#8A857E]">
+            No connected accounts. Reconnect one under Channels first.
           </p>
         )}
       </Section>
