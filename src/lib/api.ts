@@ -920,12 +920,13 @@ export interface PostLibraryItem {
   engagement_rate: string | null;
   account_username: string | null;
   /** Why the backend is offering this row as this account's post.
-   *  'payload' — the synced payload named this account.
-   *  'sole_account_inference' — nothing proved it; it is shown only because
-   *  the workspace has never had another account on this platform. That
-   *  inference is what misattributes a second account's posts when the
+   *  'verified' — ownership was established and recorded: the synced payload
+   *  named this account, or the creator filed the post here by URL.
+   *  'sole_account_inference' — nothing established it; it is shown only
+   *  because the workspace has never had another account on this platform.
+   *  That inference is what misattributes a second account's posts once the
    *  evidence of the second account is gone (see the picker's notice). */
-  ownership_basis?: 'payload' | 'sole_account_inference';
+  ownership_basis?: 'verified' | 'sole_account_inference';
   contacts_generated: string;
   warm_leads: string;
   hot_leads: string;

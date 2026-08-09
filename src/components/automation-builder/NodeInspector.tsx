@@ -401,7 +401,8 @@ function TriggerInspector({
           </div>
 
           {!cfg.allPosts && (
-            selectedPost && !pickingPost ? (
+            <>
+            {selectedPost && !pickingPost ? (
               <div className="flex items-center gap-2 rounded-lg border border-[#E8E4DF] p-2">
                 {selectedPost.media_url
                   ? <img src={selectedPost.media_url} alt="" className="w-10 h-10 rounded object-cover" />
@@ -446,22 +447,30 @@ function TriggerInspector({
                     setPickingPost(false);
                   }}
                 />
-                <UnprovenPostsNotice
-                  posts={posts}
-                  accountId={cfg.accountId}
-                  username={account?.username ?? null}
-                  onDeclared={declaredFor => {
-                    // A post the creator has just told us isn't theirs must
-                    // not stay bound to the trigger — the automation would
-                    // watch a post on an account this flow can't see.
-                    if (selectedPost?.ownership_basis === 'sole_account_inference') {
-                      onChange({ postId: null });
-                    }
-                    onRefreshPosts(declaredFor);
-                  }}
-                />
               </div>
-            )
+            )}
+            {/* Outside the branches above on purpose. A trigger already bound
+                to an unconfirmed post shows only its selected-post card —
+                which is exactly the state a creator lands in when the wrong
+                account's post was picked — and selecting one closes the
+                picker immediately. Mounting the warning only alongside the
+                list would hide it in both. */}
+            <UnprovenPostsNotice
+              posts={posts}
+              accountId={cfg.accountId}
+              username={account?.username ?? null}
+              onDeclared={declaredFor => {
+                // A post the creator has just told us isn't theirs must not
+                // stay bound to the trigger — the automation would watch a
+                // post on an account this flow can't see, and fail silently.
+                if (selectedPost?.ownership_basis === 'sole_account_inference') {
+                  onChange({ postId: null });
+                  setPickingPost(true);
+                }
+                onRefreshPosts(declaredFor);
+              }}
+            />
+            </>
           )}
         </Section>
       )}
