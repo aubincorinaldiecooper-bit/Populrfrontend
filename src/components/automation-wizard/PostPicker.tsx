@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, MessageCircle, Heart, Search } from 'lucide-react';
+import { Check, MessageCircle, Heart, Search, EyeOff, Loader2 } from 'lucide-react';
 import { platformMeta } from '../../lib/platformMeta';
 import type { Post } from '../../lib/api';
 
@@ -28,11 +28,17 @@ function timeAgo(iso: string | null): string {
  * column on narrow screens instead of hiding posts off-axis.
  */
 export default function PostPicker({
-  posts, selectedId, onSelect,
+  posts, selectedId, onSelect, onDisown, disowning,
 }: {
   posts: Post[];
   selectedId: string | null;
   onSelect: (post: Post) => void;
+  /** Offered per card because the account handle above it cannot reveal a
+   *  misattribution — see the card footer. Omitted where there is no account
+   *  in context to disown against. */
+  onDisown?: (post: Post) => void;
+  /** id of the post whose disownment is in flight. */
+  disowning?: string | null;
 }) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
@@ -90,7 +96,7 @@ export default function PostPicker({
             const selected = post.id === selectedId;
             const PlatformIcon = platformMeta(post.platform).icon;
             return (
-              <li key={post.id}>
+              <li key={post.id} className="relative">
                 <button
                   type="button"
                   onClick={() => onSelect(post)}
@@ -116,11 +122,12 @@ export default function PostPicker({
                     )}
                   </div>
                   <div className="p-2.5">
-                    {/* The owning account, on every card. Posts are already
-                        fetched for one account, but a sync can attribute a
-                        post to the wrong one — and without the handle here a
-                        creator has no way to notice they're being offered
-                        somebody else's post. */}
+                    {/* The account this post is FILED under, which is the
+                        account being browsed — the server reads it from the
+                        connected account, not from the post. So it confirms
+                        which library you're looking at, and can never reveal
+                        that a post was misattributed into it. "Not mine"
+                        below is the control that actually answers that. */}
                     {post.account_username && (
                       <p className="text-[10px] text-[#9B9B8F] mb-1 truncate">@{post.account_username}</p>
                     )}
@@ -134,6 +141,33 @@ export default function PostPicker({
                     </div>
                   </div>
                 </button>
+                {/* A sibling of the card button, not a child: nesting one
+                    button inside another is invalid, and browsers resolve it
+                    by firing the outer one — which would silently select the
+                    post the creator was trying to remove.
+
+                    Always visible rather than revealed on hover. There is no
+                    hover on touch, and this is the only affordance that
+                    reaches a post the server has recorded as proven. */}
+                {onDisown && (
+                  <button
+                    type="button"
+                    disabled={disowning === post.id}
+                    onClick={() => onDisown(post)}
+                    title="Remove this post — it was published by a different account"
+                    className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full
+                      bg-white/90 backdrop-blur-sm border border-[#E8E4DF] px-1.5 py-0.5
+                      text-[10px] font-medium text-[#6B665F] shadow-sm
+                      hover:bg-white hover:text-[#B4432F] hover:border-[#E4C4BC]
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111111]
+                      disabled:opacity-50 transition-colors"
+                  >
+                    {disowning === post.id
+                      ? <Loader2 size={9} className="animate-spin" />
+                      : <EyeOff size={9} />}
+                    Not mine
+                  </button>
+                )}
               </li>
             );
           })}
