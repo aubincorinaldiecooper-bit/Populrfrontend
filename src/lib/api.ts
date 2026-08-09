@@ -919,6 +919,13 @@ export interface PostLibraryItem {
   reach: string | null;
   engagement_rate: string | null;
   account_username: string | null;
+  /** Why the backend is offering this row as this account's post.
+   *  'payload' — the synced payload named this account.
+   *  'sole_account_inference' — nothing proved it; it is shown only because
+   *  the workspace has never had another account on this platform. That
+   *  inference is what misattributes a second account's posts when the
+   *  evidence of the second account is gone (see the picker's notice). */
+  ownership_basis?: 'payload' | 'sole_account_inference';
   contacts_generated: string;
   warm_leads: string;
   hot_leads: string;
@@ -944,6 +951,21 @@ export async function fetchPostsLibrary(filter: {
 /** POST /api/posts/sync — refresh the library from Zernio for one (or all) of the caller's own accounts. */
 export async function syncPostsLibrary(accountId?: string): Promise<{ accounts: number; postsStored: number; errors: string[] }> {
   return apiFetch('/api/posts/sync', { method: 'POST', body: accountId ? { accountId } : {} });
+}
+
+/**
+ * POST /api/posts/declare-other-accounts — "these aren't all mine".
+ *
+ * The backend offers an unproven post as this account's only while nothing on
+ * disk says the workspace has ever had a second account on the platform. When
+ * that second account's record is gone, the inference is wrong and no re-sync
+ * can correct it — the creator is the only one left who knows. This records
+ * their say-so, after which unproven posts are withheld for good.
+ */
+export async function declareOtherAccountsOnPlatform(
+  accountId: string,
+): Promise<{ withdrawn: number; remaining: number; soleAccountOnPlatform: boolean }> {
+  return apiFetch('/api/posts/declare-other-accounts', { method: 'POST', body: { accountId } });
 }
 
 /* The "paste a post URL" fallback that used to live here (POST
