@@ -11,6 +11,7 @@ import KeywordInput from '../automation-wizard/KeywordInput';
 import PostPicker from '../automation-wizard/PostPicker';
 import Select from './Select';
 import TagCombobox from './TagCombobox';
+import { declareOtherAccountsOnPlatform } from '../../lib/api';
 import type { ConnectedAccount, PlatformCapabilities, PostLibraryItem } from '../../lib/api';
 
 /**
@@ -221,6 +222,70 @@ export default function NodeInspector({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * "Some of these aren't mine."
+ *
+ * A post is offered as this account's for one of two reasons: the synced
+ * payload named the account, or nothing named it and the workspace has never
+ * had a second account on this platform, so there was nothing else it could
+ * be. The second is an inference, and it is wrong precisely when the second
+ * account's record no longer exists — the case a creator sees as "this is
+ * showing my other Instagram's posts". No re-sync can correct it, because the
+ * evidence it would reason from is what's missing.
+ *
+ * So the notice appears only when at least one offered post rests on that
+ * inference, and it asks the one question only the creator can answer.
+ */
+function UnprovenPostsNotice({
+  posts, accountId, username, onDeclared,
+}: {
+  posts: PostLibraryItem[];
+  accountId: string | null;
+  username: string | null;
+  onDeclared: (accountId: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const unproven = posts.filter(p => p.ownership_basis === 'sole_account_inference');
+
+  if (!accountId || unproven.length === 0) return null;
+
+  const handle = username ? `@${username}` : 'this account';
+
+  return (
+    <div className="mt-2 rounded-lg border border-[#E8E4DF] bg-[#FAF9F7] p-2.5">
+      <p className="text-[11px] leading-snug text-[#6B665F]">
+        {unproven.length === posts.length
+          ? `We couldn't confirm these posts were published by ${handle}.`
+          : `${unproven.length} of these posts couldn't be confirmed as ${handle}'s.`}{' '}
+        They're shown because this workspace has no record of another account on this platform.
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await declareOtherAccountsOnPlatform(accountId);
+            onDeclared(accountId);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not save that.');
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="mt-1.5 inline-flex items-center gap-1.5 text-[11.5px] font-medium
+          text-[#111111] underline underline-offset-2 disabled:opacity-50"
+      >
+        {busy && <Loader2 size={11} className="animate-spin" />}
+        I have another account on this platform — hide unconfirmed posts
+      </button>
+      {error && <p className="mt-1 text-[11px] text-[#B4432F]">{error}</p>}
+    </div>
+  );
+}
+
 function TriggerInspector({
   node, accounts, posts, postsLoading, capabilities, onChange,
   pickingPost, setPickingPost, onRefreshPosts,
@@ -336,7 +401,8 @@ function TriggerInspector({
           </div>
 
           {!cfg.allPosts && (
-            selectedPost && !pickingPost ? (
+            <>
+            {selectedPost && !pickingPost ? (
               <div className="flex items-center gap-2 rounded-lg border border-[#E8E4DF] p-2">
                 {selectedPost.media_url
                   ? <img src={selectedPost.media_url} alt="" className="w-10 h-10 rounded object-cover" />
@@ -382,7 +448,29 @@ function TriggerInspector({
                   }}
                 />
               </div>
-            )
+            )}
+            {/* Outside the branches above on purpose. A trigger already bound
+                to an unconfirmed post shows only its selected-post card —
+                which is exactly the state a creator lands in when the wrong
+                account's post was picked — and selecting one closes the
+                picker immediately. Mounting the warning only alongside the
+                list would hide it in both. */}
+            <UnprovenPostsNotice
+              posts={posts}
+              accountId={cfg.accountId}
+              username={account?.username ?? null}
+              onDeclared={declaredFor => {
+                // A post the creator has just told us isn't theirs must not
+                // stay bound to the trigger — the automation would watch a
+                // post on an account this flow can't see, and fail silently.
+                if (selectedPost?.ownership_basis === 'sole_account_inference') {
+                  onChange({ postId: null });
+                  setPickingPost(true);
+                }
+                onRefreshPosts(declaredFor);
+              }}
+            />
+            </>
           )}
         </Section>
       )}
