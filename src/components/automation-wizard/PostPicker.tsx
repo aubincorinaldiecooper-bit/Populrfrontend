@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, MessageCircle, Heart, Search } from 'lucide-react';
+import { Check, MessageCircle, Heart, Search, ExternalLink } from 'lucide-react';
 import { platformMeta } from '../../lib/platformMeta';
 import type { Post } from '../../lib/api';
 
@@ -90,7 +90,27 @@ export default function PostPicker({
             const selected = post.id === selectedId;
             const PlatformIcon = platformMeta(post.platform).icon;
             return (
-              <li key={post.id}>
+              <li key={post.id} className="relative">
+                {/* Sibling of the card button, never a child: nesting one
+                    button/link inside another is invalid, and the browser
+                    resolves it by firing the outer one — selecting the post
+                    you were trying to inspect. */}
+                {post.url && (
+                  <a
+                    href={post.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    title="Open this post on the platform to check whose it is"
+                    onClick={e => e.stopPropagation()}
+                    className="absolute top-1.5 left-1.5 z-10 inline-flex items-center gap-1 rounded-full
+                      bg-white/90 backdrop-blur-sm border border-[#E8E4DF] px-1.5 py-0.5
+                      text-[10px] font-medium text-[#6B665F] shadow-sm no-underline
+                      hover:bg-white hover:text-[#111111]
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111111]"
+                  >
+                    <ExternalLink size={9} /> Open
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={() => onSelect(post)}
@@ -116,11 +136,13 @@ export default function PostPicker({
                     )}
                   </div>
                   <div className="p-2.5">
-                    {/* The owning account, on every card. Posts are already
-                        fetched for one account, but a sync can attribute a
-                        post to the wrong one — and without the handle here a
-                        creator has no way to notice they're being offered
-                        somebody else's post. */}
+                    {/* The account this post is FILED under — read from the
+                        connected account, not from the post. So it names the
+                        library you are looking at and can never reveal that a
+                        post was misattributed into it: it renders the same
+                        handle whether or not the post is really theirs. The
+                        "Open" link beside it is the part that can settle the
+                        question, because the post's own page names its author. */}
                     {post.account_username && (
                       <p className="text-[10px] text-[#9B9B8F] mb-1 truncate">@{post.account_username}</p>
                     )}

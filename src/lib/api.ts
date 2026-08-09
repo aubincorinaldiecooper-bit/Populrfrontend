@@ -37,6 +37,11 @@ export interface ConnectedAccount {
   is_connected: boolean;
   status: AccountStatus;
   connected_at: string | null;
+  /** The platform's own id for this account (an Instagram business id, say).
+   *  Unlike the handle it is unique per account and stable across reauth, so
+   *  it is the only field that distinguishes two accounts a provider reports
+   *  under the same username — see the duplicate-handle notice on Channels. */
+  external_id?: string | null;
 }
 
 /**

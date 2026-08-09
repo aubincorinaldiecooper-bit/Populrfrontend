@@ -313,6 +313,24 @@ export default function ChannelsPage() {
                   {accts.map(a => {
                     const needsReauth = a.status === 'reconnect_required';
                     const label = a.username ? `@${a.username}` : a.display_name ?? 'Connected account';
+                    // Another account on this platform reporting the SAME
+                    // handle. A provider can do this in two very different
+                    // situations — the same account reconnected, or a
+                    // genuinely different account whose display name matches —
+                    // and the handle alone cannot tell them apart while
+                    // reading as confirmation that it has. That is how an
+                    // Instagram authorised by mistake sat in a picker serving
+                    // someone else's reels without anything on screen looking
+                    // wrong. The platform's own id does distinguish them, so
+                    // when the handles collide it is shown.
+                    const handleTwin = a.username
+                      ? accts.find(
+                          other =>
+                            other.id !== a.id &&
+                            other.username === a.username &&
+                            (!other.external_id || !a.external_id || other.external_id !== a.external_id),
+                        )
+                      : undefined;
                     return (
                       <div key={a.id} className="flex items-center gap-3">
                         {a.avatar_url ? (
@@ -338,6 +356,17 @@ export default function ChannelsPage() {
                           {needsReauth && (
                             <p className="text-[12px] text-[#D97706] mt-0.5">
                               Authorization expired — reconnect to keep this account active.
+                            </p>
+                          )}
+                          {handleTwin && (
+                            <p className="text-[11.5px] text-[#8A857E] mt-0.5 leading-snug">
+                              Another {metaFor(a.platform).name} account here reports this same
+                              handle.{' '}
+                              {a.external_id
+                                ? <>This one is <span className="font-mono text-[11px]">{a.external_id}</span>.</>
+                                : <>They can only be told apart by their posts.</>}{' '}
+                              If its posts aren&apos;t yours, disconnect it and reconnect while
+                              signed into the right account.
                             </p>
                           )}
                         </div>
