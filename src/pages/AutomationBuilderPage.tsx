@@ -363,7 +363,6 @@ export default function AutomationBuilderPage() {
 
         {selectedNode && (
           <NodeInspector
-            onNotify={showToast}
             key={selectedNode.id}
             node={selectedNode}
             accounts={accounts}

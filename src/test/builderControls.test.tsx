@@ -8,7 +8,7 @@
  * leaving the step.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import NodeInspector from '../components/automation-builder/NodeInspector';
 import TagCombobox from '../components/automation-builder/TagCombobox';
 import { normalizeTag } from '../lib/tags';
@@ -17,25 +17,8 @@ import { timeAgo } from '../lib/timeAgo';
 import type { FlowNode } from '../lib/flowSchema';
 import type { ConnectedAccount, PlatformCapabilities, PostLibraryItem } from '../lib/api';
 
-// The disown/reclaim pair reaches the network; the module's exports are ESM
-// getters, so they're replaced at the module boundary rather than assigned to.
-const apiSpies = {
-  disownPost: vi.fn(),
-  reclaimPost: vi.fn(),
-};
-vi.mock('../lib/api', async () => {
-  const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
-  return {
-    ...actual,
-    disownPost: (...args: unknown[]) => apiSpies.disownPost(...args),
-    reclaimPost: (...args: unknown[]) => apiSpies.reclaimPost(...args),
-  };
-});
-
 function inspector(node: FlowNode, onChange = vi.fn(), extra: Partial<{
   posts: PostLibraryItem[]; accounts: ConnectedAccount[]; workspaceTags: string[];
-  onNotify: (message: string, type?: 'success' | 'error' | 'info', options?: unknown) => void;
-  onRefreshPosts: (accountId: string) => void;
 }> = {}) {
   render(
     <NodeInspector
@@ -49,8 +32,7 @@ function inspector(node: FlowNode, onChange = vi.fn(), extra: Partial<{
       onChange={onChange}
       onDelete={vi.fn()}
       onClose={vi.fn()}
-      onRefreshPosts={extra.onRefreshPosts ?? vi.fn()}
-      onNotify={extra.onNotify}
+      onRefreshPosts={vi.fn()}
     />,
   );
   return onChange;
@@ -225,114 +207,9 @@ describe('the post picker', () => {
     });
 
     // Twice: once where the account was chosen, once on the post card itself.
-    // The card's copy confirms which library is on screen. It cannot reveal a
-    // misattribution — the server reads that handle from the connected
-    // account, not from the post, so it says 'populr.space' even for a post
-    // Zernio filed here by mistake. "Not mine" is what answers that; see below.
+    // The card is the one that matters — without it, a post attributed to the
+    // wrong account is indistinguishable from a correct one.
     expect(screen.getAllByText('@populr.space')).toHaveLength(2);
-  });
-
-  /* "Not mine" — the only control that reaches a post the server considers
-   * proven. Zernio's analytics response has returned another Instagram
-   * account's posts carrying the queried account's id; such a row is recorded
-   * as verified, so the platform-wide "I have another account" declaration
-   * doesn't withdraw it and a re-sync re-proves it. The creator saying so is
-   * the only evidence left that Zernio didn't author. */
-  const acc: ConnectedAccount = {
-    id: 'acc_1', platform: 'instagram', username: 'thesupersecretclubb', display_name: null,
-    avatar_url: null, is_connected: true, status: 'connected', connected_at: null,
-  };
-  const boundTrigger: FlowNode = {
-    id: 't', type: 'trigger', position: { x: 0, y: 0 },
-    config: { kind: 'comment', accountId: 'acc_1', postId: '1', allPosts: false, matchMode: 'any' },
-  };
-
-  it('offers "Not mine" on the bound post, where the grid is never shown', () => {
-    inspector(boundTrigger, vi.fn(), {
-      accounts: [acc],
-      posts: [{ ...post('1', 'thesupersecretclubb'), ownership_basis: 'verified' }],
-    });
-    // A trigger already bound to a post renders only its card. That is exactly
-    // the state a creator is in when they notice the post isn't theirs, so the
-    // control has to be reachable without opening the picker.
-    expect(screen.getByRole('button', { name: /not mine/i })).toBeTruthy();
-  });
-
-  it('unbinds the trigger from a post the creator disowns', async () => {
-    const disown = apiSpies.disownPost.mockResolvedValue({
-      disowned: { externalPostId: 'x1', claimedBasis: 'verified' },
-      remaining: 0, soleAccountOnPlatform: true, pinnedFlows: 0,
-    });
-
-    const onChange = vi.fn();
-    const onRefreshPosts = vi.fn();
-    const onNotify = vi.fn();
-    inspector(boundTrigger, onChange, {
-      accounts: [acc],
-      posts: [{ ...post('1', 'thesupersecretclubb'), ownership_basis: 'verified' }],
-      onNotify, onRefreshPosts,
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /not mine/i }));
-    await waitFor(() => expect(disown).toHaveBeenCalledWith('acc_1', 'x1'));
-
-    // Leaving it bound would pin the automation to a post on an account this
-    // flow can't see: no comment or DM on it ever arrives, and the failure is
-    // silence rather than an error.
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ postId: null }));
-    expect(onRefreshPosts).toHaveBeenCalledWith('acc_1');
-  });
-
-  it('warns when automations were already built on the disowned post', async () => {
-    apiSpies.disownPost.mockResolvedValue({
-      disowned: { externalPostId: 'x1', claimedBasis: 'verified' },
-      remaining: 0, soleAccountOnPlatform: true, pinnedFlows: 2,
-    });
-
-    const onNotify = vi.fn();
-    inspector(boundTrigger, vi.fn(), {
-      accounts: [acc],
-      posts: [{ ...post('1', 'thesupersecretclubb'), ownership_basis: 'verified' }],
-      onNotify,
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /not mine/i }));
-    // Those automations were already dead — the events arrive on the account
-    // that really published the post. This is the first moment anyone could
-    // have been told.
-    await waitFor(() =>
-      expect(onNotify.mock.calls[0][0]).toMatch(/2 automations still pinned to it can never fire/),
-    );
-  });
-
-  it('offers an undo, and says so honestly when undoing does not restore it', async () => {
-    apiSpies.disownPost.mockResolvedValue({
-      disowned: { externalPostId: 'x1', claimedBasis: 'sole_account_inference' },
-      remaining: 0, soleAccountOnPlatform: false, pinnedFlows: 0,
-    });
-    const reclaim = apiSpies.reclaimPost.mockResolvedValue({ backInPicker: false });
-
-    const onNotify = vi.fn();
-    inspector(boundTrigger, vi.fn(), {
-      accounts: [acc],
-      posts: [{ ...post('1', 'thesupersecretclubb'), ownership_basis: 'sole_account_inference' }],
-      onNotify,
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /not mine/i }));
-    await waitFor(() => expect(onNotify).toHaveBeenCalled());
-
-    const options = onNotify.mock.calls[0][2] as { action: { label: string; onClick: () => void } };
-    expect(options.action.label).toBe('Undo');
-    options.action.onClick();
-    await waitFor(() => expect(reclaim).toHaveBeenCalledWith('acc_1', 'x1'));
-
-    // Withdrawing the objection only lets the ordinary rules apply again. This
-    // post was never provable, so it stays hidden — claiming otherwise would
-    // be a lie the picker contradicts on the next render.
-    await waitFor(() =>
-      expect(onNotify.mock.calls.at(-1)![0]).toMatch(/stays hidden because its account was never confirmed/),
-    );
   });
 });
 

@@ -969,48 +969,6 @@ export async function declareOtherAccountsOnPlatform(
   return apiFetch('/api/posts/declare-other-accounts', { method: 'POST', body: { accountId } });
 }
 
-/**
- * POST /api/posts/disown — "this specific post isn't mine".
- *
- * The narrower sibling of declareOtherAccountsOnPlatform, and the only thing
- * that reaches a post the backend has recorded as proven. Zernio's analytics
- * response has been seen returning another Instagram account's posts stamped
- * with the queried account's id, which makes the payload agree with the
- * request that produced it; such a row reports ownership_basis 'verified' and
- * survives re-syncing, the platform-wide declaration, and the server's own
- * repair. A person saying "not mine" is the only evidence left that Zernio
- * didn't write.
- *
- * `pinnedFlows` counts automations already built on the post — they can never
- * fire, because the comments and DMs arrive on the account that really
- * published it.
- */
-export async function disownPost(
-  accountId: string,
-  externalPostId: string,
-): Promise<{
-  disowned: { externalPostId: string; claimedBasis: 'verified' | 'sole_account_inference' };
-  remaining: number;
-  soleAccountOnPlatform: boolean;
-  pinnedFlows: number;
-}> {
-  return apiFetch('/api/posts/disown', { method: 'POST', body: { accountId, externalPostId } });
-}
-
-/**
- * POST /api/posts/reclaim — undo a disownment.
- *
- * `backInPicker` is the honest outcome, not a success flag: withdrawing the
- * objection only lets the ordinary ownership rules apply again, and a post
- * that was never provable stays hidden underneath it.
- */
-export async function reclaimPost(
-  accountId: string,
-  externalPostId: string,
-): Promise<{ backInPicker: boolean }> {
-  return apiFetch('/api/posts/reclaim', { method: 'POST', body: { accountId, externalPostId } });
-}
-
 /* The "paste a post URL" fallback that used to live here (POST
  * /api/posts/find-missing) has been removed from the product: it could store
  * a placeholder post row carrying no metrics and no thumbnail, which then

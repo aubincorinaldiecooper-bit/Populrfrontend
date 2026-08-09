@@ -11,14 +11,8 @@ import KeywordInput from '../automation-wizard/KeywordInput';
 import PostPicker from '../automation-wizard/PostPicker';
 import Select from './Select';
 import TagCombobox from './TagCombobox';
-import { declareOtherAccountsOnPlatform, disownPost, reclaimPost } from '../../lib/api';
+import { declareOtherAccountsOnPlatform } from '../../lib/api';
 import type { ConnectedAccount, PlatformCapabilities, PostLibraryItem } from '../../lib/api';
-import type { Toast, ToastOptions } from '../../context/AppContext';
-
-/** Raising a toast is the page's job, not the inspector's. Passed down rather
- *  than pulled from context so this stays renderable without a provider — the
- *  builder-control tests mount it directly. */
-type Notify = (message: string, type?: Toast['type'], options?: ToastOptions) => void;
 
 /**
  * The contextual inspector.
@@ -140,14 +134,11 @@ export interface NodeInspectorProps {
   onDelete: () => void;
   onClose: () => void;
   onRefreshPosts: (accountId: string) => void;
-  /** Optional: without it the inspector simply stays silent, which is the
-   *  right default for a component mounted outside the app shell. */
-  onNotify?: Notify;
 }
 
 export default function NodeInspector({
   node, accounts, posts, postsLoading, capabilities, workspaceTags, problems,
-  onChange, onDelete, onClose, onRefreshPosts, onNotify,
+  onChange, onDelete, onClose, onRefreshPosts,
 }: NodeInspectorProps) {
   const [pickingPost, setPickingPost] = useState(false);
 
@@ -187,7 +178,7 @@ export default function NodeInspector({
             node={node} accounts={accounts} posts={posts} postsLoading={postsLoading}
             capabilities={capabilities} onChange={onChange}
             pickingPost={pickingPost} setPickingPost={setPickingPost}
-            onRefreshPosts={onRefreshPosts} onNotify={onNotify}
+            onRefreshPosts={onRefreshPosts}
           />
         )}
         {node.type === 'condition' && (
@@ -297,7 +288,7 @@ function UnprovenPostsNotice({
 
 function TriggerInspector({
   node, accounts, posts, postsLoading, capabilities, onChange,
-  pickingPost, setPickingPost, onRefreshPosts, onNotify,
+  pickingPost, setPickingPost, onRefreshPosts,
 }: {
   node: FlowNode;
   accounts: ConnectedAccount[];
@@ -308,70 +299,10 @@ function TriggerInspector({
   pickingPost: boolean;
   setPickingPost: (v: boolean) => void;
   onRefreshPosts: (accountId: string) => void;
-  onNotify?: Notify;
 }) {
   const cfg = readTrigger(node);
   const account = accounts.find(a => a.id === cfg.accountId) ?? null;
   const selectedPost = posts.find(p => String(p.id) === cfg.postId) ?? null;
-  const [disowning, setDisowning] = useState<string | null>(null);
-  const notify: Notify = onNotify ?? (() => {});
-
-  /**
-   * "Not mine" on a post card.
-   *
-   * Undoable rather than confirmed: a dialog in front of every card would tax
-   * the common case to guard a reversible one, and the server's reclaim
-   * endpoint makes the reversal exact. The toast is the confirmation.
-   *
-   * If the post being disowned is the one this trigger is bound to, the
-   * binding goes with it. Leaving it would pin the automation to a post on an
-   * account this flow cannot see, and the failure would be silence — no
-   * comment or DM on it ever reaches us.
-   */
-  async function handleDisown(post: PostLibraryItem) {
-    if (!cfg.accountId) return;
-    const accountId = cfg.accountId;
-    const wasBound = String(post.id) === cfg.postId;
-    setDisowning(String(post.id));
-    try {
-      const res = await disownPost(accountId, post.external_post_id);
-      if (wasBound) {
-        onChange({ postId: null });
-        setPickingPost(true);
-      }
-      onRefreshPosts(accountId);
-      notify(
-        res.pinnedFlows > 0
-          ? `Post removed. ${res.pinnedFlows} automation${res.pinnedFlows === 1 ? '' : 's'} still pinned to it can never fire.`
-          : 'Post removed from this account.',
-        res.pinnedFlows > 0 ? 'info' : 'success',
-        {
-          action: {
-            label: 'Undo',
-            onClick: () => {
-              reclaimPost(accountId, post.external_post_id)
-                .then(r => {
-                  onRefreshPosts(accountId);
-                  if (!r.backInPicker) {
-                    // Withdrawing the objection only lets the ordinary rules
-                    // apply again; say so rather than implying the undo failed.
-                    notify(
-                      "Undone — but the post stays hidden because its account was never confirmed.",
-                      'info',
-                    );
-                  }
-                })
-                .catch(() => notify('Could not undo that.', 'error'));
-            },
-          },
-        },
-      );
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Could not remove that post.', 'error');
-    } finally {
-      setDisowning(null);
-    }
-  }
 
   // Only connected accounts are offered: an automation on a disconnected
   // account cannot run, so listing it is an invitation to build something
@@ -486,30 +417,13 @@ function TriggerInspector({
                     </span>
                   )}
                 </span>
-                <span className="flex flex-col items-end gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPickingPost(true)}
-                    className="text-[11.5px] font-medium text-[#111111] underline underline-offset-2"
-                  >
-                    Change
-                  </button>
-                  {/* Repeated here, not only on the grid cards. A trigger
-                      already bound to somebody else's post shows this card and
-                      never the grid, and that is exactly the state a creator
-                      is in when they discover the mistake. */}
-                  <button
-                    type="button"
-                    disabled={disowning === String(selectedPost.id)}
-                    onClick={() => handleDisown(selectedPost)}
-                    className="inline-flex items-center gap-1 text-[11px] text-[#8A857E]
-                      hover:text-[#B4432F] disabled:opacity-50 focus-visible:outline-none
-                      focus-visible:ring-2 focus-visible:ring-[#111111] rounded px-0.5"
-                  >
-                    {disowning === String(selectedPost.id) && <Loader2 size={10} className="animate-spin" />}
-                    Not mine
-                  </button>
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setPickingPost(true)}
+                  className="text-[11.5px] font-medium text-[#111111] underline underline-offset-2"
+                >
+                  Change
+                </button>
               </div>
             ) : !cfg.accountId ? (
               <p className="text-[11.5px] text-[#8A857E]">Choose an account first.</p>
@@ -532,8 +446,6 @@ function TriggerInspector({
                     onChange({ postId: String(post.id), allPosts: false });
                     setPickingPost(false);
                   }}
-                  onDisown={handleDisown}
-                  disowning={disowning}
                 />
               </div>
             )}
