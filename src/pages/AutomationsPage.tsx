@@ -54,6 +54,37 @@ const UNDO_WINDOW_MS = 7000;
  */
 const committedDeletes = new Map<string, Promise<Error | null>>();
 
+/** Send the delete, and remember its outcome until somebody reports it. */
+function commitDelete(id: string): Promise<Error | null> {
+  const outcome = deleteFlow(id).then(
+    () => null,
+    (err: unknown) => (err instanceof Error ? err : new Error('Could not delete this automation.')),
+  );
+  committedDeletes.set(id, outcome);
+  return outcome;
+}
+
+/**
+ * Take an outcome nobody has reported yet, or null if someone already has.
+ *
+ * Both the page that started the delete and the next load of that page can
+ * reach the same outcome, and exactly one of them should speak about it.
+ */
+function claimDeleteOutcome(id: string): Promise<Error | null> | null {
+  const outcome = committedDeletes.get(id);
+  if (!outcome) return null;
+  committedDeletes.delete(id);
+  return outcome;
+}
+
+/** Every unreported outcome. The refetch waits on these whether or not it
+ *  ends up being the one to report them. */
+function claimAllDeleteOutcomes(): Promise<Error | null>[] {
+  const all = [...committedDeletes.values()];
+  committedDeletes.clear();
+  return all;
+}
+
 /** A one-line "what does this do", read from the graph. */
 function summarize(graph: FlowGraph): string {
   const trigger = triggerNodes(graph)[0];
@@ -104,13 +135,7 @@ export default function AutomationsPage() {
     // instead of racing it — see there.
     for (const [id, timer] of pendingDeletes.current) {
       clearTimeout(timer);
-      committedDeletes.set(
-        id,
-        deleteFlow(id).then(
-          () => null,
-          (err: unknown) => (err instanceof Error ? err : new Error('Could not delete this automation.')),
-        ),
-      );
+      void commitDelete(id);
     }
     pendingDeletes.current.clear();
   }, []);
@@ -123,10 +148,7 @@ export default function AutomationsPage() {
     // Let any delete committed on the way out of this page land first. Asking
     // for the list before it does returns the automation that was just
     // deleted, and it then sits there looking undeleted.
-    const pending = [...committedDeletes.values()];
-    committedDeletes.clear();
-
-    Promise.all(pending)
+    Promise.all(claimAllDeleteOutcomes())
       .then(results => {
         // A delete that actually failed is why the row is about to come back.
         // Say so, rather than letting the reappearance be the only clue.
@@ -242,17 +264,23 @@ export default function AutomationsPage() {
     setFlows(prev => prev.filter(f => f.id !== flow.id));
     let undone = false;
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       if (undone) return;
       pendingDeletes.current.delete(flow.id);
-      try {
-        await deleteFlow(flow.id);
-      } catch (err) {
+      // Registered before the request is awaited, not after. The window
+      // between the timer firing and the server answering is one the creator
+      // can leave the page in and come straight back to — and a refetch that
+      // lands inside it shows the automation again, which is the same
+      // reappearance as before with a narrower door.
+      void commitDelete(flow.id).then(err => {
+        // Only ours to report if a reload hasn't already taken it.
+        if (!claimDeleteOutcome(flow.id)) return;
+        if (!err) return;
         // The delete failed after the row was already gone from the list, so
         // put it back rather than leave the two out of step.
         setFlows(prev => [flow, ...prev.filter(f => f.id !== flow.id)]);
-        showToast(err instanceof Error ? err.message : 'Could not delete this automation.', 'error');
-      }
+        showToast(err.message, 'error');
+      });
     }, UNDO_WINDOW_MS);
 
     pendingDeletes.current.set(flow.id, timer);
