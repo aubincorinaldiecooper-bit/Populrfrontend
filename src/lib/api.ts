@@ -5,7 +5,7 @@
 // accounts. Base URL is baked in at build time via VITE_API_URL.
 // ============================================================
 
-import { getApiAuthToken, getCachedApiAuthToken, clearApiAuthToken } from './authClient';
+import { getApiAuthToken, clearApiAuthToken } from './authClient';
 import type { FlowGraph } from './flowSchema';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
@@ -91,7 +91,21 @@ function notifyUnauthorized(): void {
 
 async function apiFetch<T>(
   path: string,
-  init?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
+  init?: {
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    body?: unknown;
+    /**
+     * Let the request outlive the document that started it.
+     *
+     * An ordinary fetch is bound to its document: reload the page or close the
+     * tab while one is open and the browser is free to cancel it. For a request
+     * whose whole point is that it has already been sent — a delete the
+     * interface has already acted on — that cancellation is indistinguishable
+     * from never having asked. `keepalive` is the browser's contract that the
+     * request goes out regardless.
+     */
+    keepalive?: boolean;
+  },
 ): Promise<T> {
   // populrbackend verifies the caller via this JWT (see
   // populrbackend/src/middleware/requireAuth.ts) rather than a shared
@@ -108,6 +122,7 @@ async function apiFetch<T>(
     method: init?.method ?? 'GET',
     headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: init?.body ? JSON.stringify(init.body) : undefined,
+    ...(init?.keepalive ? { keepalive: true } : {}),
   });
   if (!res.ok) {
     // An expired session used to surface as an ordinary inline error on
@@ -1361,40 +1376,42 @@ export async function updateFlow(
   );
 }
 
-export async function deleteFlow(id: string): Promise<void> {
-  await apiFetch(`/api/flows/${id}`, { method: 'DELETE' });
+/**
+ * DELETE /api/flows/:id — sent when the creator asks, not seven seconds later.
+ *
+ * `keepalive` because the interface acts on this immediately: the row is gone
+ * and the toast says "deleted" before the server has answered. Without it, a
+ * reload or a closed tab in the moments after the click could have the browser
+ * cancel the request, and the automation would be back on the way in — the
+ * same failure the seven-second delay used to cause, through a much smaller
+ * door. The window shrinking is not the same as it closing.
+ *
+ * `warning` means Populr marked the automation deleted but Instagram has not
+ * confirmed its copy stopped, so commenters may still be receiving the DM. The
+ * automation is gone from the creator's list either way; the difference is
+ * whether anything is still messaging people on its behalf.
+ */
+export async function deleteFlow(id: string): Promise<{ deleted: boolean; warning?: string }> {
+  return apiFetch(`/api/flows/${id}`, { method: 'DELETE', keepalive: true });
 }
 
 /**
- * Send a delete while the page is being torn down.
+ * POST /api/flows/:id/restore — Undo.
  *
- * Deleting an automation holds the request for the length of the undo offer,
- * and the Automations page flushes anything still waiting when it unmounts.
- * But a reload, a tab close, or a link out of the app tears the document down
- * without React cleanup ever running — so the delete was simply never sent,
- * and the automation was still there on the way back in. That is not a race
- * with the refetch; the request never happened at all.
+ * Deleting is a soft delete, so Undo restores the automation itself: same id,
+ * same run history, rather than a rebuilt lookalike. It comes back PAUSED
+ * whatever it was before, because deleting it stopped Instagram's copy and
+ * cancelled its scheduled follow-ups, and neither of those is reversed by
+ * bringing the row back. `restoredPaused` says so explicitly so the caller can
+ * tell a creator whose automation was live that it is not live again.
  *
- * `keepalive` is what lets a request outlive the document that started it.
- * The handler cannot await, so the auth token has to be one already in hand —
- * without it the backend would only reject the call, and reporting a delete
- * we know cannot succeed would be worse than admitting it did not go.
- *
- * Returns whether the request was actually dispatched.
+ * 404 means there is nothing to restore — never deleted, already restored, or
+ * not this workspace's.
  */
-export function deleteFlowOnUnload(id: string): boolean {
-  const token = getCachedApiAuthToken();
-  if (!token) return false;
-  try {
-    void fetch(`${API_BASE_URL}/api/flows/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-      keepalive: true,
-    });
-    return true;
-  } catch {
-    return false;
-  }
+export async function restoreFlow(
+  id: string,
+): Promise<{ flow: AutomationFlow; restoredPaused: boolean }> {
+  return apiFetch(`/api/flows/${id}/restore`, { method: 'POST' });
 }
 
 /** GET /api/flows/:id/validation — what Review reads. */

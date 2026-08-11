@@ -140,23 +140,6 @@ export async function getApiAuthToken(): Promise<string | null> {
   return inFlight;
 }
 
-/**
- * The cached token, or null — without ever going to the network.
- *
- * For the one situation that cannot await: a request being sent while the
- * page is being torn down (see deleteFlowOnUnload). `pagehide` handlers get no
- * chance to resume after a promise, so a token that isn't already in hand
- * cannot be fetched in time. Null means the caller must give up rather than
- * send an unauthenticated request the backend will only reject.
- */
-export function getCachedApiAuthToken(): string | null {
-  const REFRESH_SKEW_MS = 30_000;
-  if (cachedToken && cachedToken.expiresAtMs - REFRESH_SKEW_MS > Date.now()) {
-    return cachedToken.token;
-  }
-  return null;
-}
-
 /** Drops the cached backend token and invalidates any token exchange still
  * in flight, so it can no longer repopulate the cache once it resolves.
  * Called on sign-out so a subsequent sign-in (by a different user, in the
