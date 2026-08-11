@@ -396,6 +396,14 @@ export function useFlowBuilder(flowId: string | null) {
       const result = await activateFlow(flowId);
       setFlow(result.flow);
       setProblems([]);
+      // Activation registers the automation with the platform afresh, so any
+      // earlier complaint — an edit that hadn't reached it, a pause it never
+      // confirmed — describes a state that no longer exists. Left standing, a
+      // banner saying "Instagram hasn't confirmed it stopped" would greet the
+      // creator on an automation they have just deliberately switched on.
+      // Only on success: a refused activation leaves the flow exactly as the
+      // warning describes it.
+      setDelegationWarning(null);
       return { ok: true, problems: [] };
     } catch (err) {
       if (err instanceof FlowNotReadyError) {

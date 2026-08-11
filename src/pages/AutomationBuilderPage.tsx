@@ -162,12 +162,20 @@ export default function AutomationBuilderPage() {
   const onPause = useCallback(async () => {
     try {
       const result = await pause();
-      showToast(
-        result && result.cancelledRuns > 0
-          ? `Paused — ${result.cancelledRuns} in-progress follow-up${result.cancelledRuns === 1 ? '' : 's'} cancelled`
-          : 'Automation paused',
-        'success',
-      );
+      // The banner below the header already says Instagram hasn't confirmed
+      // the automation stopped. Announcing "Automation paused" beside it would
+      // contradict it in the same breath, and the reassuring message is the
+      // one people believe.
+      if (result?.warning) {
+        showToast(result.warning, 'error', { durationMs: 10000 });
+      } else {
+        showToast(
+          result && result.cancelledRuns > 0
+            ? `Paused — ${result.cancelledRuns} in-progress follow-up${result.cancelledRuns === 1 ? '' : 's'} cancelled`
+            : 'Automation paused',
+          'success',
+        );
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not pause.', 'error');
     }

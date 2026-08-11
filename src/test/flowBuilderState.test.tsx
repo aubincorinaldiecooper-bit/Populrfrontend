@@ -363,3 +363,40 @@ describe('an edit that saved here but not on the platform', () => {
     expect(result.current.delegationWarning).toContain("hasn't confirmed it stopped");
   });
 });
+
+/* Both raised in review on #81. Each leaves a creator with two statements in
+ * front of them that cannot both be true. */
+describe('warnings that must not outlive what they describe', () => {
+  it('a successful activation clears a stale unconfirmed-pause banner', async () => {
+    pauseFlowMock.mockImplementation(async () => ({
+      flow: flowFixture(), cancelledRuns: 0,
+      warning: "Instagram hasn't confirmed it stopped.",
+    }));
+    activateFlowMock.mockImplementation(async () => ({ flow: flowFixture(), legacyPaused: false }));
+    const { result } = await mountBuilder();
+
+    await act(async () => { await result.current.pause(); });
+    expect(result.current.delegationWarning).not.toBeNull();
+
+    // Switching it back on registers it afresh, so "it never stopped" is no
+    // longer a statement about anything.
+    await act(async () => { await result.current.activate(); });
+    expect(result.current.delegationWarning).toBeNull();
+  });
+
+  it('a refused activation keeps it, because nothing about the flow changed', async () => {
+    const { FlowNotReadyError } = await import('../lib/api');
+    pauseFlowMock.mockImplementation(async () => ({
+      flow: flowFixture(), cancelledRuns: 0,
+      warning: "Instagram hasn't confirmed it stopped.",
+    }));
+    activateFlowMock.mockImplementation(async () => {
+      throw new FlowNotReadyError([{ nodeId: 'send', message: 'Write the message.' }]);
+    });
+    const { result } = await mountBuilder();
+
+    await act(async () => { await result.current.pause(); });
+    await act(async () => { await result.current.activate(); });
+    expect(result.current.delegationWarning).not.toBeNull();
+  });
+});
