@@ -91,7 +91,21 @@ function notifyUnauthorized(): void {
 
 async function apiFetch<T>(
   path: string,
-  init?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
+  init?: {
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    body?: unknown;
+    /**
+     * Let the request outlive the document that started it.
+     *
+     * An ordinary fetch is bound to its document: reload the page or close the
+     * tab while one is open and the browser is free to cancel it. For a request
+     * whose whole point is that it has already been sent — a delete the
+     * interface has already acted on — that cancellation is indistinguishable
+     * from never having asked. `keepalive` is the browser's contract that the
+     * request goes out regardless.
+     */
+    keepalive?: boolean;
+  },
 ): Promise<T> {
   // populrbackend verifies the caller via this JWT (see
   // populrbackend/src/middleware/requireAuth.ts) rather than a shared
@@ -108,6 +122,7 @@ async function apiFetch<T>(
     method: init?.method ?? 'GET',
     headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: init?.body ? JSON.stringify(init.body) : undefined,
+    ...(init?.keepalive ? { keepalive: true } : {}),
   });
   if (!res.ok) {
     // An expired session used to surface as an ordinary inline error on
@@ -1364,13 +1379,20 @@ export async function updateFlow(
 /**
  * DELETE /api/flows/:id — sent when the creator asks, not seven seconds later.
  *
+ * `keepalive` because the interface acts on this immediately: the row is gone
+ * and the toast says "deleted" before the server has answered. Without it, a
+ * reload or a closed tab in the moments after the click could have the browser
+ * cancel the request, and the automation would be back on the way in — the
+ * same failure the seven-second delay used to cause, through a much smaller
+ * door. The window shrinking is not the same as it closing.
+ *
  * `warning` means Populr marked the automation deleted but Instagram has not
  * confirmed its copy stopped, so commenters may still be receiving the DM. The
  * automation is gone from the creator's list either way; the difference is
  * whether anything is still messaging people on its behalf.
  */
 export async function deleteFlow(id: string): Promise<{ deleted: boolean; warning?: string }> {
-  return apiFetch(`/api/flows/${id}`, { method: 'DELETE' });
+  return apiFetch(`/api/flows/${id}`, { method: 'DELETE', keepalive: true });
 }
 
 /**

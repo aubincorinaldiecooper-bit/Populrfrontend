@@ -49,6 +49,12 @@ function flow(id: string, name: string, status: AutomationFlow['status'] = 'draf
 let serverFlows: AutomationFlow[] = [];
 /** Resolves the pending DELETE, so a test controls when it lands. */
 let releaseDelete: (() => void) | null = null;
+/** Resolves the pending restore, so a test controls when it lands. */
+let releaseRestore: (() => void) | null = null;
+
+function landPendingRestore() {
+  releaseRestore?.();
+}
 
 /** Called through a function so the assignment inside the mock is visible to
  *  the type checker — read directly, it narrows to `never` after the reset. */
@@ -68,8 +74,10 @@ const mockDeleteFlow = vi.fn(async (id: string) => {
   return { deleted: true };
 });
 
-/** Restore, as the backend does it: the row comes back PAUSED. */
+/** Restore, as the backend does it: the row comes back PAUSED.
+ *  Held open by default so a test can decide when it lands. */
 const mockRestoreFlow = vi.fn(async (id: string) => {
+  await new Promise<void>(resolve => { releaseRestore = resolve; });
   const hit = softDeleted.find(f => f.id === id);
   if (!hit) throw new Error('not found');
   softDeleted = softDeleted.filter(f => f.id !== id);
@@ -101,6 +109,7 @@ function undoFrom(showToast: ReturnType<typeof vi.fn>): (() => void) | undefined
 
 function reset() {
   releaseDelete = null;
+  releaseRestore = null;
   softDeleted = [];
   mockDeleteFlow.mockClear();
   mockRestoreFlow.mockClear();
@@ -305,6 +314,7 @@ describe('Undo', () => {
 
     undoFrom(showToast)?.();
     await waitFor(() => expect(mockRestoreFlow).toHaveBeenCalledWith('f1'));
+    landPendingRestore();
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
     // Back switched off, not live — read off the row's own control, which
@@ -337,7 +347,41 @@ describe('Undo', () => {
 
     landPendingDelete();
     await waitFor(() => expect(mockRestoreFlow).toHaveBeenCalledWith('f1'));
+    landPendingRestore();
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+  });
+
+  it('keeps it on a page that remounted while the restore was still in flight', async () => {
+    // Raised in review on #84, and the mirror image of the delete bug this PR
+    // exists to fix. Undo, then straight off the page and back: the new page
+    // asked for the list while the restore was still open, the server
+    // truthfully said the automation was still deleted, and the restore then
+    // landed on a component that no longer existed — so the automation the
+    // creator had just brought back was missing from the page in front of
+    // them until something else reloaded it.
+    serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
+    reset();
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast });
+    const user = userEvent.setup();
+
+    const first = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    landPendingDelete();
+    await act(async () => { await Promise.resolve(); });
+
+    undoFrom(showToast)?.();
+    await waitFor(() => expect(mockRestoreFlow).toHaveBeenCalledWith('f1'));
+
+    // Away and back while the restore is still open.
+    first.unmount();
+    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    await act(async () => { await Promise.resolve(); });
+
+    landPendingRestore();
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+    expect(screen.getByText('Waitlist DM')).toBeInTheDocument();
   });
 
   it('does not call restore when the delete failed, because nothing was deleted', async () => {

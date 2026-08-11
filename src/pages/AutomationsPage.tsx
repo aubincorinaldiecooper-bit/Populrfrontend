@@ -105,6 +105,38 @@ function commitDelete(id: string): Promise<DeleteOutcome> {
 }
 
 /**
+ * Restores that have been sent and not yet answered — the mirror of the map
+ * above, and needed for the mirror-image reason.
+ *
+ * Undo, then straight back to another page and back again: the new page asks
+ * for the list while the restore is still open, and the server truthfully
+ * answers that the automation is still deleted. The restore then lands on a
+ * component that no longer exists, so its setFlows does nothing, and the
+ * automation the creator just brought back is missing from the page they are
+ * looking at until something else reloads it.
+ */
+const inFlightRestores = new Map<string, Promise<RestoreOutcome>>();
+
+interface RestoreOutcome {
+  flow: AutomationFlow | null;
+  error: Error | null;
+}
+
+/** Send the restore and track it until the server answers. Never rejects. */
+function commitRestore(id: string): Promise<RestoreOutcome> {
+  const outcome: Promise<RestoreOutcome> = restoreFlow(id).then(
+    res => ({ flow: res.flow, error: null }),
+    (err: unknown) => ({
+      flow: null,
+      error: err instanceof Error ? err : new Error('Could not restore this automation.'),
+    }),
+  );
+  inFlightRestores.set(id, outcome);
+  void outcome.then(() => inFlightRestores.delete(id));
+  return outcome;
+}
+
+/**
  * Claim the right to report a failure; false if somebody already has.
  *
  * The page that started the delete and the next load of that page can both
@@ -165,12 +197,13 @@ export default function AutomationsPage() {
     setLoading(true);
     setError(null);
 
-    // Let any delete already sent land first — asking for the list before it
-    // does returns the automation that was just deleted. Bounded, because a
-    // request that is accepted and never answered would otherwise hold this
-    // page on its skeleton forever.
+    // Let anything already sent land first — asking for the list before a
+    // delete arrives returns the automation that was just deleted, and asking
+    // before a restore arrives leaves out the one just brought back. Bounded,
+    // because a request that is accepted and never answered would otherwise
+    // hold this page on its skeleton forever.
     Promise.race([
-      Promise.all([...inFlightDeletes.values()]),
+      Promise.all([...inFlightDeletes.values(), ...inFlightRestores.values()]),
       new Promise(resolve => setTimeout(resolve, DELETE_SETTLE_WAIT_MS)),
     ])
       .then(() => fetchFlows())
@@ -178,6 +211,13 @@ export default function AutomationsPage() {
         // Whatever is still being deleted must not reappear merely because the
         // server hasn't answered yet. This is what makes the bounded wait
         // above safe: waiting can give up, but the list still tells the truth.
+        //
+        // There is deliberately no mirror of this for restores. A restore that
+        // outlasts the wait leaves its automation missing from a list it is
+        // about to be in, which the next load corrects; speculatively adding a
+        // row instead would show an automation that isn't there if the restore
+        // turns out to have failed. Briefly missing something real is the safer
+        // way to be wrong than briefly showing something that isn't.
         setFlows(list.filter(f => !inFlightDeletes.has(f.id)));
 
         // A delete that actually failed is why a row is back. Say so, rather
@@ -333,27 +373,33 @@ export default function AutomationsPage() {
             // It was never deleted, so there is nothing to restore; the
             // failure branch above has already put it back and said why.
             if (error) return;
-            try {
-              const { flow: restored } = await restoreFlow(flow.id);
-              setFlows(prev =>
-                [restored, ...prev.filter(f => f.id !== restored.id)]
-                  .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-              // Restore hands back a paused automation whatever it was before.
-              // Deleting stopped Instagram's copy and cancelled the follow-ups
-              // that were in flight; bringing the row back reverses neither, so
-              // someone who deleted a live automation by accident has to be
-              // told it is not live again rather than discovering it later.
-              if (flow.status === 'live') {
-                showToast(
-                  `“${restored.name}” is back, switched off — turn it on when you're ready`,
-                  'success',
-                  { durationMs: 10000 },
-                );
-              }
-            } catch (err) {
+
+            // Tracked, for the same reason the delete is: a creator who
+            // presses Undo and immediately navigates away and back would
+            // otherwise land on a page that asked for the list before the
+            // restore arrived, and the automation they just brought back
+            // would be missing from it.
+            const { flow: restored, error: restoreError } = await commitRestore(flow.id);
+            if (restoreError || !restored) {
               showToast(
-                err instanceof Error ? err.message : 'Could not restore this automation.',
+                restoreError?.message ?? 'Could not restore this automation.',
                 'error',
+              );
+              return;
+            }
+            setFlows(prev =>
+              [restored, ...prev.filter(f => f.id !== restored.id)]
+                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+            // Restore hands back a paused automation whatever it was before.
+            // Deleting stopped Instagram's copy and cancelled the follow-ups
+            // that were in flight; bringing the row back reverses neither, so
+            // someone who deleted a live automation by accident has to be
+            // told it is not live again rather than discovering it later.
+            if (flow.status === 'live') {
+              showToast(
+                `“${restored.name}” is back, switched off — turn it on when you're ready`,
+                'success',
+                { durationMs: 10000 },
               );
             }
           });
