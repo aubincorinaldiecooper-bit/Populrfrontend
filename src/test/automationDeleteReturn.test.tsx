@@ -10,27 +10,32 @@ import type { AutomationFlow } from '../lib/api';
  * The reported symptom: delete an automation, leave the page, return, and it
  * is still listed as though the delete never happened.
  *
- * The cause is the undo window. Delete holds the server call for seven
- * seconds so Undo can genuinely restore the automation rather than rebuild a
- * lookalike, and leaving the page inside that window commits the delete on the
- * way out. But it was sent fire-and-forget — so navigating straight back
- * re-mounted the page and refetched the list before the DELETE had reached the
- * server, and the response still contained the deleted automation. It then sat
- * there looking undeleted until something else happened to reload.
+ * The cause was the architecture, not a missing event handler. Delete held the
+ * server call for seven seconds so Undo could restore the automation rather
+ * than rebuild a lookalike — which made the deletion itself contingent on the
+ * browser surviving those seven seconds. A reload, a crash, a closed tab or a
+ * phone that discarded the tab meant the DELETE was never sent at all. Not a
+ * race with the refetch: no request existed to race.
  *
- * What this pins:
- *  1. the return refetch waits for a delete committed on the way out;
- *  2. a delete that genuinely failed puts the row back AND says why, rather
- *     than letting the reappearance be the only evidence — that failure used
- *     to be swallowed by a component that no longer existed;
- *  3. Undo inside the window still cancels the delete entirely.
+ * The delete is sent when it is asked for now, and Undo is an explicit
+ * restore. What this file pins:
+ *  1. deleting sends the DELETE immediately, with no timer to wait out;
+ *  2. nothing about leaving the page can lose it — unmount, `pagehide`, or
+ *     simply waiting past the old window all leave exactly one request sent;
+ *  3. the return refetch still waits for a delete that is in flight, and the
+ *     list is filtered by what is in flight so the wait can safely give up;
+ *  4. a delete that genuinely failed puts the row back AND says why;
+ *  5. Undo restores through the backend, and takes the server's flow — which
+ *     comes back paused — rather than re-inserting the stale captured one;
+ *  6. Undo waits for the DELETE to land before restoring, so it cannot be
+ *     overtaken by the very request it is undoing.
  */
 
-function flow(id: string, name: string): AutomationFlow {
+function flow(id: string, name: string, status: AutomationFlow['status'] = 'draft'): AutomationFlow {
   return {
     id,
     name,
-    status: 'draft',
+    status,
     accountId: 'acct_1',
     platform: 'instagram',
     graph: { schemaVersion: 1, nodes: [], edges: [] },
@@ -52,15 +57,25 @@ function landPendingDelete() {
 }
 
 const mockFetchFlows = vi.fn(async () => [...serverFlows]);
+
+/** Soft delete: held out of the list, kept for restore. */
+let softDeleted: AutomationFlow[] = [];
 const mockDeleteFlow = vi.fn(async (id: string) => {
   await new Promise<void>(resolve => { releaseDelete = resolve; });
+  const hit = serverFlows.find(f => f.id === id);
+  if (hit) softDeleted.push(hit);
   serverFlows = serverFlows.filter(f => f.id !== id);
+  return { deleted: true };
 });
 
-const dispatchedOnUnload: string[] = [];
-const mockDeleteFlowOnUnload = vi.fn((id: string) => {
-  dispatchedOnUnload.push(id);
-  return true;
+/** Restore, as the backend does it: the row comes back PAUSED. */
+const mockRestoreFlow = vi.fn(async (id: string) => {
+  const hit = softDeleted.find(f => f.id === id);
+  if (!hit) throw new Error('not found');
+  softDeleted = softDeleted.filter(f => f.id !== id);
+  const restored = { ...hit, status: 'paused' as const, updatedAt: new Date().toISOString() };
+  serverFlows = [restored, ...serverFlows];
+  return { flow: restored, restoredPaused: true };
 });
 
 const mockUseApp = vi.fn();
@@ -74,7 +89,7 @@ vi.mock('../lib/api', async () => {
     isBackendConfigured: () => true,
     fetchFlows: () => mockFetchFlows(),
     deleteFlow: (id: string) => mockDeleteFlow(id),
-    deleteFlowOnUnload: (id: string) => mockDeleteFlowOnUnload(id),
+    restoreFlow: (id: string) => mockRestoreFlow(id),
   };
 });
 
@@ -84,10 +99,39 @@ function undoFrom(showToast: ReturnType<typeof vi.fn>): (() => void) | undefined
   return (call?.[2] as { action?: { onClick: () => void } } | undefined)?.action?.onClick;
 }
 
+function reset() {
+  releaseDelete = null;
+  softDeleted = [];
+  mockDeleteFlow.mockClear();
+  mockRestoreFlow.mockClear();
+}
+
 describe('deleting an automation, then coming back to the page', () => {
-  it('does not show it again while the committed delete is still in flight', async () => {
+  it('sends the DELETE straight away, with no window to wait out', async () => {
+    // The whole point of the change. Under the old design nothing had been
+    // sent at this moment, and everything that could go wrong from here —
+    // reload, crash, tab close — went wrong because of that.
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
-    releaseDelete = null;
+    reset();
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast });
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+
+    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+
+    expect(mockDeleteFlow).toHaveBeenCalledWith('f1');
+    expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
+
+    landPendingDelete();
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('does not show it again while the delete is still in flight', async () => {
+    serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
+    reset();
     const showToast = vi.fn();
     mockUseApp.mockReturnValue({ showToast });
     const user = userEvent.setup();
@@ -96,55 +140,56 @@ describe('deleting an automation, then coming back to the page', () => {
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
     await user.click(screen.getAllByLabelText(/delete/i)[0]);
-    expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
-
-    // Navigate away inside the undo window: the delete is committed on the
-    // way out, and is deliberately left unresolved here so the return happens
-    // while it is still in flight — the exact race that caused the bug.
+    // Left unresolved so the return happens while the request is still open —
+    // "sent" is not "answered", and a list fetched in between is stale.
     view.unmount();
-    expect(mockDeleteFlow).toHaveBeenCalledWith('f1');
 
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
-    // Let the re-mount get as far as it can while the DELETE hangs.
-    await Promise.resolve();
+    await act(async () => { await Promise.resolve(); });
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
 
-    // The DELETE lands; the list that follows is the truthful one.
     landPendingDelete();
     await waitFor(() => expect(screen.getByText('Waitlist DM')).toBeInTheDocument());
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
   });
 
-  it('does not show it again when the undo window expired and the request is still in flight', async () => {
-    // The narrower door left open by the first fix: once the undo timer
-    // fires, the delete stopped being tracked as pending and was awaited
-    // untracked. Leaving the page during that request and returning raced it
-    // exactly as before — and a draft, the thing most often deleted right
-    // after being abandoned in the builder, is where that happens most.
+  it('sends exactly one delete no matter how the page goes away', async () => {
+    // Unmount, `pagehide`, and waiting past the old seven-second window used
+    // to be three different ways of sending — or losing — the request. They
+    // are now three ways of doing nothing, because it has already gone. A
+    // second dispatch would be worse than none: it would 404 against a row
+    // already deleted and report a failure for a delete that succeeded.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
-      releaseDelete = null;
+      serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
+      reset();
       const showToast = vi.fn();
       mockUseApp.mockReturnValue({ showToast });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
       const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
-      await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
+
       await user.click(screen.getAllByLabelText(/delete/i)[0]);
-
-      // Let the undo window expire, so the delete is sent — and left hanging.
-      await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
-      await waitFor(() => expect(mockDeleteFlow).toHaveBeenCalledWith('f1'));
-
-      view.unmount();
-      render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
-      await act(async () => { await Promise.resolve(); });
-      expect(screen.queryByText('Half-built draft')).not.toBeInTheDocument();
-
       landPendingDelete();
-      await waitFor(() => expect(screen.getByText('Waitlist DM')).toBeInTheDocument());
-      expect(screen.queryByText('Half-built draft')).not.toBeInTheDocument();
+      await act(async () => { await Promise.resolve(); });
+      await user.click(screen.getAllByLabelText(/delete/i)[0]);
+      landPendingDelete();
+      await act(async () => { await Promise.resolve(); });
+
+      expect(mockDeleteFlow.mock.calls.map(c => c[0]).sort()).toEqual(['f1', 'f2']);
+
+      // The document goes away, then React tears down, then time passes well
+      // past the old undo window. None of it may send anything.
+      act(() => { window.dispatchEvent(new Event('pagehide')); });
+      view.unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+
+      expect(mockDeleteFlow).toHaveBeenCalledTimes(2);
+
+      // And they are gone from the server, so the next load agrees.
+      render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+      await waitFor(() => expect(screen.getByText('No automations yet')).toBeInTheDocument());
     } finally {
       vi.useRealTimers();
     }
@@ -152,7 +197,7 @@ describe('deleting an automation, then coming back to the page', () => {
 
   it('puts it back and says why when the delete actually failed', async () => {
     serverFlows = [flow('f1', 'Guide DM')];
-    releaseDelete = null;
+    reset();
     mockDeleteFlow.mockImplementationOnce(async () => { throw new Error('Network unreachable'); });
     const showToast = vi.fn();
     mockUseApp.mockReturnValue({ showToast });
@@ -177,7 +222,7 @@ describe('deleting an automation, then coming back to the page', () => {
     // answered, the return after it had nothing left to wait on and fetched
     // straight into the stale list.
     serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
-    releaseDelete = null;
+    reset();
     const showToast = vi.fn();
     mockUseApp.mockReturnValue({ showToast });
     const user = userEvent.setup();
@@ -209,7 +254,7 @@ describe('deleting an automation, then coming back to the page', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
-      releaseDelete = null;
+      reset();
       const showToast = vi.fn();
       mockUseApp.mockReturnValue({ showToast });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -234,44 +279,20 @@ describe('deleting an automation, then coming back to the page', () => {
       vi.useRealTimers();
     }
   });
+});
 
-  it('sends the delete when the page is torn down without React cleanup', async () => {
-    // The reported case, and the one none of the earlier fixes touched: a
-    // reload, a tab close, or a link out of the app ends the document without
-    // unmounting anything, so a delete still inside its undo window was never
-    // dispatched at all. Not a race with the refetch — no request existed to
-    // race. Both deleted drafts were simply still there afterwards.
-    serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
-    releaseDelete = null;
-    mockDeleteFlow.mockClear();
-    dispatchedOnUnload.length = 0;
+describe('Undo', () => {
+  it('restores through the backend and shows the server\'s flow, paused', async () => {
+    // Undo can no longer mean "cancel a request we never sent". It restores a
+    // row the backend still has — and takes back what the backend says that
+    // row now is, rather than re-inserting the captured object. Restoring a
+    // live automation as "live" would claim something Instagram was told to
+    // stop and has not been told to start again.
+    serverFlows = [flow('f1', 'Guide DM', 'live')];
+    reset();
     const showToast = vi.fn();
     mockUseApp.mockReturnValue({ showToast });
-    const user = userEvent.setup();
-
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
-
-    // Delete both, as in the report.
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
-    expect(screen.queryByText('daytime party')).not.toBeInTheDocument();
-    expect(screen.queryByText('weekend boat drops!')).not.toBeInTheDocument();
-
-    // The document goes away. No unmount: that is the whole point.
-    act(() => { window.dispatchEvent(new Event('pagehide')); });
-
-    // Both deletes must actually have been sent, or they are still there when
-    // the page loads again.
-    expect([...dispatchedOnUnload].sort()).toEqual(['f1', 'f2']);
-  });
-
-  it('Undo inside the window cancels the delete outright', async () => {
-    serverFlows = [flow('f1', 'Guide DM')];
-    releaseDelete = null;
-    mockDeleteFlow.mockClear();
-    const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup();
 
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
@@ -279,8 +300,64 @@ describe('deleting an automation, then coming back to the page', () => {
     await user.click(screen.getAllByLabelText(/delete/i)[0]);
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
 
+    landPendingDelete();
+    await act(async () => { await Promise.resolve(); });
+
     undoFrom(showToast)?.();
+    await waitFor(() => expect(mockRestoreFlow).toHaveBeenCalledWith('f1'));
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
-    expect(mockDeleteFlow).not.toHaveBeenCalled();
+
+    // Back switched off, not live — read off the row's own control, which
+    // offers Activate for anything that isn't running and Pause for anything
+    // that is. And said out loud, because it was live when it was deleted.
+    await waitFor(() => expect(screen.getByLabelText('Activate Guide DM')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Pause Guide DM')).not.toBeInTheDocument();
+    expect(showToast.mock.calls.some(c => String(c[0]).includes('switched off'))).toBe(true);
+  });
+
+  it('waits for the DELETE to land before restoring', async () => {
+    // Pressing Undo quickly is the normal case, not the edge case. Firing the
+    // restore straight away would race the DELETE it is undoing: restore
+    // first, 404 (nothing is deleted yet), then the delete lands and the
+    // automation is gone for good with the toast already dismissed.
+    serverFlows = [flow('f1', 'Guide DM')];
+    reset();
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast });
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+
+    // Undo while the DELETE is still open.
+    undoFrom(showToast)?.();
+    await act(async () => { await Promise.resolve(); });
+    expect(mockRestoreFlow).not.toHaveBeenCalled();
+
+    landPendingDelete();
+    await waitFor(() => expect(mockRestoreFlow).toHaveBeenCalledWith('f1'));
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+  });
+
+  it('does not call restore when the delete failed, because nothing was deleted', async () => {
+    // The row is already back, put there by the failure path. Restoring on top
+    // of that would 404 and report a second failure for one failed delete.
+    serverFlows = [flow('f1', 'Guide DM')];
+    reset();
+    mockDeleteFlow.mockImplementationOnce(async () => { throw new Error('Network unreachable'); });
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast });
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
+
+    undoFrom(showToast)?.();
+    await act(async () => { await Promise.resolve(); });
+    expect(mockRestoreFlow).not.toHaveBeenCalled();
+    expect(screen.getByText('Guide DM')).toBeInTheDocument();
   });
 });

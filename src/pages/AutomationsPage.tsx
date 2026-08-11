@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { Search, Play, Pause, Zap, Plus, AlertCircle, Trash2, Loader2, GitBranch } from 'lucide-react';
@@ -7,7 +7,7 @@ import StatusPill from '../components/StatusPill';
 import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
 import {
-  isBackendConfigured, fetchFlows, createFlow, deleteFlow, deleteFlowOnUnload, pauseFlow, activateFlow,
+  isBackendConfigured, fetchFlows, createFlow, deleteFlow, restoreFlow, pauseFlow, activateFlow,
   FlowNotReadyError,
   type AutomationFlow,
 } from '../lib/api';
@@ -33,7 +33,15 @@ import { timeAgo } from '../lib/timeAgo';
 
 type StatusTab = 'all' | 'live' | 'draft' | 'paused';
 
-/** How long Undo stays on offer before a delete is actually sent. */
+/**
+ * How long Undo stays on offer. It is the length of a toast, nothing more.
+ *
+ * It used to be how long the DELETE was held back for, which made the deletion
+ * itself contingent on the browser surviving the next seven seconds: a reload,
+ * a crash, an OS tab discard or a backgrounded phone lost it after the
+ * interface had already said "deleted". The request is sent when the creator
+ * asks for it now, and Undo restores what was deleted.
+ */
 const UNDO_WINDOW_MS = 7000;
 
 /**
@@ -51,11 +59,11 @@ const DELETE_SETTLE_WAIT_MS = 4000;
  * Deletes that have been sent and not yet answered, held at module scope so
  * they outlive the component that started them.
  *
- * Leaving the page inside the undo window sends the delete immediately, and
- * navigating back re-mounts and refetches — so a list fetched before that
- * DELETE reaches the server still contains the automation the creator just
- * deleted. It reappears and stays there, which reads as the delete having
- * silently failed.
+ * A delete is sent the moment it is asked for, but "sent" is not "answered".
+ * Deleting an automation and immediately navigating away and back re-mounts
+ * this page and refetches — and a list fetched before the DELETE reaches the
+ * server still contains the automation that was just deleted. It reappears and
+ * stays there, which reads as the delete having silently failed.
  *
  * Entries are removed when the request is ANSWERED, never when somebody reads
  * them. A creator can leave and return several times while one delete is still
@@ -74,16 +82,24 @@ const inFlightDeletes = new Map<string, Promise<Error | null>>();
  */
 const unreportedDeleteErrors = new Map<string, Error>();
 
+interface DeleteOutcome {
+  error: Error | null;
+  /** Populr deleted it, but Instagram hasn't confirmed its copy stopped. */
+  warning?: string;
+}
+
 /** Send the delete and track it until the server answers. Never rejects. */
-function commitDelete(id: string): Promise<Error | null> {
-  const outcome = deleteFlow(id).then(
-    () => null,
-    (err: unknown) => (err instanceof Error ? err : new Error('Could not delete this automation.')),
+function commitDelete(id: string): Promise<DeleteOutcome> {
+  const outcome: Promise<DeleteOutcome> = deleteFlow(id).then(
+    res => ({ error: null, warning: res.warning }),
+    (err: unknown) => ({
+      error: err instanceof Error ? err : new Error('Could not delete this automation.'),
+    }),
   );
-  inFlightDeletes.set(id, outcome);
-  void outcome.then(err => {
+  inFlightDeletes.set(id, outcome.then(o => o.error));
+  void outcome.then(o => {
     inFlightDeletes.delete(id);
-    if (err) unreportedDeleteErrors.set(id, err);
+    if (o.error) unreportedDeleteErrors.set(id, o.error);
   });
   return outcome;
 }
@@ -137,42 +153,12 @@ export default function AutomationsPage() {
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
   const [creating, setCreating] = useState(false);
-  // Deletions waiting out their undo window, so leaving the page can commit
-  // them instead of silently abandoning the request.
-  const pendingDeletes = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  useEffect(() => {
-    // The other way out of this page: a reload, a tab close, or a link that
-    // leaves the app. None of those run React cleanup, so a delete still
-    // inside its undo window was never sent at all — and the automation was
-    // simply still there on the way back, with no request having failed and
-    // nothing to report. `pagehide` is the event that survives all three
-    // (unlike beforeunload on mobile Safari), and the request needs
-    // `keepalive` to outlive the document — see deleteFlowOnUnload.
-    const flush = () => {
-      for (const [id, timer] of pendingDeletes.current) {
-        clearTimeout(timer);
-        deleteFlowOnUnload(id);
-      }
-      // Cleared so the unmount handler below doesn't send them a second time
-      // in the cases where both fire.
-      pendingDeletes.current.clear();
-    };
-    window.addEventListener('pagehide', flush);
-    return () => window.removeEventListener('pagehide', flush);
-  }, []);
-
-  useEffect(() => () => {
-    // Unmounting mid-window: fire the deletes the creator asked for rather
-    // than dropping them, and drop the timers so nothing runs after teardown.
-    // Each one is handed to committedDeletes so a re-mount can wait for it
-    // instead of racing it — see there.
-    for (const [id, timer] of pendingDeletes.current) {
-      clearTimeout(timer);
-      void commitDelete(id);
-    }
-    pendingDeletes.current.clear();
-  }, []);
+  // There is deliberately nothing here for teardown to do. A delete is a
+  // request that has already been sent by the time anything can tear this page
+  // down, so no `pagehide` handler, unmount flush or `keepalive` request is
+  // needed to rescue one — which is the point: those existed only because the
+  // deletion was being held hostage to the browser staying alive.
 
   const load = useCallback(() => {
     if (!backendConfigured) return;
@@ -292,11 +278,18 @@ export default function AutomationsPage() {
   /**
    * Delete, with a real way back.
    *
-   * The row disappears at once and the server call is held for the length of
-   * the undo offer, so Undo genuinely restores the automation — id, run
-   * history and all — rather than rebuilding a lookalike. Nothing is lost if
-   * the tab closes mid-window: the delete simply never happens, which is the
-   * safe direction to fail in.
+   * The delete is sent now. The row disappears now. Undo is a separate request
+   * that brings the automation back — same id, same run history, not a
+   * rebuilt lookalike — because the backend records the deletion rather than
+   * destroying the row.
+   *
+   * The order matters, and it is the opposite of what this used to do. Holding
+   * the DELETE for the length of the undo offer made the deletion contingent
+   * on the browser: a reload, a crash, a closed tab or a phone that discarded
+   * the tab meant the request was simply never sent, and the automation was
+   * still there on the way back with nothing having failed and nothing to
+   * report. Undo is now the exceptional path; it is no longer the delete path
+   * waiting to go wrong.
    *
    * A live automation still asks first. It is actively messaging real people,
    * and stopping that deserves a deliberate answer rather than a toast you
@@ -308,40 +301,62 @@ export default function AutomationsPage() {
     )) return;
 
     setFlows(prev => prev.filter(f => f.id !== flow.id));
-    let undone = false;
+    const sent = commitDelete(flow.id);
 
-    const timer = setTimeout(() => {
-      if (undone) return;
-      pendingDeletes.current.delete(flow.id);
-      // Registered before the request is awaited, not after. The window
-      // between the timer firing and the server answering is one the creator
-      // can leave the page in and come straight back to — and a refetch that
-      // lands inside it shows the automation again, which is the same
-      // reappearance as before with a narrower door.
-      void commitDelete(flow.id).then(err => {
+    void sent.then(({ error, warning }) => {
+      if (error) {
         // Only ours to report if a reload hasn't already taken it.
-        if (!err || !claimDeleteError(flow.id)) return;
+        if (!claimDeleteError(flow.id)) return;
         // The delete failed after the row was already gone from the list, so
         // put it back rather than leave the two out of step.
-        setFlows(prev => [flow, ...prev.filter(f => f.id !== flow.id)]);
-        showToast(err.message, 'error');
-      });
-    }, UNDO_WINDOW_MS);
-
-    pendingDeletes.current.set(flow.id, timer);
+        setFlows(prev => (prev.some(f => f.id === flow.id) ? prev : [flow, ...prev]));
+        showToast(error.message, 'error');
+        return;
+      }
+      // "Deleted" is a claim about what fans experience. If Instagram hasn't
+      // confirmed its copy stopped, commenters may still be getting the DM,
+      // and letting the row vanish quietly would be the reassuring version of
+      // a lie — the same distinction pause already draws.
+      if (warning) showToast(warning, 'error', { durationMs: 10000 });
+    });
 
     showToast(`“${flow.name}” deleted`, 'success', {
       durationMs: UNDO_WINDOW_MS,
       action: {
         label: 'Undo',
         onClick: () => {
-          undone = true;
-          clearTimeout(timer);
-          pendingDeletes.current.delete(flow.id);
-          setFlows(prev =>
-            prev.some(f => f.id === flow.id)
-              ? prev
-              : [...prev, flow].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+          // Sequenced behind the delete rather than raced with it. A restore
+          // that overtook its own DELETE would find nothing deleted yet, 404,
+          // and then be deleted a moment later — the automation would vanish
+          // again with the toast already gone and nothing left to press.
+          void sent.then(async ({ error }) => {
+            // It was never deleted, so there is nothing to restore; the
+            // failure branch above has already put it back and said why.
+            if (error) return;
+            try {
+              const { flow: restored } = await restoreFlow(flow.id);
+              setFlows(prev =>
+                [restored, ...prev.filter(f => f.id !== restored.id)]
+                  .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+              // Restore hands back a paused automation whatever it was before.
+              // Deleting stopped Instagram's copy and cancelled the follow-ups
+              // that were in flight; bringing the row back reverses neither, so
+              // someone who deleted a live automation by accident has to be
+              // told it is not live again rather than discovering it later.
+              if (flow.status === 'live') {
+                showToast(
+                  `“${restored.name}” is back, switched off — turn it on when you're ready`,
+                  'success',
+                  { durationMs: 10000 },
+                );
+              }
+            } catch (err) {
+              showToast(
+                err instanceof Error ? err.message : 'Could not restore this automation.',
+                'error',
+              );
+            }
+          });
         },
       },
     });

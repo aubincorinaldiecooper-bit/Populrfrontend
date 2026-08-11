@@ -5,7 +5,7 @@
 // accounts. Base URL is baked in at build time via VITE_API_URL.
 // ============================================================
 
-import { getApiAuthToken, getCachedApiAuthToken, clearApiAuthToken } from './authClient';
+import { getApiAuthToken, clearApiAuthToken } from './authClient';
 import type { FlowGraph } from './flowSchema';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
@@ -1361,40 +1361,35 @@ export async function updateFlow(
   );
 }
 
-export async function deleteFlow(id: string): Promise<void> {
-  await apiFetch(`/api/flows/${id}`, { method: 'DELETE' });
+/**
+ * DELETE /api/flows/:id — sent when the creator asks, not seven seconds later.
+ *
+ * `warning` means Populr marked the automation deleted but Instagram has not
+ * confirmed its copy stopped, so commenters may still be receiving the DM. The
+ * automation is gone from the creator's list either way; the difference is
+ * whether anything is still messaging people on its behalf.
+ */
+export async function deleteFlow(id: string): Promise<{ deleted: boolean; warning?: string }> {
+  return apiFetch(`/api/flows/${id}`, { method: 'DELETE' });
 }
 
 /**
- * Send a delete while the page is being torn down.
+ * POST /api/flows/:id/restore — Undo.
  *
- * Deleting an automation holds the request for the length of the undo offer,
- * and the Automations page flushes anything still waiting when it unmounts.
- * But a reload, a tab close, or a link out of the app tears the document down
- * without React cleanup ever running — so the delete was simply never sent,
- * and the automation was still there on the way back in. That is not a race
- * with the refetch; the request never happened at all.
+ * Deleting is a soft delete, so Undo restores the automation itself: same id,
+ * same run history, rather than a rebuilt lookalike. It comes back PAUSED
+ * whatever it was before, because deleting it stopped Instagram's copy and
+ * cancelled its scheduled follow-ups, and neither of those is reversed by
+ * bringing the row back. `restoredPaused` says so explicitly so the caller can
+ * tell a creator whose automation was live that it is not live again.
  *
- * `keepalive` is what lets a request outlive the document that started it.
- * The handler cannot await, so the auth token has to be one already in hand —
- * without it the backend would only reject the call, and reporting a delete
- * we know cannot succeed would be worse than admitting it did not go.
- *
- * Returns whether the request was actually dispatched.
+ * 404 means there is nothing to restore — never deleted, already restored, or
+ * not this workspace's.
  */
-export function deleteFlowOnUnload(id: string): boolean {
-  const token = getCachedApiAuthToken();
-  if (!token) return false;
-  try {
-    void fetch(`${API_BASE_URL}/api/flows/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-      keepalive: true,
-    });
-    return true;
-  } catch {
-    return false;
-  }
+export async function restoreFlow(
+  id: string,
+): Promise<{ flow: AutomationFlow; restoredPaused: boolean }> {
+  return apiFetch(`/api/flows/${id}/restore`, { method: 'POST' });
 }
 
 /** GET /api/flows/:id/validation — what Review reads. */
