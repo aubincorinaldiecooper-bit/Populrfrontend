@@ -7,7 +7,7 @@ import StatusPill from '../components/StatusPill';
 import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
 import {
-  isBackendConfigured, fetchFlows, createFlow, deleteFlow, pauseFlow, activateFlow,
+  isBackendConfigured, fetchFlows, createFlow, deleteFlow, deleteFlowOnUnload, pauseFlow, activateFlow,
   FlowNotReadyError,
   type AutomationFlow,
 } from '../lib/api';
@@ -140,6 +140,27 @@ export default function AutomationsPage() {
   // Deletions waiting out their undo window, so leaving the page can commit
   // them instead of silently abandoning the request.
   const pendingDeletes = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    // The other way out of this page: a reload, a tab close, or a link that
+    // leaves the app. None of those run React cleanup, so a delete still
+    // inside its undo window was never sent at all — and the automation was
+    // simply still there on the way back, with no request having failed and
+    // nothing to report. `pagehide` is the event that survives all three
+    // (unlike beforeunload on mobile Safari), and the request needs
+    // `keepalive` to outlive the document — see deleteFlowOnUnload.
+    const flush = () => {
+      for (const [id, timer] of pendingDeletes.current) {
+        clearTimeout(timer);
+        deleteFlowOnUnload(id);
+      }
+      // Cleared so the unmount handler below doesn't send them a second time
+      // in the cases where both fire.
+      pendingDeletes.current.clear();
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, []);
 
   useEffect(() => () => {
     // Unmounting mid-window: fire the deletes the creator asked for rather

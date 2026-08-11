@@ -5,7 +5,7 @@
 // accounts. Base URL is baked in at build time via VITE_API_URL.
 // ============================================================
 
-import { getApiAuthToken, clearApiAuthToken } from './authClient';
+import { getApiAuthToken, getCachedApiAuthToken, clearApiAuthToken } from './authClient';
 import type { FlowGraph } from './flowSchema';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
@@ -1363,6 +1363,38 @@ export async function updateFlow(
 
 export async function deleteFlow(id: string): Promise<void> {
   await apiFetch(`/api/flows/${id}`, { method: 'DELETE' });
+}
+
+/**
+ * Send a delete while the page is being torn down.
+ *
+ * Deleting an automation holds the request for the length of the undo offer,
+ * and the Automations page flushes anything still waiting when it unmounts.
+ * But a reload, a tab close, or a link out of the app tears the document down
+ * without React cleanup ever running — so the delete was simply never sent,
+ * and the automation was still there on the way back in. That is not a race
+ * with the refetch; the request never happened at all.
+ *
+ * `keepalive` is what lets a request outlive the document that started it.
+ * The handler cannot await, so the auth token has to be one already in hand —
+ * without it the backend would only reject the call, and reporting a delete
+ * we know cannot succeed would be worse than admitting it did not go.
+ *
+ * Returns whether the request was actually dispatched.
+ */
+export function deleteFlowOnUnload(id: string): boolean {
+  const token = getCachedApiAuthToken();
+  if (!token) return false;
+  try {
+    void fetch(`${API_BASE_URL}/api/flows/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+      keepalive: true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** GET /api/flows/:id/validation — what Review reads. */

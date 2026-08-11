@@ -57,6 +57,12 @@ const mockDeleteFlow = vi.fn(async (id: string) => {
   serverFlows = serverFlows.filter(f => f.id !== id);
 });
 
+const dispatchedOnUnload: string[] = [];
+const mockDeleteFlowOnUnload = vi.fn((id: string) => {
+  dispatchedOnUnload.push(id);
+  return true;
+});
+
 const mockUseApp = vi.fn();
 
 vi.mock('../context/AppContext', () => ({ useApp: () => mockUseApp() }));
@@ -68,6 +74,7 @@ vi.mock('../lib/api', async () => {
     isBackendConfigured: () => true,
     fetchFlows: () => mockFetchFlows(),
     deleteFlow: (id: string) => mockDeleteFlow(id),
+    deleteFlowOnUnload: (id: string) => mockDeleteFlowOnUnload(id),
   };
 });
 
@@ -226,6 +233,37 @@ describe('deleting an automation, then coming back to the page', () => {
       await act(async () => { await Promise.resolve(); });
       vi.useRealTimers();
     }
+  });
+
+  it('sends the delete when the page is torn down without React cleanup', async () => {
+    // The reported case, and the one none of the earlier fixes touched: a
+    // reload, a tab close, or a link out of the app ends the document without
+    // unmounting anything, so a delete still inside its undo window was never
+    // dispatched at all. Not a race with the refetch — no request existed to
+    // race. Both deleted drafts were simply still there afterwards.
+    serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
+    releaseDelete = null;
+    mockDeleteFlow.mockClear();
+    dispatchedOnUnload.length = 0;
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast });
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
+
+    // Delete both, as in the report.
+    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    expect(screen.queryByText('daytime party')).not.toBeInTheDocument();
+    expect(screen.queryByText('weekend boat drops!')).not.toBeInTheDocument();
+
+    // The document goes away. No unmount: that is the whole point.
+    act(() => { window.dispatchEvent(new Event('pagehide')); });
+
+    // Both deletes must actually have been sent, or they are still there when
+    // the page loads again.
+    expect([...dispatchedOnUnload].sort()).toEqual(['f1', 'f2']);
   });
 
   it('Undo inside the window cancels the delete outright', async () => {
