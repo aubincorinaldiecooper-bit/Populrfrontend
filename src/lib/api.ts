@@ -1340,12 +1340,25 @@ export async function createFlow(input: { name?: string; graph?: FlowGraph } = {
 }
 
 /** PATCH /api/flows/:id — the builder's autosave. */
+/**
+ * Autosave.
+ *
+ * `delegationWarning` says the automation's live behaviour and what is on the
+ * canvas have come apart. A comment→DM automation's opening message is sent by
+ * Instagram, from a copy registered when it went live, so an edit only reaches
+ * real people once that copy is updated — and it can't be, if the edit is one
+ * Instagram won't accept. Returned rather than discarded because a creator who
+ * has been told "Autosaved just now" will otherwise reasonably believe the
+ * automation is now sending what they just typed.
+ */
 export async function updateFlow(
   id: string,
   patch: { name?: string; graph?: FlowGraph },
-): Promise<AutomationFlow> {
-  const data = await apiFetch<{ flow: AutomationFlow }>(`/api/flows/${id}`, { method: 'PATCH', body: patch });
-  return data.flow;
+): Promise<{ flow: AutomationFlow; delegationWarning?: string }> {
+  return apiFetch<{ flow: AutomationFlow; delegationWarning?: string }>(
+    `/api/flows/${id}`,
+    { method: 'PATCH', body: patch },
+  );
 }
 
 export async function deleteFlow(id: string): Promise<void> {
@@ -1381,7 +1394,17 @@ export async function activateFlow(id: string): Promise<{ flow: AutomationFlow; 
   }
 }
 
-export async function pauseFlow(id: string): Promise<{ flow: AutomationFlow; cancelledRuns: number }> {
+/**
+ * Pause.
+ *
+ * `warning` means Populr paused its side but Instagram has not confirmed the
+ * automation stopped, so commenters may still be receiving the DM. It is the
+ * difference between "paused" and "we asked" — and a creator pausing an
+ * automation because its message is wrong needs to know which one they got.
+ */
+export async function pauseFlow(
+  id: string,
+): Promise<{ flow: AutomationFlow; cancelledRuns: number; warning?: string }> {
   return apiFetch(`/api/flows/${id}/pause`, { method: 'POST' });
 }
 
