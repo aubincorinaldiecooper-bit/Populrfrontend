@@ -37,52 +37,65 @@ type StatusTab = 'all' | 'live' | 'draft' | 'paused';
 const UNDO_WINDOW_MS = 7000;
 
 /**
- * Deletes committed on the way out of this page that may still be in flight,
- * held at module scope so they outlive the component that started them.
+ * How long a reload will wait for a delete that hasn't been answered yet.
  *
- * Leaving the page inside the undo window sends the delete immediately — but
- * navigating straight back re-mounts and refetches, and a list fetched before
- * that DELETE reaches the server still contains the automation the creator
- * just deleted. It reappears, and stays visibly there until something happens
- * to load the page again, which reads as the delete having silently failed.
- * So the refetch waits for them.
- *
- * Each entry resolves to the error that stopped the delete, or null; it never
- * rejects. A delete that genuinely failed then surfaces on whatever page the
- * creator is looking at, instead of disappearing into a swallowed rejection
- * raised by a component that no longer exists.
+ * Bounded on purpose. The API client sets no timeout and passes no abort
+ * signal, so a server that accepts a DELETE and never answers would otherwise
+ * hold this page on its loading skeleton for as long as the tab is open. After
+ * this, the list is fetched anyway — the filter below is what stops the
+ * still-deleting automation reappearing in the meantime.
  */
-const committedDeletes = new Map<string, Promise<Error | null>>();
+const DELETE_SETTLE_WAIT_MS = 4000;
 
-/** Send the delete, and remember its outcome until somebody reports it. */
+/**
+ * Deletes that have been sent and not yet answered, held at module scope so
+ * they outlive the component that started them.
+ *
+ * Leaving the page inside the undo window sends the delete immediately, and
+ * navigating back re-mounts and refetches — so a list fetched before that
+ * DELETE reaches the server still contains the automation the creator just
+ * deleted. It reappears and stays there, which reads as the delete having
+ * silently failed.
+ *
+ * Entries are removed when the request is ANSWERED, never when somebody reads
+ * them. A creator can leave and return several times while one delete is still
+ * in flight, and every one of those remounts has to see it — a map that
+ * emptied on the first read would leave the second return racing the request
+ * exactly as before.
+ */
+const inFlightDeletes = new Map<string, Promise<Error | null>>();
+
+/**
+ * Failures from deletes that nobody has told the creator about yet.
+ *
+ * Kept apart from the in-flight map because the two have different lifetimes:
+ * waiting is over the moment the server answers, while an unreported failure
+ * has to survive until some page is around to show it.
+ */
+const unreportedDeleteErrors = new Map<string, Error>();
+
+/** Send the delete and track it until the server answers. Never rejects. */
 function commitDelete(id: string): Promise<Error | null> {
   const outcome = deleteFlow(id).then(
     () => null,
     (err: unknown) => (err instanceof Error ? err : new Error('Could not delete this automation.')),
   );
-  committedDeletes.set(id, outcome);
+  inFlightDeletes.set(id, outcome);
+  void outcome.then(err => {
+    inFlightDeletes.delete(id);
+    if (err) unreportedDeleteErrors.set(id, err);
+  });
   return outcome;
 }
 
 /**
- * Take an outcome nobody has reported yet, or null if someone already has.
+ * Claim the right to report a failure; false if somebody already has.
  *
- * Both the page that started the delete and the next load of that page can
- * reach the same outcome, and exactly one of them should speak about it.
+ * The page that started the delete and the next load of that page can both
+ * reach the same failure, and the creator should hear about it once.
  */
-function claimDeleteOutcome(id: string): Promise<Error | null> | null {
-  const outcome = committedDeletes.get(id);
-  if (!outcome) return null;
-  committedDeletes.delete(id);
-  return outcome;
-}
-
-/** Every unreported outcome. The refetch waits on these whether or not it
- *  ends up being the one to report them. */
-function claimAllDeleteOutcomes(): Promise<Error | null>[] {
-  const all = [...committedDeletes.values()];
-  committedDeletes.clear();
-  return all;
+function claimDeleteError(id: string): boolean {
+  return unreportedDeleteErrors.delete(id);
 }
 
 /** A one-line "what does this do", read from the graph. */
@@ -145,18 +158,30 @@ export default function AutomationsPage() {
     setLoading(true);
     setError(null);
 
-    // Let any delete committed on the way out of this page land first. Asking
-    // for the list before it does returns the automation that was just
-    // deleted, and it then sits there looking undeleted.
-    Promise.all(claimAllDeleteOutcomes())
-      .then(results => {
-        // A delete that actually failed is why the row is about to come back.
-        // Say so, rather than letting the reappearance be the only clue.
-        const failed = results.find((e): e is Error => e !== null);
-        if (failed) showToast(failed.message, 'error');
-        return fetchFlows();
+    // Let any delete already sent land first — asking for the list before it
+    // does returns the automation that was just deleted. Bounded, because a
+    // request that is accepted and never answered would otherwise hold this
+    // page on its skeleton forever.
+    Promise.race([
+      Promise.all([...inFlightDeletes.values()]),
+      new Promise(resolve => setTimeout(resolve, DELETE_SETTLE_WAIT_MS)),
+    ])
+      .then(() => fetchFlows())
+      .then(list => {
+        // Whatever is still being deleted must not reappear merely because the
+        // server hasn't answered yet. This is what makes the bounded wait
+        // above safe: waiting can give up, but the list still tells the truth.
+        setFlows(list.filter(f => !inFlightDeletes.has(f.id)));
+
+        // A delete that actually failed is why a row is back. Say so, rather
+        // than letting the reappearance be the only clue — and say it once.
+        for (const [id, err] of unreportedDeleteErrors) {
+          if (claimDeleteError(id)) {
+            showToast(err.message, 'error');
+            break;
+          }
+        }
       })
-      .then(setFlows)
       .catch(err => setError(err instanceof Error ? err.message : 'Could not load automations.'))
       .finally(() => setLoading(false));
   }, [backendConfigured, showToast]);
@@ -274,8 +299,7 @@ export default function AutomationsPage() {
       // reappearance as before with a narrower door.
       void commitDelete(flow.id).then(err => {
         // Only ours to report if a reload hasn't already taken it.
-        if (!claimDeleteOutcome(flow.id)) return;
-        if (!err) return;
+        if (!err || !claimDeleteError(flow.id)) return;
         // The delete failed after the row was already gone from the list, so
         // put it back rather than leave the two out of step.
         setFlows(prev => [flow, ...prev.filter(f => f.id !== flow.id)]);
