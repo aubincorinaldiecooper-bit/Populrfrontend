@@ -57,6 +57,15 @@ export function useFlowBuilder(flowId: string | null) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  /**
+   * Set when the last save reached Populr but not Instagram — the automation
+   * is live and still sending its previous message, or it was paused because
+   * the update could not be applied. Deliberately state rather than a toast:
+   * autosave fires on every pause in typing, and a toast per keystroke would
+   * be unreadable, while this is a condition that persists until the edit is
+   * one Instagram will take.
+   */
+  const [delegationWarning, setDelegationWarning] = useState<string | null>(null);
 
   const [composing, setComposing] = useState(false);
   const [changeCard, setChangeCard] = useState<ChangeCard | null>(null);
@@ -127,12 +136,18 @@ export function useFlowBuilder(flowId: string | null) {
     // always the thing that ends up stored.
     let current: { graph: FlowGraph; name: string } | null = next;
     try {
+      let warning: string | undefined;
       while (current) {
         const updated = await updateFlow(flowId, { graph: current.graph, name: current.name });
-        setFlow(updated);
+        setFlow(updated.flow);
+        warning = updated.delegationWarning;
         current = pending.current;
         pending.current = null;
       }
+      // Only the last write's answer counts: an earlier keystroke's warning
+      // describes a graph the creator has already typed past. Cleared on a
+      // clean save, so fixing the edit removes the banner without a reload.
+      setDelegationWarning(warning ?? null);
       setSaveState('saved');
       setSavedAt(Date.now());
     } catch (err) {
@@ -381,6 +396,14 @@ export function useFlowBuilder(flowId: string | null) {
       const result = await activateFlow(flowId);
       setFlow(result.flow);
       setProblems([]);
+      // Activation registers the automation with the platform afresh, so any
+      // earlier complaint — an edit that hadn't reached it, a pause it never
+      // confirmed — describes a state that no longer exists. Left standing, a
+      // banner saying "Instagram hasn't confirmed it stopped" would greet the
+      // creator on an automation they have just deliberately switched on.
+      // Only on success: a refused activation leaves the flow exactly as the
+      // warning describes it.
+      setDelegationWarning(null);
       return { ok: true, problems: [] };
     } catch (err) {
       if (err instanceof FlowNotReadyError) {
@@ -395,13 +418,17 @@ export function useFlowBuilder(flowId: string | null) {
     if (!flowId) return;
     const result = await pauseFlow(flowId);
     setFlow(result.flow);
+    // A pause Instagram hasn't confirmed leaves the automation still able to
+    // DM commenters, which outlives the toast that reports it — so it takes
+    // the same persistent banner as an unapplied edit.
+    setDelegationWarning(result.warning ?? null);
     return result;
   }, [flowId]);
 
   return {
     flow, graph, name, loading, loadError,
     selectedNodeId, setSelectedNodeId,
-    saveState, savedAt,
+    saveState, savedAt, delegationWarning,
     composing, changeCard, setChangeCard, highlighted, history,
     problems, refreshValidation,
     updateNodeConfig, moveNode, addNode, deleteNode, connectNodes, disconnect,

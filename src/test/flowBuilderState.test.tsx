@@ -15,6 +15,7 @@ import type { FlowGraph, FlowNode } from '../lib/flowSchema';
 const updateFlow = vi.fn();
 const composeFlowMock = vi.fn();
 const activateFlowMock = vi.fn();
+const pauseFlowMock = vi.fn();
 
 function baseGraph(): FlowGraph {
   return {
@@ -49,14 +50,19 @@ vi.mock('../lib/api', async () => {
     composeFlow: (...args: unknown[]) => composeFlowMock(...args),
     activateFlow: (...args: unknown[]) => activateFlowMock(...args),
     fetchFlowValidation: vi.fn(async () => ({ ok: true, problems: [] })),
-    pauseFlow: vi.fn(async () => ({ flow: flowFixture(), cancelledRuns: 0 })),
+    pauseFlow: (...args: unknown[]) => pauseFlowMock(...args),
   };
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Mirrors the real PATCH response — the flow AND whether the edit actually
+  // reached the platform. Returning a bare flow here would let the hook read
+  // `.flow` off the wrong shape and still pass, which is how a mock stops
+  // testing anything.
   updateFlow.mockImplementation(async (_id: string, patch: { graph: FlowGraph; name: string }) =>
-    ({ ...flowFixture(patch.graph), name: patch.name }));
+    ({ flow: { ...flowFixture(patch.graph), name: patch.name } }));
+  pauseFlowMock.mockImplementation(async () => ({ flow: flowFixture(), cancelledRuns: 0 }));
 });
 
 async function mountBuilder() {
@@ -307,5 +313,90 @@ describe('undo targets the change it was offered for', () => {
     // behaviour a delete toast must not have.
     expect(result.current.graph.nodes.find(n => n.id === 'tag')!.config.tag).toBe('warm_lead');
     expect(result.current.graph.nodes.some(n => n.id === 'send')).toBe(false);
+  });
+});
+
+/* A live comment→DM automation's opening message is sent by Instagram, from a
+ * copy registered when the automation went live. So an edit can save perfectly
+ * here and still not reach a single person — and "Autosaved just now" then
+ * reads as a promise the product hasn't kept. The backend says so; these pin
+ * that the builder passes it on rather than swallowing it. */
+describe('an edit that saved here but not on the platform', () => {
+  it('carries the backend warning instead of only saying "saved"', async () => {
+    updateFlow.mockImplementation(async (_id: string, patch: { graph: FlowGraph; name: string }) => ({
+      flow: { ...flowFixture(patch.graph), name: patch.name },
+      delegationWarning: 'Remove {first_name} from the opening DM. Instagram is still sending the previous version.',
+    }));
+    const { result } = await mountBuilder();
+
+    act(() => result.current.updateNodeConfig('send', { text: 'Hey {first_name}' }));
+    await waitFor(() => expect(result.current.saveState).toBe('saved'));
+    expect(result.current.delegationWarning).toContain('still sending the previous version');
+  });
+
+  it('clears it once the edit is one the platform will take', async () => {
+    updateFlow.mockImplementationOnce(async (_id: string, patch: { graph: FlowGraph; name: string }) => ({
+      flow: { ...flowFixture(patch.graph), name: patch.name },
+      delegationWarning: 'Instagram is still sending the previous version.',
+    }));
+    const { result } = await mountBuilder();
+
+    act(() => result.current.updateNodeConfig('send', { text: 'Hey {first_name}' }));
+    await waitFor(() => expect(result.current.delegationWarning).not.toBeNull());
+
+    // The default mock (no warning) answers the next save — the fix landing.
+    act(() => result.current.updateNodeConfig('send', { text: 'Here you go' }));
+    await waitFor(() => expect(result.current.delegationWarning).toBeNull());
+  });
+
+  it('says when a pause was not confirmed by the platform', async () => {
+    pauseFlowMock.mockImplementation(async () => ({
+      flow: flowFixture(),
+      cancelledRuns: 0,
+      warning: "Instagram hasn't confirmed it stopped — new comments may still get the DM.",
+    }));
+    const { result } = await mountBuilder();
+
+    await act(async () => { await result.current.pause(); });
+    // "Paused" is a claim about what fans experience. An unconfirmed stop
+    // still reaches them, so it has to outlive the click that caused it.
+    expect(result.current.delegationWarning).toContain("hasn't confirmed it stopped");
+  });
+});
+
+/* Both raised in review on #81. Each leaves a creator with two statements in
+ * front of them that cannot both be true. */
+describe('warnings that must not outlive what they describe', () => {
+  it('a successful activation clears a stale unconfirmed-pause banner', async () => {
+    pauseFlowMock.mockImplementation(async () => ({
+      flow: flowFixture(), cancelledRuns: 0,
+      warning: "Instagram hasn't confirmed it stopped.",
+    }));
+    activateFlowMock.mockImplementation(async () => ({ flow: flowFixture(), legacyPaused: false }));
+    const { result } = await mountBuilder();
+
+    await act(async () => { await result.current.pause(); });
+    expect(result.current.delegationWarning).not.toBeNull();
+
+    // Switching it back on registers it afresh, so "it never stopped" is no
+    // longer a statement about anything.
+    await act(async () => { await result.current.activate(); });
+    expect(result.current.delegationWarning).toBeNull();
+  });
+
+  it('a refused activation keeps it, because nothing about the flow changed', async () => {
+    const { FlowNotReadyError } = await import('../lib/api');
+    pauseFlowMock.mockImplementation(async () => ({
+      flow: flowFixture(), cancelledRuns: 0,
+      warning: "Instagram hasn't confirmed it stopped.",
+    }));
+    activateFlowMock.mockImplementation(async () => {
+      throw new FlowNotReadyError([{ nodeId: 'send', message: 'Write the message.' }]);
+    });
+    const { result } = await mountBuilder();
+
+    await act(async () => { await result.current.pause(); });
+    await act(async () => { await result.current.activate(); });
+    expect(result.current.delegationWarning).not.toBeNull();
   });
 });

@@ -190,12 +190,20 @@ export default function AutomationsPage() {
       if (flow.status === 'live') {
         const result = await pauseFlow(flow.id);
         setFlows(prev => prev.map(f => (f.id === flow.id ? result.flow : f)));
-        showToast(
-          result.cancelledRuns > 0
-            ? `Paused — ${result.cancelledRuns} in-progress follow-up${result.cancelledRuns === 1 ? '' : 's'} cancelled`
-            : 'Automation paused',
-          'success',
-        );
+        // "Paused" is a claim about what fans experience, not about our own
+        // row. When Instagram hasn't confirmed the automation stopped it may
+        // still be DMing commenters, and saying "Automation paused" over the
+        // top of that would be the reassuring version of a lie.
+        if (result.warning) {
+          showToast(result.warning, 'error', { durationMs: 10000 });
+        } else {
+          showToast(
+            result.cancelledRuns > 0
+              ? `Paused — ${result.cancelledRuns} in-progress follow-up${result.cancelledRuns === 1 ? '' : 's'} cancelled`
+              : 'Automation paused',
+            'success',
+          );
+        }
       } else {
         const result = await activateFlow(flow.id);
         setFlows(prev => prev.map(f => (f.id === flow.id ? result.flow : f)));

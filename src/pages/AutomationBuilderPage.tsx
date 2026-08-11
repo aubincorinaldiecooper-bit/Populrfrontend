@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  ArrowLeft, Check, Cloud, CloudOff, Loader2, Pause, PenLine, Play, Eye, Zap,
+  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Loader2, Pause, PenLine, Play, Eye, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
@@ -40,7 +40,7 @@ export default function AutomationBuilderPage() {
   const builder = useFlowBuilder(flowId);
   const {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
-    saveState, savedAt, composing, changeCard, setChangeCard, highlighted, history,
+    saveState, savedAt, delegationWarning, composing, changeCard, setChangeCard, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -162,12 +162,20 @@ export default function AutomationBuilderPage() {
   const onPause = useCallback(async () => {
     try {
       const result = await pause();
-      showToast(
-        result && result.cancelledRuns > 0
-          ? `Paused — ${result.cancelledRuns} in-progress follow-up${result.cancelledRuns === 1 ? '' : 's'} cancelled`
-          : 'Automation paused',
-        'success',
-      );
+      // The banner below the header already says Instagram hasn't confirmed
+      // the automation stopped. Announcing "Automation paused" beside it would
+      // contradict it in the same breath, and the reassuring message is the
+      // one people believe.
+      if (result?.warning) {
+        showToast(result.warning, 'error', { durationMs: 10000 });
+      } else {
+        showToast(
+          result && result.cancelledRuns > 0
+            ? `Paused — ${result.cancelledRuns} in-progress follow-up${result.cancelledRuns === 1 ? '' : 's'} cancelled`
+            : 'Automation paused',
+          'success',
+        );
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not pause.', 'error');
     }
@@ -330,6 +338,24 @@ export default function AutomationBuilderPage() {
           )}
         </div>
       </header>
+
+      {/* The automation's live behaviour and this canvas have come apart.
+          Sits directly under the header, above the canvas, because it
+          contradicts the "Autosaved just now" sitting a few pixels above it —
+          the save did happen, it just hasn't reached the people the
+          automation talks to. Not a toast: autosave fires on every pause in
+          typing, and this is a condition that lasts until the edit is one
+          Instagram will accept, not an event. */}
+      {delegationWarning && (
+        <div
+          role="status"
+          className="flex items-start gap-2 border-b border-[#F0D9A8] bg-[#FEF7E6]
+            px-4 md:px-6 py-2.5 text-[13px] text-[#7A5A12]"
+        >
+          <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-[#B8860B]" />
+          <p className="flex-1">{delegationWarning}</p>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------ canvas */}
       <div className="relative flex-1 min-h-0">
