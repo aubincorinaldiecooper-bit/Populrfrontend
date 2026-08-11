@@ -36,6 +36,24 @@ type StatusTab = 'all' | 'live' | 'draft' | 'paused';
 /** How long Undo stays on offer before a delete is actually sent. */
 const UNDO_WINDOW_MS = 7000;
 
+/**
+ * Deletes committed on the way out of this page that may still be in flight,
+ * held at module scope so they outlive the component that started them.
+ *
+ * Leaving the page inside the undo window sends the delete immediately — but
+ * navigating straight back re-mounts and refetches, and a list fetched before
+ * that DELETE reaches the server still contains the automation the creator
+ * just deleted. It reappears, and stays visibly there until something happens
+ * to load the page again, which reads as the delete having silently failed.
+ * So the refetch waits for them.
+ *
+ * Each entry resolves to the error that stopped the delete, or null; it never
+ * rejects. A delete that genuinely failed then surfaces on whatever page the
+ * creator is looking at, instead of disappearing into a swallowed rejection
+ * raised by a component that no longer exists.
+ */
+const committedDeletes = new Map<string, Promise<Error | null>>();
+
 /** A one-line "what does this do", read from the graph. */
 function summarize(graph: FlowGraph): string {
   const trigger = triggerNodes(graph)[0];
@@ -82,9 +100,17 @@ export default function AutomationsPage() {
   useEffect(() => () => {
     // Unmounting mid-window: fire the deletes the creator asked for rather
     // than dropping them, and drop the timers so nothing runs after teardown.
+    // Each one is handed to committedDeletes so a re-mount can wait for it
+    // instead of racing it — see there.
     for (const [id, timer] of pendingDeletes.current) {
       clearTimeout(timer);
-      void deleteFlow(id).catch(() => undefined);
+      committedDeletes.set(
+        id,
+        deleteFlow(id).then(
+          () => null,
+          (err: unknown) => (err instanceof Error ? err : new Error('Could not delete this automation.')),
+        ),
+      );
     }
     pendingDeletes.current.clear();
   }, []);
@@ -93,11 +119,25 @@ export default function AutomationsPage() {
     if (!backendConfigured) return;
     setLoading(true);
     setError(null);
-    fetchFlows()
+
+    // Let any delete committed on the way out of this page land first. Asking
+    // for the list before it does returns the automation that was just
+    // deleted, and it then sits there looking undeleted.
+    const pending = [...committedDeletes.values()];
+    committedDeletes.clear();
+
+    Promise.all(pending)
+      .then(results => {
+        // A delete that actually failed is why the row is about to come back.
+        // Say so, rather than letting the reappearance be the only clue.
+        const failed = results.find((e): e is Error => e !== null);
+        if (failed) showToast(failed.message, 'error');
+        return fetchFlows();
+      })
       .then(setFlows)
       .catch(err => setError(err instanceof Error ? err.message : 'Could not load automations.'))
       .finally(() => setLoading(false));
-  }, [backendConfigured]);
+  }, [backendConfigured, showToast]);
 
   useEffect(() => {
     // Data fetch from the backend, not derived state — see ContactsPage.
