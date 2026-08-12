@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { ApiError } from '../lib/api';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import ConnectAnotherModal from '../components/ConnectAnotherModal';
 
 /* The modal must mint exactly one connection link on mount, no matter how
@@ -68,5 +69,48 @@ describe('ConnectAnotherModal', () => {
       <ConnectAnotherModal platform="instagram" platformName="Instagram" initialMode="duplicate" onClose={() => {}} />,
     );
     expect(screen.getByText(/reused your current login/i)).toBeInTheDocument();
+  });
+
+  it('says which failure it was, and whether retrying can help', async () => {
+    // A wedged connect (the Zernio profile-name conflict) surfaced as
+    // "copying will retry" — advice that could never work, and the reason
+    // diagnosing it needed backend logs at all.
+    mockGetPlatformConnectUrl.mockRejectedValueOnce(
+      new ApiError('anything the server said', 500, 'misconfigured'),
+    );
+    render(
+      <ConnectAnotherModal platform="instagram" platformName="Instagram" initialMode="confirm" onClose={() => {}} />,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/support/i);
+    expect(alert.textContent).not.toMatch(/copying will retry/i);
+    // Never the backend's own text.
+    expect(alert.textContent).not.toContain('anything the server said');
+  });
+
+  it('still offers the retry for a failure a retry can fix', async () => {
+    mockGetPlatformConnectUrl.mockRejectedValueOnce(
+      new ApiError('busy', 502, 'profile_unavailable'),
+    );
+    render(
+      <ConnectAnotherModal platform="instagram" platformName="Instagram" initialMode="confirm" onClose={() => {}} />,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/copying will retry/i);
+    expect(alert.textContent).toContain('Instagram');
+  });
+
+  it('clears the failure once a link is minted again', async () => {
+    // Recovery goes through the copy button, which re-mints. Deliberately not
+    // through a prop change: mintLink is stable on purpose (the "mint once"
+    // guard above), so a re-render must NOT quietly mint a new single-use link.
+    mockGetPlatformConnectUrl.mockRejectedValueOnce(new ApiError('busy', 502, 'profile_unavailable'));
+    render(
+      <ConnectAnotherModal platform="instagram" platformName="Instagram" initialMode="confirm" onClose={() => {}} />,
+    );
+    await screen.findByRole('alert');
+    mockGetPlatformConnectUrl.mockResolvedValue('https://oauth.example/recovered');
+    fireEvent.click(screen.getByRole('button', { name: /Copy connection link/ }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 });
