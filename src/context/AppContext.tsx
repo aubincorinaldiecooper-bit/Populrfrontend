@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { OnboardingPlatform } from '../data';
 import { defaultOnboardingPlatforms } from '../data';
+import { connectFailure } from '../lib/connectErrors';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
@@ -91,10 +92,6 @@ export const OAUTH_SYNC_ERROR_MESSAGE =
 // error, a network blip) is never shown verbatim — only logged to the
 // console for debugging. subscription_required never reaches this message;
 // it opens the subscription modal instead (see beginPlatformConnect).
-function connectionFailedMessage(platformLabel: string): string {
-  return `Couldn't connect ${platformLabel}. Populr could not complete the connection. Try again.`;
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -260,11 +257,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         // Persist as a visible "Connection failed" card state rather than
         // silently reverting to idle — a toast alone disappears before the
-        // user can act on it. The message is always the fixed, safe copy;
-        // whatever the backend actually said is only ever in the console.error
-        // above, never rendered.
+        // user can act on it. The backend's own text is still never rendered;
+        // only its stable error CODE is read, and the copy for each is
+        // Populr's own (see lib/connectErrors). Distinguishing "try again"
+        // from "this needs support" is the point: the old single sentence
+        // invited a creator to keep retrying a connect that could not succeed
+        // until someone changed a setting.
         const label = defaultOnboardingPlatforms.find(p => p.id === id)?.name ?? id;
-        const message = connectionFailedMessage(label);
+        const message = connectFailure(err, label).message;
         setState(prev => ({
           ...prev,
           connectedPlatforms: prev.connectedPlatforms.map(p =>

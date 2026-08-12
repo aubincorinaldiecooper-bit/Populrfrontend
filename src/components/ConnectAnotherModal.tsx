@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Copy, Check, Loader2, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getPlatformConnectUrl, ApiError } from '../lib/api';
+import { connectFailure, type ConnectFailure } from '../lib/connectErrors';
 import type { ConnectedAccount } from '../lib/api';
 
 /**
@@ -79,7 +80,10 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
 
   const [mode, setMode] = useState<'confirm' | 'waiting' | 'duplicate'>(initialMode);
   const [link, setLink] = useState<string | null>(null);
-  const [linkError, setLinkError] = useState(false);
+  // What went wrong, in Populr's words — not a boolean, because "try again"
+  // and "this needs support" are different answers and the old single flag
+  // could only ever give the first.
+  const [linkError, setLinkError] = useState<ConnectFailure | null>(null);
   // Set when the clipboard write fails (some browsers restrict it) — the
   // link is shown read-only for manual copying instead of being dropped.
   const [manualLink, setManualLink] = useState<string | null>(null);
@@ -124,7 +128,7 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
       const url = await getPlatformConnectUrl(platform, privateWindowReturnUrl);
       mintedAtRef.current = Date.now();
       setLink(url);
-      setLinkError(false);
+      setLinkError(null);
       return url;
     } catch (err) {
       console.error(`[connect] failed to mint a ${platform} connection link:`, err);
@@ -133,10 +137,10 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
         onCloseRef.current();
         return null;
       }
-      setLinkError(true);
+      setLinkError(connectFailure(err, platformName));
       return null;
     }
-  }, [platform, privateWindowReturnUrl, openSubscriptionModal]);
+  }, [platform, platformName, privateWindowReturnUrl, openSubscriptionModal]);
 
   useEffect(() => {
     // Prefetching here (not on the copy click) is what keeps the clipboard
@@ -368,8 +372,9 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
         )}
 
         {linkError && (
-          <p className="text-[12px] text-[#DC2626] mt-3">
-            Couldn&apos;t create a connection link just now — copying will retry.
+          <p className="text-[12px] text-[#DC2626] mt-3" role="alert">
+            {linkError.message}
+            {linkError.kind === 'transient' && ' Copying will retry.'}
           </p>
         )}
       </div>
