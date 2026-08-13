@@ -322,9 +322,14 @@ function Bubble({
   if (item.kind === 'public_reply') {
     return (
       <div style={delay} className={enter}>
-        <div className="rounded-xl border border-[#E8E4DF] bg-white px-3 py-2.5">
+        <div className={`rounded-xl border px-3 py-2.5
+          ${item.problem ? 'border-[#E8E4DF] bg-[#F7F5F2]' : 'border-[#E8E4DF] bg-white'}`}>
           <p className="text-[11px] text-[#8A857E]">Public reply under the comment</p>
-          <p className="mt-1 text-[13px] text-[#111111] whitespace-pre-wrap break-words">{item.text}</p>
+          <p className={`mt-1 text-[13px] whitespace-pre-wrap break-words
+            ${item.problem ? 'text-[#6B6B6B]' : 'text-[#111111]'}`}>
+            {item.text}
+          </p>
+          {item.problem && <p className="mt-1 text-[10.5px] text-[#B4432F]">{item.problem}</p>}
         </div>
       </div>
     );

@@ -9,13 +9,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
-import type { AutomationFlow } from '../lib/api';
+import type { AutomationFlow, FlowProblem } from '../lib/api';
 import type { FlowGraph, FlowNode } from '../lib/flowSchema';
 
 const updateFlow = vi.fn();
 const composeFlowMock = vi.fn();
 const activateFlowMock = vi.fn();
 const pauseFlowMock = vi.fn();
+const fetchFlowValidationMock = vi.fn();
 
 function baseGraph(): FlowGraph {
   return {
@@ -49,7 +50,7 @@ vi.mock('../lib/api', async () => {
     updateFlow: (...args: unknown[]) => updateFlow(...args),
     composeFlow: (...args: unknown[]) => composeFlowMock(...args),
     activateFlow: (...args: unknown[]) => activateFlowMock(...args),
-    fetchFlowValidation: vi.fn(async () => ({ ok: true, problems: [] })),
+    fetchFlowValidation: (...args: unknown[]) => fetchFlowValidationMock(...args),
     pauseFlow: (...args: unknown[]) => pauseFlowMock(...args),
   };
 });
@@ -63,6 +64,7 @@ beforeEach(() => {
   updateFlow.mockImplementation(async (_id: string, patch: { graph: FlowGraph; name: string }) =>
     ({ flow: { ...flowFixture(patch.graph), name: patch.name } }));
   pauseFlowMock.mockImplementation(async () => ({ flow: flowFixture(), cancelledRuns: 0 }));
+  fetchFlowValidationMock.mockImplementation(async () => ({ ok: true, problems: [] as FlowProblem[] }));
 });
 
 async function mountBuilder() {
@@ -248,6 +250,58 @@ describe('the AI round trip', () => {
     await act(async () => { await result.current.compose('anything') });
 
     expect(result.current.changeCard?.summary).toBe('The model is unavailable.');
+  });
+});
+
+/* The bell in the top bar counts what the SERVER says is still missing, so
+ * whenever the stored graph changes, that answer has to be asked for again —
+ * and the answer that arrives has to be the one for the graph on screen. */
+describe('what still stands in the way', () => {
+  it('re-checks after the AI changes the flow, not only after a manual edit', async () => {
+    composeFlowMock.mockResolvedValue({
+      applied: true, summary: 'Added a follow-up.', source: 'model',
+      operations: [], touchedNodeIds: [], previousGraph: baseGraph(), flow: flowFixture(),
+    });
+
+    const { result } = await mountBuilder();
+    // Compose saves server-side and deliberately leaves the builder clean, so
+    // no autosave follows to carry the re-check. Without an explicit one the
+    // bell would keep the count from before the AI's change — which is most
+    // of the changes a creator makes.
+    fetchFlowValidationMock.mockResolvedValue({
+      ok: false, problems: [{ nodeId: 'send-followup', message: 'This Send step is empty — write the message.' }],
+    });
+
+    await act(async () => { await result.current.compose('follow up in two days') });
+
+    await waitFor(() => expect(result.current.problems).toHaveLength(1));
+    expect(result.current.problems[0].nodeId).toBe('send-followup');
+  });
+
+  it('ignores an answer that has been overtaken by a newer one', async () => {
+    const pending: ((value: { ok: boolean; problems: FlowProblem[] }) => void)[] = [];
+    fetchFlowValidationMock.mockImplementation(
+      () => new Promise(resolve => { pending.push(resolve); }),
+    );
+    const stale: FlowProblem[] = [{ nodeId: 'trigger', message: 'Choose which connected account this automation watches.' }];
+    const fresh: FlowProblem[] = [];
+
+    const { result } = await mountBuilder();
+    act(() => { void result.current.refreshValidation(); });
+    act(() => { void result.current.refreshValidation(); });
+    await waitFor(() => expect(pending.length).toBe(3)); // one from the load, two asked for
+
+    // Newest first, then the older ones — the order two saves in quick
+    // succession can genuinely land in.
+    await act(async () => {
+      pending[2]({ ok: true, problems: fresh });
+      pending[1]({ ok: false, problems: stale });
+      pending[0]({ ok: false, problems: stale });
+    });
+
+    // A superseded answer describes a graph that no longer exists; letting it
+    // through would leave the bell holding blockers the creator has fixed.
+    expect(result.current.problems).toEqual(fresh);
   });
 });
 

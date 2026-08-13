@@ -25,7 +25,8 @@ export type PreviewItem =
   /** The fan's DM. Either the message that started it, or their reply. */
   | { id: string; kind: 'incoming'; text: string }
   | { id: string; kind: 'outgoing'; text: string; problem: string | null }
-  | { id: string; kind: 'public_reply'; text: string }
+  /** A public reply carries its own failure: it is as refusable as a DM. */
+  | { id: string; kind: 'public_reply'; text: string; problem: string | null }
   | { id: string; kind: 'separator'; text: string }
   /** Something Populr does that the fan never sees — a tag, a stage move. */
   | { id: string; kind: 'note'; text: string }
@@ -119,10 +120,14 @@ export function buildConversation(input: ConversationInput): Conversation {
       // The executor's own rendered body, so the preview shows the greeting
       // filled in and the tracked link in place rather than the template.
       const text = stringField(step.output, 'text') ?? cfg.text;
+      // A step the executor refused is the most important thing Preview can
+      // show — a flow that DMs a commenter on a platform that won't allow it
+      // looks perfect until it silently sends nothing.
+      const problem = step.status === 'failed' ? step.detail : null;
       items.push(
         cfg.kind === 'comment_reply'
-          ? { id, kind: 'public_reply', text }
-          : { id, kind: 'outgoing', text, problem: step.status === 'failed' ? step.detail : null },
+          ? { id, kind: 'public_reply', text, problem }
+          : { id, kind: 'outgoing', text, problem },
       );
       continue;
     }

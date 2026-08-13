@@ -142,6 +142,36 @@ describe('reading a simulation as a conversation', () => {
     expect(items.some(i => 'text' in i && i.text === FOLLOW_UP)).toBe(false);
   });
 
+  it('never draws a message the platform refused as though it was sent', () => {
+    const graph = graphFixture();
+    graph.nodes[1] = {
+      id: 'send', type: 'send', position: { x: 280, y: 0 },
+      config: { kind: 'comment_reply', text: 'Sent you a DM!' },
+    };
+    const refused = {
+      matched: true, reason: null,
+      steps: [
+        { nodeId: 'trigger', nodeType: 'trigger', status: 'ok' as const, detail: 'Matched “guide”', branch: 'next' as const },
+        {
+          nodeId: 'send', nodeType: 'send', status: 'failed' as const,
+          detail: 'instagram doesn’t support public comment replies.',
+        },
+      ],
+    };
+
+    const { items } = buildConversation({
+      graph, result: refused, channel: 'comment',
+      triggerText: 'guide', replyText: null, pauseAtReplyCheck: true,
+    });
+
+    // A public reply is as refusable as a DM, and a preview that shows it
+    // going out anyway is the exact lie this panel exists to prevent.
+    expect(items[items.length - 1]).toMatchObject({
+      kind: 'public_reply',
+      problem: 'instagram doesn’t support public comment replies.',
+    });
+  });
+
   it('says why nothing would happen when the trigger wouldn’t fire', () => {
     const { items } = buildConversation({
       graph: graphFixture(),

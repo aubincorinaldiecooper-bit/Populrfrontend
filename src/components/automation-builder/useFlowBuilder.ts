@@ -94,12 +94,22 @@ export function useFlowBuilder(flowId: string | null) {
    * Deliberately the server's answer and not a local re-implementation: it is
    * the same call Activate makes, so the notification bell can never say "all
    * caught up" about a flow the server would refuse.
+   *
+   * Answers are sequenced because they can overtake each other: two saves in
+   * quick succession each validate, and opening a different automation starts
+   * its own. Whichever request left last is the only one describing the graph
+   * on screen — an earlier answer arriving after it would put blockers on the
+   * bell for a version that no longer exists, or clear ones that still stand.
    */
+  const validationSeq = useRef(0);
   const refreshValidation = useCallback(async () => {
     if (!flowId) return [];
+    const seq = ++validationSeq.current;
     try {
       const result = await fetchFlowValidation(flowId);
-      setProblems(result.problems);
+      // Still returned to the caller — Activate asks directly and wants its
+      // own answer — but a superseded one must not reach the bell.
+      if (seq === validationSeq.current) setProblems(result.problems);
       return result.problems;
     } catch {
       return [];
@@ -364,6 +374,10 @@ export function useFlowBuilder(flowId: string | null) {
       dirty.current = false;
       setSaveState('saved');
       setSavedAt(Date.now());
+      // The server saved this graph itself, so no autosave follows to carry
+      // the re-check. Without this the bell would keep the count from before
+      // the AI's change — which is most of the changes a creator makes.
+      void refreshValidation();
 
       setChangeCard({
         summary: result.summary,
@@ -384,7 +398,7 @@ export function useFlowBuilder(flowId: string | null) {
     } finally {
       setComposing(false);
     }
-  }, [flowId, composing, graph, name, selectedNodeId, pushUndo, highlight]);
+  }, [flowId, composing, graph, name, selectedNodeId, pushUndo, highlight, refreshValidation]);
 
   /** Undo the last change — AI or manual — and save the restored graph. */
   const undo = useCallback(() => {
