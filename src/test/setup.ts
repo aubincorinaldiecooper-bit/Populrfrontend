@@ -22,6 +22,14 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
+// jsdom has no layout, so it implements no scrolling either — scrollIntoView
+// is simply absent. Anything that brings a control into view (the builder's
+// notification panel, the node inspector, the preview conversation) calls it
+// during a normal render, and an absent method throws rather than no-opping.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 // jsdom reflects <dialog>'s `open` attribute but doesn't implement the
 // showModal()/close() methods (longstanding jsdom gap) — Astryx's
 // Dialog/AlertDialog and anything built on them call these directly, so

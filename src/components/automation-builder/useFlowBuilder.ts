@@ -87,6 +87,25 @@ export function useFlowBuilder(flowId: string | null) {
   const saving = useRef(false);
   const pending = useRef<{ graph: FlowGraph; name: string } | null>(null);
 
+  // ------------------------------------------------------- validate/activate
+  /**
+   * Ask the server what still stands between this flow and going live.
+   *
+   * Deliberately the server's answer and not a local re-implementation: it is
+   * the same call Activate makes, so the notification bell can never say "all
+   * caught up" about a flow the server would refuse.
+   */
+  const refreshValidation = useCallback(async () => {
+    if (!flowId) return [];
+    try {
+      const result = await fetchFlowValidation(flowId);
+      setProblems(result.problems);
+      return result.problems;
+    } catch {
+      return [];
+    }
+  }, [flowId]);
+
   // ---------------------------------------------------------------- load
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +128,9 @@ export function useFlowBuilder(flowId: string | null) {
         // the creator has already arranged is left exactly as they left it.
         setGraph(needsLayout(loaded.graph) ? layoutGraph(loaded.graph) : loaded.graph);
         dirty.current = false;
+        // So the bell is right the moment the builder opens, rather than
+        // after the first edit.
+        void refreshValidation();
       })
       .catch(err => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load this automation.');
@@ -117,7 +139,7 @@ export function useFlowBuilder(flowId: string | null) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [flowId]);
+  }, [flowId, refreshValidation]);
 
   // ------------------------------------------------------------- autosave
   const persist = useCallback(async (next: { graph: FlowGraph; name: string }) => {
@@ -150,6 +172,10 @@ export function useFlowBuilder(flowId: string | null) {
       setDelegationWarning(warning ?? null);
       setSaveState('saved');
       setSavedAt(Date.now());
+      // Re-check now that the server holds this version. The notification bell
+      // is only useful if it keeps up with the edit that just landed — and
+      // asking any earlier would validate the previous graph.
+      void refreshValidation();
     } catch (err) {
       // Deliberately surfaced. "Autosaved just now" is a promise, and a failed
       // save that shows nothing is the one way this UI can lie to a creator.
@@ -158,7 +184,7 @@ export function useFlowBuilder(flowId: string | null) {
     } finally {
       saving.current = false;
     }
-  }, [flowId]);
+  }, [flowId, refreshValidation]);
 
   useEffect(() => {
     if (!dirty.current || !flowId) return;
@@ -371,18 +397,6 @@ export function useFlowBuilder(flowId: string | null) {
     setHighlighted([]);
     setCanUndo(undoStack.current.length > 0);
   }, []);
-
-  // ------------------------------------------------------- validate/activate
-  const refreshValidation = useCallback(async () => {
-    if (!flowId) return [];
-    try {
-      const result = await fetchFlowValidation(flowId);
-      setProblems(result.problems);
-      return result.problems;
-    } catch {
-      return [];
-    }
-  }, [flowId]);
 
   const activate = useCallback(async (): Promise<{ ok: boolean; problems: FlowProblem[] }> => {
     if (!flowId) return { ok: false, problems: [] };

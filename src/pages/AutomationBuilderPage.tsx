@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Loader2, Pause, PenLine, Play, Eye, Zap,
+  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Loader2, MessageCircle, Pause, PenLine, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
+import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
-import NodeInspector from '../components/automation-builder/NodeInspector';
+import NodeInspector, { type BuilderQuestion } from '../components/automation-builder/NodeInspector';
 import AIComposer from '../components/automation-builder/AIComposer';
-import TestPanel from '../components/automation-builder/TestPanel';
-import ReviewPanel from '../components/automation-builder/ReviewPanel';
+import BuildingOverlay from '../components/automation-builder/BuildingOverlay';
+import PreviewPanel from '../components/automation-builder/PreviewPanel';
+import NotificationBell from '../components/automation-builder/NotificationBell';
+import NotificationsPanel from '../components/automation-builder/NotificationsPanel';
 import HistoryDrawer from '../components/automation-builder/HistoryDrawer';
 import {
   fetchCapabilities, fetchConnectedAccounts, fetchFlowBuilderMeta,
   isBackendConfigured, testFlow,
   type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities,
 } from '../lib/api';
+import { platformMeta } from '../lib/platformMeta';
+import { derivedNotifications, type BuilderNotification } from '../lib/builderNotifications';
 import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
 
@@ -25,12 +30,16 @@ import LoadingState from '../components/LoadingState';
  *
  * The canvas owns the viewport; everything else is transient. Nothing sits
  * permanently on either side of it — the inspector appears when a step is
- * selected, Test and Review when asked for, history only when opened. That
- * restraint is the product: a creator should be looking at their automation,
- * not at the tool.
+ * selected, Preview and Notifications when asked for, history only when
+ * opened. That restraint is the product: a creator should be looking at their
+ * automation, not at the tool.
+ *
+ * The three things in the top right are deliberately three different
+ * questions. Preview: how will this feel? The bell: what does Populr need from
+ * me? Activate: put it live. Nothing else earns a place up there.
  */
 
-type SidePanel = 'test' | 'review' | 'history' | null;
+type SidePanel = 'preview' | 'notifications' | 'history' | null;
 
 export default function AutomationBuilderPage() {
   const { flowId = null } = useParams<{ flowId: string }>();
@@ -59,6 +68,18 @@ export default function AutomationBuilderPage() {
   const [activating, setActivating] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [addMenu, setAddMenu] = useState<{ nodeId: string; branch: 'next' | 'yes' | 'no' } | null>(null);
+
+  // Arriving at a step from a notification: which one to bring into view, and
+  // what Populr is asking about it once we're there.
+  const [focus, setFocus] = useState<{ nodeId: string; signal: number }>({ nodeId: '', signal: 0 });
+  const [question, setQuestion] = useState<(BuilderQuestion & {
+    id: string; nodeId: string; sourceMessage: string;
+  }) | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  /** A refused activation sent the creator to the bell — say so briefly. */
+  const [bellAttention, setBellAttention] = useState(false);
+
+  const notifications = useBuilderNotifications(problems, graph);
 
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -114,26 +135,79 @@ export default function AutomationBuilderPage() {
   // --------------------------------------------------------------- actions
   const selectedNode = nodeById(graph, selectedNodeId);
 
+  /**
+   * The question actually on screen.
+   *
+   * A question belongs to a step AND to the notification that opened it, so
+   * it stops being asked the moment either moves on — a different step
+   * selected, or the thing it asked about answered. Derived rather than
+   * cleared in an effect: "is this still being asked" is a fact about the
+   * current state, not an event to react to.
+   */
+  const activeQuestion = useMemo(() => {
+    if (!question || question.nodeId !== selectedNodeId) return null;
+    return notifications.open.some(n => n.id === question.id) ? question : null;
+  }, [question, selectedNodeId, notifications.open]);
+
   const nodeProblems = useMemo(
-    () => problems.filter(p => p.nodeId === selectedNodeId).map(p => p.message),
-    [problems, selectedNodeId],
+    () =>
+      problems
+        .filter(p => p.nodeId === selectedNodeId)
+        // The open question is already on screen in Populr's words; printing
+        // the validator's sentence beside it would say the same thing twice.
+        .filter(p => p.message !== activeQuestion?.sourceMessage)
+        .map(p => p.message),
+    [problems, selectedNodeId, activeQuestion],
   );
 
-  const openReview = useCallback(async () => {
-    setPanel('review');
+  const openNotifications = useCallback(async () => {
+    setPanel('notifications');
     setChecking(true);
     await refreshValidation();
     setChecking(false);
   }, [refreshValidation]);
 
-  const runTest = useCallback(async (input: { channel: 'comment' | 'dm'; text: string; replied: boolean }) => {
-    if (!flowId) return;
+  /** Take the creator to the step a notification is about, and ask it there. */
+  const openNotification = useCallback((notification: BuilderNotification) => {
+    setHighlightId(notification.id);
+    if (!notification.nodeId) return;
+    setSelectedNodeId(notification.nodeId);
+    setFocus(current => ({ nodeId: notification.nodeId!, signal: current.signal + 1 }));
+    setQuestion(
+      notification.kind === 'question'
+        ? {
+            id: notification.id,
+            nodeId: notification.nodeId,
+            title: notification.title,
+            field: notification.field,
+            sourceMessage: notification.sourceMessage,
+          }
+        : null,
+    );
+    // Wide enough for both, the feed stays open beside the step — it is an
+    // index, and closing it would cost the creator their place in the list.
+    // Narrow, the two would be stacked on top of each other.
+    if (window.innerWidth < 640) setPanel(null);
+  }, [setSelectedNodeId]);
+
+  useEffect(() => {
+    if (!bellAttention) return;
+    const timer = setTimeout(() => setBellAttention(false), 2200);
+    return () => clearTimeout(timer);
+  }, [bellAttention]);
+
+  const runPreview = useCallback(async (
+    input: { channel: 'comment' | 'dm'; text: string; replied: boolean },
+  ): Promise<FlowSimulationResult | null> => {
+    if (!flowId) return null;
     setTesting(true);
-    setTestResult(null);
     try {
-      setTestResult(await testFlow(flowId, input));
+      const result = await testFlow(flowId, input);
+      setTestResult(result);
+      return result;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not run the test.', 'error');
+      showToast(err instanceof Error ? err.message : 'Could not run the preview.', 'error');
+      return null;
     } finally {
       setTesting(false);
     }
@@ -142,22 +216,27 @@ export default function AutomationBuilderPage() {
   const onActivate = useCallback(async () => {
     setActivating(true);
     try {
+      // The server decides. `problems` here is its answer, not a local guess —
+      // the bell only ever shows what activation itself would refuse over.
       const result = await activate();
       if (result.ok) {
         showToast('Automation activated', 'success');
         setPanel(null);
-      } else {
-        // Not an error the creator caused blindly — show them exactly what's
-        // missing, in the panel built to explain it.
-        setPanel('review');
-        showToast('A few things need fixing first', 'error');
+        return;
       }
+      // Not a modal and not a wall of validation: the same feed the bell
+      // already offers, opened on the first thing standing in the way.
+      setPanel('notifications');
+      setBellAttention(true);
+      const first = derivedNotifications(result.problems, graph)[0];
+      setHighlightId(first?.id ?? null);
+      showToast('Populr needs a couple of things first', 'error');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not activate.', 'error');
     } finally {
       setActivating(false);
     }
-  }, [activate, showToast]);
+  }, [activate, graph, showToast]);
 
   const onPause = useCallback(async () => {
     try {
@@ -292,25 +371,21 @@ export default function AutomationBuilderPage() {
 
           <button
             type="button"
-            onClick={() => setPanel(panel === 'test' ? null : 'test')}
+            onClick={() => setPanel(panel === 'preview' ? null : 'preview')}
             disabled={isEmpty}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8E4DF] bg-white
               px-2.5 md:px-3 py-1.5 text-[13px] font-medium text-[#111111] hover:border-[#D8D3CC]
               disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
           >
-            <Play size={14} /> <span className="hidden md:inline">Test</span>
+            <MessageCircle size={14} /> <span className="hidden md:inline">Preview</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => (panel === 'review' ? setPanel(null) : void openReview())}
-            disabled={isEmpty}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8E4DF] bg-white
-              px-2.5 md:px-3 py-1.5 text-[13px] font-medium text-[#111111] hover:border-[#D8D3CC]
-              disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
-          >
-            <Eye size={14} /> <span className="hidden md:inline">Review</span>
-          </button>
+          <NotificationBell
+            count={notifications.unresolvedCount}
+            open={panel === 'notifications'}
+            attention={bellAttention}
+            onClick={() => (panel === 'notifications' ? setPanel(null) : void openNotifications())}
+          />
 
           {live ? (
             <button
@@ -371,9 +446,15 @@ export default function AutomationBuilderPage() {
           onConnect={connectNodes}
           onAddAfter={onAddAfter}
           fitSignal={fitSignal}
+          focusNodeId={focus.nodeId || null}
+          focusSignal={focus.signal}
         />
 
-        {isEmpty && (
+        {/* Building an automation takes a few seconds of someone else's
+            computer thinking. Say so on the canvas, where they're looking. */}
+        {composing && <BuildingOverlay building={isEmpty} />}
+
+        {isEmpty && !composing && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
             <button
               type="button"
@@ -398,6 +479,7 @@ export default function AutomationBuilderPage() {
             capabilities={capabilities}
             workspaceTags={workspaceTags}
             problems={nodeProblems}
+            question={activeQuestion}
             onChange={patch => updateNodeConfig(selectedNode.id, patch)}
             onDelete={() => {
               const label = NODE_LABEL[selectedNode.type];
@@ -451,25 +533,24 @@ export default function AutomationBuilderPage() {
           </>
         )}
 
-        {panel === 'test' && (
-          <TestPanel
+        {panel === 'preview' && (
+          <PreviewPanel
             graph={graph}
+            platformLabel={triggerPlatform ? platformMeta(triggerPlatform).name : null}
             running={testing}
-            result={testResult}
-            onRun={runTest}
+            onRun={runPreview}
+            onReset={() => setTestResult(null)}
             onClose={() => { setPanel(null); setTestResult(null); }}
           />
         )}
 
-        {panel === 'review' && (
-          <ReviewPanel
-            graph={graph}
-            problems={problems}
-            accounts={accounts}
-            posts={posts}
+        {panel === 'notifications' && (
+          <NotificationsPanel
+            notifications={notifications.feed}
             checking={checking}
+            highlightId={highlightId}
+            onSelect={openNotification}
             onClose={() => setPanel(null)}
-            onSelectNode={id => { setSelectedNodeId(id); setPanel(null); }}
           />
         )}
 
