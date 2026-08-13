@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import {
   ACTION_OPTIONS, CONDITION_OPTIONS, LEAD_STAGES, NODE_LABEL, SEND_OPTIONS, TRIGGER_OPTIONS,
@@ -40,8 +40,13 @@ function Label({ children, hint }: { children: React.ReactNode; hint?: string })
   );
 }
 
-function Section({ children }: { children: React.ReactNode }) {
-  return <div className="px-4 py-3 border-b border-[#F0EDE8] last:border-b-0">{children}</div>;
+/** `field` names the control a notification can point at (see BuilderQuestion). */
+function Section({ children, field }: { children: React.ReactNode; field?: string }) {
+  return (
+    <div data-field={field} className="px-4 py-3 border-b border-[#F0EDE8] last:border-b-0">
+      {children}
+    </div>
+  );
 }
 
 type Unit = 'minutes' | 'hours' | 'days';
@@ -122,6 +127,13 @@ function DurationField({
   );
 }
 
+/** What Populr is asking about this step, arrived at from a notification. */
+export interface BuilderQuestion {
+  title: string;
+  /** Which Section answers it — scrolled to and focused when it opens. */
+  field: string | null;
+}
+
 export interface NodeInspectorProps {
   node: FlowNode;
   accounts: ConnectedAccount[];
@@ -130,6 +142,7 @@ export interface NodeInspectorProps {
   capabilities: PlatformCapabilities | null;
   workspaceTags: string[];
   problems: string[];
+  question?: BuilderQuestion | null;
   onChange: (patch: Record<string, unknown>) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -137,13 +150,25 @@ export interface NodeInspectorProps {
 }
 
 export default function NodeInspector({
-  node, accounts, posts, postsLoading, capabilities, workspaceTags, problems,
+  node, accounts, posts, postsLoading, capabilities, workspaceTags, problems, question = null,
   onChange, onDelete, onClose, onRefreshPosts,
 }: NodeInspectorProps) {
   const [pickingPost, setPickingPost] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
+
+  // Arriving from a notification should land on the control that answers it,
+  // not at the top of a panel the creator then has to read through.
+  useEffect(() => {
+    if (!question?.field) return;
+    const section = panelRef.current?.querySelector<HTMLElement>(`[data-field="${question.field}"]`);
+    if (!section) return;
+    section.scrollIntoView({ block: 'nearest' });
+    section.querySelector<HTMLElement>('input, textarea, [role="combobox"], button')?.focus();
+  }, [question]);
 
   return (
     <aside
+      ref={panelRef}
       className="absolute left-0 top-0 bottom-0 z-20 w-[300px] max-w-[85vw] bg-white
         border-r border-[#E8E4DF] shadow-[4px_0_24px_rgba(17,17,17,0.05)]
         flex flex-col animate-in slide-in-from-left-2 fade-in duration-150"
@@ -165,6 +190,19 @@ export default function NodeInspector({
       {/* The composer floats over the canvas; the padding here keeps the last
           control clear of it rather than hidden underneath. */}
       <div className="flex-1 overflow-y-auto pb-28">
+        {/* The question in Populr's own words, sitting on the step it belongs
+            to. The notification feed is only an index into these — this is
+            where the answer actually happens. */}
+        {question && (
+          <div
+            role="status"
+            className="mx-4 mt-3 rounded-xl rounded-tl-sm border border-[#E4EFC4] bg-[#F9FFE9] px-3 py-2.5"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#4D7C0F]">Populr asks</p>
+            <p className="mt-0.5 text-[12.5px] leading-snug text-[#111111]">{question.title}</p>
+          </div>
+        )}
+
         {problems.length > 0 && (
           <div className="mx-4 mt-3 rounded-lg bg-[#FFF7ED] border border-[#F5D9B8] px-3 py-2">
             {problems.map(p => (
@@ -188,7 +226,7 @@ export default function NodeInspector({
           <SendInspector node={node} capabilities={capabilities} onChange={onChange} />
         )}
         {node.type === 'wait' && (
-          <Section>
+          <Section field="duration">
             <Label hint="Nothing happens during this pause — the next step runs when it's over.">
               Wait for
             </Label>
@@ -315,7 +353,7 @@ function TriggerInspector({
 
   return (
     <>
-      <Section>
+      <Section field="account">
         <Label hint="Only this account's posts and DMs will trigger the automation.">Account</Label>
         <Select
           value={cfg.accountId ?? ''}
@@ -366,7 +404,7 @@ function TriggerInspector({
       </Section>
 
       {cfg.kind === 'comment' && (
-        <Section>
+        <Section field="post">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[12px] font-medium text-[#111111]">Post or reel</span>
             {cfg.accountId && (
@@ -475,7 +513,7 @@ function TriggerInspector({
         </Section>
       )}
 
-      <Section>
+      <Section field="keywords">
         <Label hint="Leave empty and choose “Any message” to react to everything.">Keywords</Label>
         <KeywordInput
           keywords={cfg.keywords}
@@ -533,7 +571,7 @@ function ConditionInspector({
       </Section>
 
       {cfg.kind === 'text_contains' && (
-        <Section>
+        <Section field="keywords">
           <Label>Their message contains</Label>
           <KeywordInput keywords={cfg.keywords} onChange={(keywords: string[]) => onChange({ keywords })} />
           <div className="mt-2">
@@ -552,7 +590,7 @@ function ConditionInspector({
       )}
 
       {cfg.kind === 'has_tag' && (
-        <Section>
+        <Section field="tag">
           <Label>Tag</Label>
           <TagCombobox
             value={cfg.tag}
@@ -626,7 +664,7 @@ function SendInspector({
         )}
       </Section>
 
-      <Section>
+      <Section field="text">
         <Label hint="Use {first_name} to greet them by name.">Message</Label>
         <textarea
           value={cfg.text}
@@ -637,7 +675,7 @@ function SendInspector({
         />
       </Section>
 
-      <Section>
+      <Section field="link">
         <Label hint="Populr swaps this for a tracked link so you can see who clicked.">Link</Label>
         <input
           type="url"
@@ -687,7 +725,7 @@ function ActionInspector({
       </Section>
 
       {(cfg.kind === 'add_tag' || cfg.kind === 'remove_tag') && (
-        <Section>
+        <Section field="tag">
           <Label hint="Tags group people in Contacts so you can find them later.">Tag</Label>
           <TagCombobox
             value={cfg.tag}
@@ -699,7 +737,7 @@ function ActionInspector({
       )}
 
       {cfg.kind === 'set_stage' && (
-        <Section>
+        <Section field="stage">
           <Label hint="Automations only ever move someone forward, never back.">Stage</Label>
           <Select
             value={cfg.stage ?? ''}

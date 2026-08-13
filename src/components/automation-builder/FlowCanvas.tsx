@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Background, BackgroundVariant, ReactFlow, ReactFlowProvider,
   useReactFlow, useNodesInitialized,
@@ -35,13 +35,17 @@ export interface FlowCanvasProps {
   onAddAfter: (nodeId: string, branch: 'next' | 'yes' | 'no') => void;
   /** Bumped by the parent to request a re-fit (after AI generation, say). */
   fitSignal: number;
+  /** A step to bring into view — a notification the creator just tapped. */
+  focusNodeId?: string | null;
+  /** Bumped alongside focusNodeId, so asking for the same step twice works. */
+  focusSignal?: number;
 }
 
 function CanvasInner({
   graph, selectedNodeId, highlighted, problems, posts, activePath,
-  onSelect, onMove, onConnect, onAddAfter, fitSignal,
+  onSelect, onMove, onConnect, onAddAfter, fitSignal, focusNodeId = null, focusSignal = 0,
 }: FlowCanvasProps) {
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter } = useReactFlow();
   const initialized = useNodesInitialized();
 
   const problemByNode = useMemo(() => {
@@ -124,6 +128,22 @@ function CanvasInner({
     }, 40);
     return () => clearTimeout(timer);
   }, [initialized, fitSignal, fitView, graph.nodes.length]);
+
+  // Pan to a step the creator asked for from somewhere else — today, a
+  // notification. Guarded on the signal rather than the id so re-opening the
+  // same question pans again, and so an unrelated re-render (a drag, a save)
+  // never yanks the viewport back.
+  const lastFocus = useRef(0);
+  useEffect(() => {
+    if (!focusSignal || focusSignal === lastFocus.current || !focusNodeId) return;
+    lastFocus.current = focusSignal;
+    const node = graph.nodes.find(n => n.id === focusNodeId);
+    if (!node) return;
+    void setCenter(node.position.x + NODE_WIDTH / 2, node.position.y + NODE_HEIGHT / 2, {
+      zoom: 1,
+      duration: 360,
+    });
+  }, [focusSignal, focusNodeId, graph.nodes, setCenter]);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     for (const change of changes) {

@@ -87,6 +87,35 @@ export function useFlowBuilder(flowId: string | null) {
   const saving = useRef(false);
   const pending = useRef<{ graph: FlowGraph; name: string } | null>(null);
 
+  // ------------------------------------------------------- validate/activate
+  /**
+   * Ask the server what still stands between this flow and going live.
+   *
+   * Deliberately the server's answer and not a local re-implementation: it is
+   * the same call Activate makes, so the notification bell can never say "all
+   * caught up" about a flow the server would refuse.
+   *
+   * Answers are sequenced because they can overtake each other: two saves in
+   * quick succession each validate, and opening a different automation starts
+   * its own. Whichever request left last is the only one describing the graph
+   * on screen — an earlier answer arriving after it would put blockers on the
+   * bell for a version that no longer exists, or clear ones that still stand.
+   */
+  const validationSeq = useRef(0);
+  const refreshValidation = useCallback(async () => {
+    if (!flowId) return [];
+    const seq = ++validationSeq.current;
+    try {
+      const result = await fetchFlowValidation(flowId);
+      // Still returned to the caller — Activate asks directly and wants its
+      // own answer — but a superseded one must not reach the bell.
+      if (seq === validationSeq.current) setProblems(result.problems);
+      return result.problems;
+    } catch {
+      return [];
+    }
+  }, [flowId]);
+
   // ---------------------------------------------------------------- load
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +138,9 @@ export function useFlowBuilder(flowId: string | null) {
         // the creator has already arranged is left exactly as they left it.
         setGraph(needsLayout(loaded.graph) ? layoutGraph(loaded.graph) : loaded.graph);
         dirty.current = false;
+        // So the bell is right the moment the builder opens, rather than
+        // after the first edit.
+        void refreshValidation();
       })
       .catch(err => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load this automation.');
@@ -117,7 +149,7 @@ export function useFlowBuilder(flowId: string | null) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [flowId]);
+  }, [flowId, refreshValidation]);
 
   // ------------------------------------------------------------- autosave
   const persist = useCallback(async (next: { graph: FlowGraph; name: string }) => {
@@ -150,6 +182,10 @@ export function useFlowBuilder(flowId: string | null) {
       setDelegationWarning(warning ?? null);
       setSaveState('saved');
       setSavedAt(Date.now());
+      // Re-check now that the server holds this version. The notification bell
+      // is only useful if it keeps up with the edit that just landed — and
+      // asking any earlier would validate the previous graph.
+      void refreshValidation();
     } catch (err) {
       // Deliberately surfaced. "Autosaved just now" is a promise, and a failed
       // save that shows nothing is the one way this UI can lie to a creator.
@@ -158,7 +194,7 @@ export function useFlowBuilder(flowId: string | null) {
     } finally {
       saving.current = false;
     }
-  }, [flowId]);
+  }, [flowId, refreshValidation]);
 
   useEffect(() => {
     if (!dirty.current || !flowId) return;
@@ -338,6 +374,10 @@ export function useFlowBuilder(flowId: string | null) {
       dirty.current = false;
       setSaveState('saved');
       setSavedAt(Date.now());
+      // The server saved this graph itself, so no autosave follows to carry
+      // the re-check. Without this the bell would keep the count from before
+      // the AI's change — which is most of the changes a creator makes.
+      void refreshValidation();
 
       setChangeCard({
         summary: result.summary,
@@ -358,7 +398,7 @@ export function useFlowBuilder(flowId: string | null) {
     } finally {
       setComposing(false);
     }
-  }, [flowId, composing, graph, name, selectedNodeId, pushUndo, highlight]);
+  }, [flowId, composing, graph, name, selectedNodeId, pushUndo, highlight, refreshValidation]);
 
   /** Undo the last change — AI or manual — and save the restored graph. */
   const undo = useCallback(() => {
@@ -371,18 +411,6 @@ export function useFlowBuilder(flowId: string | null) {
     setHighlighted([]);
     setCanUndo(undoStack.current.length > 0);
   }, []);
-
-  // ------------------------------------------------------- validate/activate
-  const refreshValidation = useCallback(async () => {
-    if (!flowId) return [];
-    try {
-      const result = await fetchFlowValidation(flowId);
-      setProblems(result.problems);
-      return result.problems;
-    } catch {
-      return [];
-    }
-  }, [flowId]);
 
   const activate = useCallback(async (): Promise<{ ok: boolean; problems: FlowProblem[] }> => {
     if (!flowId) return { ok: false, problems: [] };

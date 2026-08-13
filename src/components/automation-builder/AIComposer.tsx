@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, ArrowUp, Check, X, History, Loader2, AlertCircle } from 'lucide-react';
+import { Sparkles, ArrowUp, Check, X, History, AlertCircle } from 'lucide-react';
+import PairedRevolution from '../PairedRevolution';
 import { NODE_LABEL, type FlowNode } from '../../lib/flowSchema';
 import type { ChangeCard } from './useFlowBuilder';
 
@@ -213,7 +214,7 @@ export default function AIComposer({
               focus-visible:ring-offset-1"
             aria-label="Send"
           >
-            {composing ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={15} />}
+            {composing ? <PairedRevolution size="sm" /> : <ArrowUp size={15} />}
           </button>
         </div>
       </div>
