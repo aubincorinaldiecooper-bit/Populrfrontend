@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
+import ProfileImage from '../components/ProfileImage';
 import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
 import InboxLauncher from '../components/inbox/InboxButton';
@@ -320,13 +321,15 @@ export default function ContactsPage() {
                     className="border-b border-[#F0EEEA] last:border-0 hover:bg-[#FAFAF8] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chartreuse">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
-                        {contact.avatar_url ? (
-                          <img src={contact.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-[#FAFAF8] flex items-center justify-center flex-shrink-0 text-[12px] font-semibold text-[#9B9B8F]">
-                            {(contact.name || contact.handle || '?').charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <ProfileImage
+                          src={contact.avatar_url}
+                          className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                          fallback={
+                            <div className="w-9 h-9 rounded-full bg-[#FAFAF8] flex items-center justify-center flex-shrink-0 text-[12px] font-semibold text-[#9B9B8F]">
+                              {(contact.name || contact.handle || '?').charAt(0).toUpperCase()}
+                            </div>
+                          }
+                        />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="text-[13px] font-semibold text-[#111111] truncate">{contact.handle ? `@${contact.handle}` : contact.name || 'Unknown'}</p>
@@ -477,13 +480,15 @@ function ContactDetailView({
         <>
           <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
             <div className="flex items-center gap-4">
-              {detail.contact.avatar_url ? (
-                <img src={detail.contact.avatar_url} alt="" className="w-16 h-16 rounded-full object-cover" />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-[20px] font-semibold text-[#9B9B8F]">
-                  {(detail.contact.name || detail.contact.handle || '?').charAt(0).toUpperCase()}
-                </div>
-              )}
+              <ProfileImage
+                src={detail.contact.avatar_url}
+                className="w-16 h-16 rounded-full object-cover"
+                fallback={
+                  <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-[20px] font-semibold text-[#9B9B8F]">
+                    {(detail.contact.name || detail.contact.handle || '?').charAt(0).toUpperCase()}
+                  </div>
+                }
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="pop-section-heading">{detail.contact.name || detail.contact.handle || 'Unknown'}</h1>

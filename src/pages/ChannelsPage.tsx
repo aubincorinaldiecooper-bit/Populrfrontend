@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import {
   Loader2, Check, AlertCircle, ArrowRight, RefreshCw, Link2Off,
 } from 'lucide-react';
+import ProfileImage from '../components/ProfileImage';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import InboxLauncher from '../components/inbox/InboxButton';
@@ -335,13 +336,15 @@ export default function ChannelsPage() {
                       : undefined;
                     return (
                       <div key={a.id} className="flex items-center gap-3">
-                        {a.avatar_url ? (
-                          <img src={a.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
-                            <Icon size={14} style={{ color: p.color }} />
-                          </div>
-                        )}
+                        <ProfileImage
+                          src={a.avatar_url}
+                          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          fallback={
+                            <div className="w-8 h-8 rounded-full bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
+                              <Icon size={14} style={{ color: p.color }} />
+                            </div>
+                          }
+                        />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[13px] font-medium text-[#111111] truncate">{label}</span>
