@@ -101,6 +101,19 @@ vi.mock('../lib/api', async () => {
   };
 });
 
+/**
+ * Delete the first automation on the list.
+ *
+ * Delete lives in the card's overflow menu now: a permanently visible red icon
+ * gave the most destructive action the most weight on a page people scan, and
+ * sat one mis-click from Pause. Every test here goes through the same two
+ * steps a creator does.
+ */
+async function deleteFirst(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getAllByLabelText(/more options for/i)[0]);
+  await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+}
+
 /** The toast's Undo handler, captured from the success toast. */
 function undoFrom(showToast: ReturnType<typeof vi.fn>): (() => void) | undefined {
   const call = showToast.mock.calls.find(c => String(c[0]).includes('deleted'));
@@ -129,7 +142,7 @@ describe('deleting an automation, then coming back to the page', () => {
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
 
     expect(mockDeleteFlow).toHaveBeenCalledWith('f1');
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
@@ -148,7 +161,7 @@ describe('deleting an automation, then coming back to the page', () => {
     const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
     // Left unresolved so the return happens while the request is still open —
     // "sent" is not "answered", and a list fetched in between is stale.
     view.unmount();
@@ -179,10 +192,10 @@ describe('deleting an automation, then coming back to the page', () => {
       const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
       await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
 
-      await user.click(screen.getAllByLabelText(/delete/i)[0]);
+      await deleteFirst(user);
       landPendingDelete();
       await act(async () => { await Promise.resolve(); });
-      await user.click(screen.getAllByLabelText(/delete/i)[0]);
+      await deleteFirst(user);
       landPendingDelete();
       await act(async () => { await Promise.resolve(); });
 
@@ -214,7 +227,7 @@ describe('deleting an automation, then coming back to the page', () => {
 
     const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
     view.unmount();
 
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
@@ -238,7 +251,7 @@ describe('deleting an automation, then coming back to the page', () => {
 
     const first = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
     first.unmount();
 
     const second = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
@@ -270,7 +283,7 @@ describe('deleting an automation, then coming back to the page', () => {
 
       const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
       await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
-      await user.click(screen.getAllByLabelText(/delete/i)[0]);
+      await deleteFirst(user);
       view.unmount();
 
       render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
@@ -306,7 +319,7 @@ describe('Undo', () => {
 
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
 
     landPendingDelete();
@@ -338,7 +351,7 @@ describe('Undo', () => {
 
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
 
     // Undo while the DELETE is still open.
     undoFrom(showToast)?.();
@@ -367,7 +380,7 @@ describe('Undo', () => {
 
     const first = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
     landPendingDelete();
     await act(async () => { await Promise.resolve(); });
 
@@ -396,7 +409,7 @@ describe('Undo', () => {
 
     render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
-    await user.click(screen.getAllByLabelText(/delete/i)[0]);
+    await deleteFirst(user);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
     undoFrom(showToast)?.();

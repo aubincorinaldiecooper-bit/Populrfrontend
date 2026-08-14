@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import {
-  Search, ArrowLeft, AlertCircle, X, Plus, Reply, Clock, Tag,
+  Search, ArrowLeft, AlertCircle, X, Plus, Reply, Clock, Tag, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
 import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
+import InboxLauncher from '../components/inbox/InboxButton';
 import EmptyState from '../components/EmptyState';
 import { TableSkeleton, Skeleton } from '../components/Skeleton';
 import {
@@ -44,6 +46,18 @@ function timeAgo(iso: string | null): string {
 
 export default function ContactsPage() {
   const backendConfigured = isBackendConfigured();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  /**
+   * The audience filter, arrived at by clicking "143 people" on an automation.
+   *
+   * Held in the URL rather than in state so the filtered view is a place: it
+   * survives a reload, it can be linked, and Back returns to the automation
+   * that sent you here. The automation's NAME comes from the response, not the
+   * link — a name in a URL would go stale the moment it was renamed.
+   */
+  const automationId = searchParams.get('automation');
+  const [automation, setAutomation] = useState<{ id: string; name: string } | null>(null);
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [total, setTotal] = useState(0);
@@ -84,6 +98,7 @@ export default function ContactsPage() {
       needsReply: needsReply ? true : undefined,
       sort: sortRecent ? 'recent' : undefined,
       tag: activeTag || undefined,
+      flowId: automationId || undefined,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     })
@@ -93,6 +108,7 @@ export default function ContactsPage() {
         setTotal(res.total);
         // Workspace-wide, not page-scoped — safe to keep across filters.
         setAllTags(res.allTags ?? []);
+        setAutomation(res.automation ?? null);
       })
       .catch(err => {
         if (seq !== loadSeq.current) return;
@@ -101,7 +117,7 @@ export default function ContactsPage() {
       .finally(() => {
         if (seq === loadSeq.current) setLoading(false);
       });
-  }, [backendConfigured, search, stageTab, urgentOnly, sortRecent, activeTag, page]);
+  }, [backendConfigured, search, stageTab, urgentOnly, sortRecent, activeTag, automationId, page]);
 
   useEffect(() => {
     // Data fetch from the backend, not derived state.
@@ -113,7 +129,7 @@ export default function ContactsPage() {
     // Resetting pagination when search/filter (external inputs) change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(0);
-  }, [search, stageTab, urgentOnly, sortRecent, activeTag]);
+  }, [search, stageTab, urgentOnly, sortRecent, activeTag, automationId]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -154,11 +170,14 @@ export default function ContactsPage() {
           // someone engages with an automation, and a primary button whose
           // only behavior was a toast explaining it does nothing was a dead
           // affordance — the empty state below carries that explanation.
-          <div className="relative hidden sm:block">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
-              className="pop-search w-56" />
-          </div>
+          <>
+            <InboxLauncher />
+            <div className="relative hidden sm:block">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
+                className="pop-search w-56" />
+            </div>
+          </>
         }
       />
 
@@ -169,6 +188,34 @@ export default function ContactsPage() {
         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts..."
           className="pop-search w-full" />
       </div>
+
+      {/* The audience one automation built. It sits above the ordinary
+          filters because it isn't one of them — it's why this page looks the
+          way it does right now, and it has to be as easy to leave as it was
+          to arrive at. */}
+      {automationId && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-[#EDFBCD]
+          border border-[#DDF5A8]">
+          <Zap size={14} className="text-[#111111] flex-shrink-0" />
+          <p className="text-[12px] text-[#111111] flex-1 min-w-0 truncate">
+            {automation
+              ? <>People <span className="font-semibold">{automation.name}</span> has reached</>
+              : 'People this automation has reached'}
+          </p>
+          <button
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('automation');
+              setSearchParams(next, { replace: true });
+            }}
+            aria-label="Show all contacts"
+            className="flex items-center gap-1 text-[11px] font-medium text-[#4A4A4A]
+              hover:text-[#111111] rounded px-1.5 py-0.5 transition-colors"
+          >
+            <X size={12} />Show all
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-1 mb-2 overflow-x-auto pb-1">
         {STAGE_TABS.map(t => (
@@ -219,7 +266,7 @@ export default function ContactsPage() {
         {loading ? (
           <TableSkeleton count={6} label="Loading contacts" />
         ) : !error && contacts.length === 0 ? (
-          search || stageTab !== 'all' || urgentOnly || activeTag ? (
+          search || stageTab !== 'all' || urgentOnly || activeTag || automationId ? (
             <EmptyState
               icon="search"
               title="No contacts match your filters"

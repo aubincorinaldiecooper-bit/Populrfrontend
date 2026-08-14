@@ -29,20 +29,29 @@ export default function NotificationBell({ count, open, attention, onClick }: No
       onClick={onClick}
       aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications, nothing unread'}
       aria-expanded={open}
-      className={`relative inline-flex items-center justify-center rounded-lg border bg-white
+      // Borderless, like Inbox beside it: these two report, they don't act,
+      // and giving them the same outline as Preview made four controls of
+      // equal weight out of two questions and two actions.
+      className={`relative inline-flex items-center justify-center rounded-lg
         h-[30px] w-[30px] text-[#111111] transition-colors
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]
-        ${open ? 'border-[#111111]' : 'border-[#E8E4DF] hover:border-[#D8D3CC]'}
+        ${open ? 'bg-[#F0EDE8]' : 'hover:bg-[#F4F1EC]'}
         ${attention ? 'ring-2 ring-[#C5FF3D] animate-in zoom-in-95 duration-150' : ''}`}
     >
       <Icon size={15} />
       {count > 0 && (
         <span
+          // Keyed on the count so a change remounts it and the bump replays.
+          // A number that quietly swaps from 2 to 3 in the corner of the eye
+          // is a change nobody sees; this is the smallest thing that says
+          // "that number just moved" without asking to be looked at.
+          key={count}
           // aria-hidden: the count is already in the button's label, and a
           // screen reader announcing "2" on its own says nothing useful.
           aria-hidden="true"
           className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full
-            bg-[#111111] text-white text-[10px] font-semibold leading-[16px] text-center"
+            bg-[#111111] text-white text-[10px] font-semibold leading-[16px] text-center
+            motion-safe:animate-[pop-badge-bump_320ms_ease-out]"
         >
           {count > 9 ? '9+' : count}
         </span>

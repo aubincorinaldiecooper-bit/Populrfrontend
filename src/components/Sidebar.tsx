@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
-  Home, Zap, Inbox, Users, Waypoints, Settings, Menu, X, Plus,
+  Home, Zap, Users, Waypoints, Settings, Menu, X, Plus,
 } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 
@@ -10,10 +10,15 @@ import AccountMenu from './AccountMenu';
 // straight to the automation builder. "Channels" is this surface's own
 // route (/connections redirects to it). Publishing surfaces (Create Post,
 // Content, etc.) stay reachable by URL but out of primary nav.
+//
+// Inbox is deliberately absent. It is not a place you go — it is something
+// that happens to you while you are building — so it lives with the
+// top-right controls and opens over whatever you are already doing. The
+// /inbox route still exists for a long triage session and for the links
+// that point at it.
 const navItems = [
   { path: '/', label: 'Home', icon: Home },
   { path: '/automations', label: 'Automations', icon: Zap },
-  { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/channels', label: 'Channels', icon: Waypoints },
   { path: '/settings', label: 'Settings', icon: Settings },

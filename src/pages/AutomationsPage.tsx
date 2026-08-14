@@ -1,21 +1,19 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
-import { Search, Play, Pause, Zap, Plus, AlertCircle, Trash2, Loader2, GitBranch } from 'lucide-react';
+import { Search, Plus, AlertCircle, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
-import StatusPill from '../components/StatusPill';
+import InboxLauncher from '../components/inbox/InboxButton';
 import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
+import AutomationCard from '../components/automations/AutomationCard';
 import {
-  isBackendConfigured, fetchFlows, createFlow, deleteFlow, restoreFlow, pauseFlow, activateFlow,
+  isBackendConfigured, fetchFlows, createFlow, updateFlow, deleteFlow, restoreFlow,
+  pauseFlow, activateFlow,
   FlowNotReadyError,
   type AutomationFlow,
 } from '../lib/api';
-import {
-  NODE_LABEL, readTrigger, triggerNodes, type FlowGraph, type FlowNodeType,
-} from '../lib/flowSchema';
-import { platformMeta } from '../lib/platformMeta';
-import { timeAgo } from '../lib/timeAgo';
+import { readTrigger, triggerNodes, type FlowGraph } from '../lib/flowSchema';
 
 /**
  * Automations — the list.
@@ -146,28 +144,6 @@ function claimDeleteError(id: string): boolean {
   return unreportedDeleteErrors.delete(id);
 }
 
-/** A one-line "what does this do", read from the graph. */
-function summarize(graph: FlowGraph): string {
-  const trigger = triggerNodes(graph)[0];
-  if (!trigger) return 'Not set up yet';
-  const cfg = readTrigger(trigger);
-  const start = cfg.kind === 'dm' ? 'Someone DMs' : 'Someone comments';
-  const words = cfg.matchMode === 'any' || !cfg.keywords.length
-    ? ''
-    : ` ${cfg.keywords.map(k => `“${k}”`).join(' or ')}`;
-
-  const counts = graph.nodes.reduce<Partial<Record<FlowNodeType, number>>>((acc, n) => {
-    acc[n.type] = (acc[n.type] ?? 0) + 1;
-    return acc;
-  }, {});
-  const after = (['send', 'wait', 'condition', 'action'] as const)
-    .filter(t => counts[t])
-    .map(t => `${counts[t]} ${NODE_LABEL[t]}`)
-    .join(' · ');
-
-  return after ? `${start}${words} → ${after}` : `${start}${words}`;
-}
-
 function keywordsOf(graph: FlowGraph): string[] {
   const trigger = triggerNodes(graph)[0];
   return trigger ? readTrigger(trigger).keywords : [];
@@ -180,6 +156,17 @@ export default function AutomationsPage() {
   const backendConfigured = isBackendConfigured();
 
   const [flows, setFlows] = useState<AutomationFlow[]>([]);
+  /**
+   * How many people each automation has reached, kept apart from the flows.
+   *
+   * The count comes only from the list route (see api.ts), so a flow object
+   * handed back by pause, activate or restore has no `audienceCount` on it.
+   * Reading the number off the flow would make an automation's audience vanish
+   * the moment it was paused — which is exactly when a creator is most likely
+   * to be looking at how many people it reached. Keyed by id, it survives
+   * every mutation that replaces a row.
+   */
+  const [audience, setAudience] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -219,6 +206,11 @@ export default function AutomationsPage() {
         // turns out to have failed. Briefly missing something real is the safer
         // way to be wrong than briefly showing something that isn't.
         setFlows(list.filter(f => !inFlightDeletes.has(f.id)));
+        setAudience(prev => {
+          const next = { ...prev };
+          for (const f of list) if (f.audienceCount !== undefined) next[f.id] = f.audienceCount;
+          return next;
+        });
 
         // A delete that actually failed is why a row is back. Say so, rather
         // than letting the reappearance be the only clue — and say it once.
@@ -278,6 +270,48 @@ export default function AutomationsPage() {
     if (statusTab !== 'all') result = result.filter(f => f.status === statusTab);
     return result;
   }, [flows, search, statusTab]);
+
+  /**
+   * Rename, from the card.
+   *
+   * Optimistic: the name is already on screen — the creator typed it — and a
+   * PATCH that answers in 200ms would otherwise make the title flick back to
+   * the old name and forward again. The failure branch puts the old name back
+   * and says so, rather than leaving the list quietly disagreeing with the
+   * server about what this automation is called.
+   */
+  const rename = async (flow: AutomationFlow, name: string) => {
+    const previous = flow.name;
+    setFlows(prev => prev.map(f => (f.id === flow.id ? { ...f, name } : f)));
+    try {
+      const { flow: saved } = await updateFlow(flow.id, { name });
+      setFlows(prev => prev.map(f => (f.id === flow.id ? { ...f, ...saved } : f)));
+    } catch (err) {
+      setFlows(prev => prev.map(f => (f.id === flow.id ? { ...f, name: previous } : f)));
+      showToast(err instanceof Error ? err.message : 'Could not rename this automation.', 'error');
+    }
+  };
+
+  /**
+   * Duplicate — a starting point, not a second live automation.
+   *
+   * The copy is created through the ordinary create route, so it arrives as a
+   * draft however it was copied: duplicating something live must not quietly
+   * put a second automation in front of real people. It also starts with an
+   * audience of nobody, which is why the count isn't copied across.
+   */
+  const duplicate = async (flow: AutomationFlow) => {
+    try {
+      const copy = await createFlow({ name: `${flow.name} copy`, graph: flow.graph });
+      setFlows(prev => [copy, ...prev]);
+      showToast(`Duplicated as “${copy.name}” — it's a draft`, 'success', {
+        durationMs: 8000,
+        action: { label: 'Open', onClick: () => navigate(`/automations/${copy.id}`) },
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not duplicate this automation.', 'error');
+    }
+  };
 
   const toggleStatus = async (flow: AutomationFlow) => {
     try {
@@ -432,6 +466,7 @@ export default function AutomationsPage() {
         subtitle={loading ? 'Loading...' : `${live.length} live · ${flows.length} total`}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+            <InboxLauncher />
             <div className="relative w-full sm:w-auto">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
               <input
@@ -460,7 +495,10 @@ export default function AutomationsPage() {
       )}
 
       {!error && (
-        <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
+        // Filters sit closer to what they filter than to the header above
+        // them, so the eye reads title → filters → list rather than finding a
+        // row of pills floating between two things.
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
           {[
             { key: 'all' as StatusTab, label: 'All', count: flows.length },
             { key: 'live' as StatusTab, label: 'Live', count: live.length },
@@ -469,10 +507,14 @@ export default function AutomationsPage() {
           ].map(t => (
             <button
               key={t.key} onClick={() => setStatusTab(t.key)}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all ${
-                statusTab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}
+              aria-pressed={statusTab === t.key}
+              className={`px-3.5 py-1.5 rounded-xl text-[12px] font-medium whitespace-nowrap
+                border transition-colors duration-150 ${
+                statusTab === t.key
+                  ? 'bg-[#111111] text-white border-[#111111] shadow-[0_1px_2px_rgba(17,17,17,0.12)]'
+                  : 'border-transparent text-[#6B6B6B] hover:bg-white hover:border-[#E8E4DF] hover:text-[#111111]'}`}
             >
-              {t.label} <span className="text-[10px] opacity-60">({t.count})</span>
+              {t.label} <span className="text-[11px] opacity-55">{t.count}</span>
             </button>
           ))}
         </div>
@@ -492,82 +534,20 @@ export default function AutomationsPage() {
           }
         />
       ) : !error && (
-        <div className="space-y-3">
-          {filtered.map(flow => {
-            const status = flow.status === 'live' ? 'active' : flow.status === 'paused' ? 'paused' : 'draft';
-            const keywords = keywordsOf(flow.graph);
-            const steps = flow.graph.nodes.length;
-            return (
-              <div
-                key={flow.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Open ${flow.name}`}
-                onClick={() => navigate(`/automations/${flow.id}`)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/automations/${flow.id}`); }
-                }}
-                className="pop-card p-4 pop-card-hover cursor-pointer outline-none focus-visible:ring-2
-                  focus-visible:ring-chartreuse focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                      flow.status === 'live' ? 'bg-chartreuse' : 'bg-[#FAFAF8]'}`}>
-                      {flow.status === 'live'
-                        ? <Zap size={18} className="text-[#111111]" />
-                        : <GitBranch size={18} className="text-[#6B6B6B]" />}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-geist font-semibold text-[13px] text-[#111111] truncate">{flow.name}</h3>
-                        <StatusPill status={status} className="text-[10px]" />
-                      </div>
-                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">{summarize(flow.graph)}</p>
-                      {keywords.length > 0 && (
-                        <div className="flex gap-1 flex-wrap mt-1.5">
-                          {keywords.map(k => (
-                            <span key={k} className="bg-[#FAFAF8] text-[#6B6B6B] text-[10px] px-2 py-0.5 rounded-full">
-                              {k}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={e => { e.stopPropagation(); toggleStatus(flow); }}
-                      className="p-2.5 hover:bg-[#FAFAF8] rounded-lg transition-all"
-                      title={flow.status === 'live' ? 'Pause' : 'Activate'}
-                      aria-label={`${flow.status === 'live' ? 'Pause' : 'Activate'} ${flow.name}`}
-                    >
-                      {flow.status === 'live'
-                        ? <Pause size={14} className="text-[#6B6B6B]" />
-                        : <Play size={14} className="text-[#10B981]" />}
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); remove(flow); }}
-                      className="p-2.5 hover:bg-[#FAFAF8] rounded-lg transition-all"
-                      title="Delete" aria-label={`Delete ${flow.name}`}
-                    >
-                      <Trash2 size={14} className="text-[#DC2626]" />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-2 pt-2 border-t border-[#F0EEEA] flex items-center justify-between">
-                  {/* Display name, not the internal id — `twitter` must read as "X". */}
-                  <p className="text-[11px] text-[#9B9B8F]">
-                    {flow.platform ? platformMeta(flow.platform).name : 'No channel yet'}
-                    {steps > 0 && ` · ${steps} step${steps === 1 ? '' : 's'}`}
-                  </p>
-                  <span className="text-[10px] text-[#9B9B8F]">
-                    Updated {timeAgo(flow.updatedAt)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+        <div className="space-y-2.5">
+          {filtered.map(flow => (
+            <AutomationCard
+              key={flow.id}
+              flow={flow}
+              audience={audience[flow.id] ?? null}
+              onOpen={() => navigate(`/automations/${flow.id}`)}
+              onToggleStatus={() => toggleStatus(flow)}
+              onRename={name => rename(flow, name)}
+              onDuplicate={() => duplicate(flow)}
+              onDelete={() => remove(flow)}
+              onShowAudience={() => navigate(`/contacts?automation=${flow.id}`)}
+            />
+          ))}
         </div>
       )}
     </div>
