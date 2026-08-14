@@ -219,6 +219,29 @@ describe('one context at a time', () => {
     expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
     expect(screen.getByText('When')).toBeInTheDocument();
   });
+
+  it('but not on a phone, where there is no room to put them beside anything', async () => {
+    // "Beside" is a width claim. Below 640px the region is a single overlay,
+    // so keeping both would stack a 320px feed and a 320px inspector inside
+    // 360px — the exception's whole justification is that the creator can see
+    // the list AND the step, and here they could see neither.
+    const wide = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+    try {
+      const user = userEvent.setup();
+      mountBuilder();
+      await screen.findByText('Preview');
+      selectNode('trigger');
+      await screen.findByText('When');
+
+      await user.click(screen.getByLabelText(/^Notifications,/));
+
+      expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: wide, configurable: true });
+    }
+  });
 });
 
 describe('one run per person', () => {

@@ -150,6 +150,21 @@ export default function AutomationBuilderPage() {
   const selectedNode = nodeById(graph, selectedNodeId);
 
   /**
+   * Whether the contextual region exists at all this render.
+   *
+   * Two independent things can put something in it — a selected step, and an
+   * explicitly opened panel — and `togglePanel` already makes them mutually
+   * exclusive everywhere except the notifications feed, which is an index
+   * into the canvas and is meant to stay open beside the step it sent you to.
+   * So the region is not "one slot with a winner"; it is however many of the
+   * two are currently live, which is almost always one.
+   *
+   * Nothing live means the region is not rendered at all, so its width goes
+   * back to the canvas instead of sitting there as an empty column.
+   */
+  const sideOpen = panel !== null || selectedNode !== null;
+
+  /**
    * The question actually on screen.
    *
    * A question belongs to a step AND to the notification that opened it, so
@@ -189,15 +204,30 @@ export default function AutomationBuilderPage() {
   const togglePanel = useCallback((next: Exclude<SidePanel, null>) => {
     const opening = panel !== next;
     setPanel(opening ? next : null);
-    if (opening && next !== 'notifications') setSelectedNodeId(null);
+    if (opening) setSelectedNodeId(null);
   }, [panel, setSelectedNodeId]);
+
+  /**
+   * Room for two, or the exception is off.
+   *
+   * "Beside" is a width claim: the feed and the inspector are a column each,
+   * and below 640px the region is a single overlay. Keeping both there would
+   * stack them, so the creator would see neither the list nor the step —
+   * losing the exact thing the exception exists to preserve. Read at click
+   * time rather than during render, so it reflects the width the creator is
+   * actually looking at without a resize listener.
+   */
+  const keepStepBesideFeed = useCallback(() => {
+    if (window.innerWidth < 640) setSelectedNodeId(null);
+  }, [setSelectedNodeId]);
 
   const openNotifications = useCallback(async () => {
     setPanel('notifications');
+    keepStepBesideFeed();
     setChecking(true);
     await refreshValidation();
     setChecking(false);
-  }, [refreshValidation]);
+  }, [refreshValidation, keepStepBesideFeed]);
 
   /** Take the creator to the step a notification is about, and ask it there. */
   const openNotification = useCallback((notification: BuilderNotification) => {
@@ -259,6 +289,7 @@ export default function AutomationBuilderPage() {
       // Not a modal and not a wall of validation: the same feed the bell
       // already offers, opened on the first thing standing in the way.
       setPanel('notifications');
+      keepStepBesideFeed();
       setBellAttention(true);
       const first = derivedNotifications(result.problems, graph)[0];
       setHighlightId(first?.id ?? null);
@@ -268,7 +299,7 @@ export default function AutomationBuilderPage() {
     } finally {
       setActivating(false);
     }
-  }, [activate, graph, showToast]);
+  }, [activate, graph, showToast, keepStepBesideFeed]);
 
   const onPause = useCallback(async () => {
     try {
@@ -480,7 +511,8 @@ export default function AutomationBuilderPage() {
       )}
 
       {/* ------------------------------------------------------------ canvas */}
-      <div className="relative flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex">
+      <div className="relative flex-1 min-w-0 min-h-0">
         <FlowCanvas
           graph={graph}
           selectedNodeId={selectedNodeId}
@@ -530,41 +562,6 @@ export default function AutomationBuilderPage() {
           </div>
         )}
 
-        {selectedNode && (
-          <NodeInspector
-            key={selectedNode.id}
-            node={selectedNode}
-            accounts={accounts}
-            posts={posts}
-            postsLoading={postsLoading}
-            onRefreshPosts={refreshPosts}
-            capabilities={capabilities}
-            workspaceTags={workspaceTags}
-            problems={nodeProblems}
-            question={activeQuestion}
-            onChange={patch => updateNodeConfig(selectedNode.id, patch)}
-            onDelete={() => {
-              const label = NODE_LABEL[selectedNode.type];
-              // Captured HERE, and restored verbatim. Calling the generic undo
-              // would pop whatever is newest on the shared stack — so a
-              // creator who edits something else (or deletes a second step)
-              // during the toast's seven seconds would have that unrelated
-              // edit reverted while the step this toast names stayed deleted.
-              const restored = graph;
-              const restoredName = name;
-              deleteNode(selectedNode.id);
-              // No confirm dialog: the step is already restorable, and an
-              // offer to undo is faster to read than a modal is to dismiss.
-              showToast(`${label} step removed`, 'success', {
-                action: {
-                  label: 'Undo',
-                  onClick: () => commitGraph(restored, { nextName: restoredName }),
-                },
-              });
-            }}
-            onClose={() => setSelectedNodeId(null)}
-          />
-        )}
 
         {addMenu && (
           <>
@@ -595,45 +592,11 @@ export default function AutomationBuilderPage() {
           </>
         )}
 
-        {panel === 'preview' && (
-          <PreviewPanel
-            graph={graph}
-            platformLabel={triggerPlatform ? platformMeta(triggerPlatform).name : null}
-            running={testing}
-            onRun={runPreview}
-            onReset={() => setTestResult(null)}
-            onClose={() => { setPanel(null); setTestResult(null); }}
-          />
-        )}
 
-        {panel === 'inbox' && (
-          <InboxDrawer onClose={() => setPanel(null)} onChanged={inboxUnread.refresh} />
-        )}
 
-        {panel === 'notifications' && (
-          <NotificationsPanel
-            notifications={notifications.feed}
-            checking={checking}
-            highlightId={highlightId}
-            onSelect={openNotification}
-            onClose={() => setPanel(null)}
-          />
-        )}
 
-        {panel === 'history' && (
-          <HistoryDrawer
-            history={history}
-            canUndo={canUndo}
-            onUndo={() => { undo(); setPanel(null); }}
-            onClose={() => setPanel(null)}
-          />
-        )}
 
         <AIComposer
-          // Shifted clear of the inspector when one is open: centred on the
-          // whole viewport it sat on top of the last settings control and the
-          // Remove-step button, which is where a creator reaches next.
-          insetLeft={selectedNode ? 300 : 0}
           selectedNode={selectedNode}
           composing={composing}
           changeCard={changeCard}
@@ -646,6 +609,109 @@ export default function AutomationBuilderPage() {
           onDismissCard={() => setChangeCard(null)}
           onOpenHistory={() => { setPanel('history'); setSelectedNodeId(null); }}
         />
+      </div>
+
+      {/* ----------------------------------------- the contextual side region
+          What you are looking at besides the canvas. Almost always exactly one
+          thing — `togglePanel` clears the selection when a whole-automation
+          panel opens, and selecting a step closes the panel — so the second
+          column only ever appears in the notifications case, where the feed is
+          an index into the canvas and closing it would cost the creator their
+          place in the list.
+
+          Not a landmark itself: each panel below is its own <aside> with its
+          own name, and wrapping them in a second one would make a screen
+          reader announce the region twice.
+
+          Desktop: real columns, so the canvas reflows to what is left.
+          Narrow: an overlay, because a 320px column beside a canvas on a
+          phone is two unusable things instead of one usable one — and the
+          two-column case is suppressed outright below 640px. */}
+      {sideOpen && (
+        <div
+          className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[360px]
+            shadow-[-4px_0_24px_rgba(17,17,17,0.06)]
+            motion-safe:animate-in motion-safe:slide-in-from-right-2 motion-safe:fade-in
+            motion-safe:duration-200
+            md:static md:z-auto md:w-auto md:max-w-none md:shrink-0 md:shadow-none"
+        >
+          {selectedNode && (
+            <div className="w-full border-l border-[#E8E4DF] md:w-[320px] md:shrink-0">
+            <NodeInspector
+              key={selectedNode.id}
+              node={selectedNode}
+              accounts={accounts}
+              posts={posts}
+              postsLoading={postsLoading}
+              onRefreshPosts={refreshPosts}
+              capabilities={capabilities}
+              workspaceTags={workspaceTags}
+              problems={nodeProblems}
+              question={activeQuestion}
+              onChange={patch => updateNodeConfig(selectedNode.id, patch)}
+              onDelete={() => {
+                const label = NODE_LABEL[selectedNode.type];
+                // Captured HERE, and restored verbatim. Calling the generic
+                // undo would pop whatever is newest on the shared stack — so a
+                // creator who edits something else (or deletes a second step)
+                // during the toast's seven seconds would have that unrelated
+                // edit reverted while the step this toast names stayed deleted.
+                const restored = graph;
+                const restoredName = name;
+                deleteNode(selectedNode.id);
+                // No confirm dialog: the step is already restorable, and an
+                // offer to undo is faster to read than a modal is to dismiss.
+                showToast(`${label} step removed`, 'success', {
+                  action: {
+                    label: 'Undo',
+                    onClick: () => commitGraph(restored, { nextName: restoredName }),
+                  },
+                });
+              }}
+              onClose={() => setSelectedNodeId(null)}
+            />
+            </div>
+          )}
+
+          {panel && (
+            <div className="w-full border-l border-[#E8E4DF] md:w-[320px] md:shrink-0">
+              {panel === 'preview' && (
+                <PreviewPanel
+                  graph={graph}
+                  platformLabel={triggerPlatform ? platformMeta(triggerPlatform).name : null}
+                  running={testing}
+                  onRun={runPreview}
+                  onReset={() => setTestResult(null)}
+                  onClose={() => { setPanel(null); setTestResult(null); }}
+                />
+              )}
+
+              {panel === 'inbox' && (
+                <InboxDrawer onClose={() => setPanel(null)} onChanged={inboxUnread.refresh} />
+              )}
+
+              {panel === 'notifications' && (
+                <NotificationsPanel
+                  notifications={notifications.feed}
+                  checking={checking}
+                  highlightId={highlightId}
+                  onSelect={openNotification}
+                  onClose={() => setPanel(null)}
+                />
+              )}
+
+              {panel === 'history' && (
+                <HistoryDrawer
+                  history={history}
+                  canUndo={canUndo}
+                  onUndo={() => { undo(); setPanel(null); }}
+                  onClose={() => setPanel(null)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
       </div>
     </div>
   );

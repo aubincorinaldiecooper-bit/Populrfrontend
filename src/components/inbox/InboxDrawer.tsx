@@ -53,9 +53,7 @@ export default function InboxDrawer({ onClose, onChanged }: InboxDrawerProps) {
 
   return (
     <aside
-      className="absolute right-0 top-0 bottom-0 z-30 w-full sm:w-[380px] bg-white
-        sm:border-l border-[#E8E4DF] shadow-[-4px_0_24px_rgba(17,17,17,0.06)]
-        flex flex-col animate-in slide-in-from-right-2 fade-in duration-200"
+      className="flex h-full w-full flex-col bg-white"
       aria-label="Inbox"
     >
       <header className="flex items-center justify-between px-4 py-3 border-b border-[#F0EDE8]">

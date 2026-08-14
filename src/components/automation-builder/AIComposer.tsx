@@ -36,7 +36,6 @@ export interface AIComposerProps {
   historyCount: number;
   /** Pixels of panel occupying the left edge, so the composer can stay clear
    *  of it instead of floating over the controls it covers. */
-  insetLeft?: number;
   onSubmit: (prompt: string) => void;
   onUndo: () => void;
   onDismissCard: () => void;
@@ -45,7 +44,7 @@ export interface AIComposerProps {
 
 export default function AIComposer({
   selectedNode, composing, changeCard, canUndo, aiConfigured, empty,
-  historyCount, insetLeft = 0, onSubmit, onUndo, onDismissCard, onOpenHistory,
+  historyCount, onSubmit, onUndo, onDismissCard, onOpenHistory,
 }: AIComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -85,12 +84,13 @@ export default function AIComposer({
 
   return (
     <div
-      className="pointer-events-none absolute right-0 bottom-0 z-30 flex flex-col items-center
-        px-4 pb-5 transition-[left] duration-150"
-      // Below the inspector's own breakpoint the panel overlays the canvas
-      // entirely, so shifting would push the composer off screen; there it
-      // stays centred and the inspector's bottom padding does the work.
-      style={{ left: typeof window !== 'undefined' && window.innerWidth < 640 ? 0 : insetLeft }}
+      // Centred on the canvas, and the canvas is now its own column — so
+      // there is nothing to dodge. The inspector used to sit on the left, over
+      // the canvas, and this shifted sideways to avoid landing on the controls
+      // a creator reaches for next; it lives in its own region now and the
+      // composer can simply stay where the work is.
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center
+        px-4 pb-5"
     >
       {empty && !changeCard && (
         <div className="pointer-events-auto mb-5 text-center max-w-md">
@@ -119,7 +119,7 @@ export default function AIComposer({
 
       {changeCard && (
         <div
-          className="pointer-events-auto mb-2.5 w-full max-w-[680px] rounded-xl border border-[#E8E4DF]
+          className="pointer-events-auto mb-2.5 w-full max-w-[600px] rounded-xl border border-[#E8E4DF]
             bg-white px-3.5 py-2.5 shadow-[0_4px_16px_rgba(17,17,17,0.07)]
             flex items-start gap-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200"
           role="status"
@@ -160,7 +160,7 @@ export default function AIComposer({
       )}
 
       <div
-        className="pointer-events-auto w-full max-w-[680px] rounded-2xl border border-[#E8E4DF]
+        className="pointer-events-auto w-full max-w-[600px] rounded-2xl border border-[#E8E4DF]
           bg-white shadow-[0_6px_24px_rgba(17,17,17,0.08)] transition-shadow
           focus-within:border-[#C5FF3D] focus-within:shadow-[0_6px_28px_rgba(17,17,17,0.10)]"
       >
