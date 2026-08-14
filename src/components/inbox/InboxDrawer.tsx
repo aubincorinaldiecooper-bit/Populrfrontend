@@ -118,6 +118,7 @@ export default function InboxDrawer({ onClose, onChanged }: InboxDrawerProps) {
                 <Avatar
                   handle={item.contact_handle}
                   name={item.contact_name}
+                  avatarUrl={item.contact_avatar_url}
                   platform={item.platform}
                   size="sm"
                   showPlatform

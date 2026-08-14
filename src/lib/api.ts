@@ -545,6 +545,7 @@ export interface InboxItem {
   message_direction: string | null;
   contact_handle: string | null;
   contact_name: string | null;
+  contact_avatar_url: string | null;
   lead_score: number | null;
   stage: string | null;
   post_caption: string | null;
