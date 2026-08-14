@@ -151,6 +151,17 @@ export function useInboxQueue(tab: InboxTab, options: { enabled?: boolean } = {}
  */
 const UNREAD_PROBE = 10;
 
+/**
+ * How often the badge re-asks while the tab is in front.
+ *
+ * A creator can sit in the builder for an hour, and a badge that only ever
+ * counted what was waiting the moment the page loaded would tell them
+ * nothing arrived — which is the one thing this control exists to say. Sixty
+ * seconds is slow enough to be invisible on the server and fast enough that
+ * "someone messaged you" isn't stale news.
+ */
+const UNREAD_POLL_MS = 60_000;
+
 export function useInboxUnread(): { count: number; refresh: () => void } {
   const [count, setCount] = useState(0);
   const backendConfigured = isBackendConfigured();
@@ -166,7 +177,23 @@ export function useInboxUnread(): { count: number; refresh: () => void } {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    if (!backendConfigured) return;
+
+    // Nothing runs against a hidden tab: a laptop left open on this screen
+    // overnight should cost nothing, and the visibility handler catches the
+    // creator up the moment they come back to it.
+    const tick = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const timer = setInterval(tick, UNREAD_POLL_MS);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [refresh, backendConfigured]);
 
   return { count, refresh };
 }

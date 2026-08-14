@@ -59,7 +59,12 @@ export default function InboxLauncher() {
     <>
       <InboxButton count={count} open={open} onClick={() => setOpen(v => !v)} />
       {open && (
-        <div className="fixed inset-0 z-40">
+        // Above the mobile header (z-[55], see Sidebar) and below toasts
+        // (z-[100]). On a phone this drawer is full-width and starts at the
+        // top of the viewport, so anything layered over it covers its own
+        // close button — and with no exposed click-away either, that left
+        // no way out of the drawer at all.
+        <div className="fixed inset-0 z-[60]">
           {/* Click-away, not a scrim: the page behind stays legible, because
               the point of this drawer is that you haven't left it. */}
           <div className="absolute inset-0" onClick={() => setOpen(false)} />

@@ -122,6 +122,34 @@ describe('the Inbox control', () => {
     await waitFor(() => expect(sendInboxReplyMock).toHaveBeenCalledWith('1', { text: 'On its way!' }));
   });
 
+  it('keeps learning about conversations that arrive after it mounted', async () => {
+    // A creator sits in the builder for an hour. A badge that only ever
+    // counted what was waiting at page load would tell them nothing arrived,
+    // which is the one thing this control exists to say.
+    fetchInboxMock.mockResolvedValueOnce({ items: [item('1', 'jordan', 'hi')] });
+    render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
+    await screen.findByLabelText('Inbox, 1 waiting');
+
+    fetchInboxMock.mockResolvedValue({
+      items: [item('1', 'jordan', 'hi'), item('2', 'maya', 'me too')],
+    });
+    window.dispatchEvent(new Event('focus'));
+
+    expect(await screen.findByLabelText('Inbox, 2 waiting')).toBeInTheDocument();
+  });
+
+  it('opens above the mobile header, so its close button is reachable', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
+    await user.click(await screen.findByLabelText('Inbox, 2 waiting'));
+
+    // On a phone the drawer is full-width from the top of the viewport, so
+    // anything layered over it covers its own close button — and there is no
+    // exposed click-away to fall back on. Sidebar's mobile header is z-[55].
+    const layer = (await screen.findByLabelText('Inbox')).parentElement!;
+    expect(layer.className).toContain('z-[60]');
+  });
+
   it('closes without leaving the page', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
