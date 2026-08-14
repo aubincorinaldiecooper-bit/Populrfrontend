@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import ContactsPage from '../pages/ContactsPage';
 import type { ContactRecord } from '../lib/api';
 
@@ -45,16 +46,22 @@ function makeContact(i: number): ContactRecord {
 // pagination advances past the first page.
 const allContacts: ContactRecord[] = Array.from({ length: 60 }, (_, i) => makeContact(i));
 
-const mockFetchContacts = vi.fn(async (filter: { limit?: number; offset?: number } = {}) => {
-  const offset = filter.offset ?? 0;
-  const limit = filter.limit ?? 20;
-  return {
-    contacts: allContacts.slice(offset, offset + limit),
-    total: allContacts.length,
-    stages: [],
-    allTags: ['pricing', 'vip'],
-  };
-});
+const mockFetchContacts = vi.fn(
+  async (filter: { limit?: number; offset?: number; flowId?: string } = {}) => {
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? 20;
+    // The audience filter narrows to the two people that automation reached,
+    // and the response says which automation, so the page can name it.
+    const pool = filter.flowId ? allContacts.slice(0, 2) : allContacts;
+    return {
+      contacts: pool.slice(offset, offset + limit),
+      total: pool.length,
+      stages: [],
+      allTags: ['pricing', 'vip'],
+      automation: filter.flowId ? { id: filter.flowId, name: 'Menu comments' } : null,
+    };
+  },
+);
 
 const mockUseApp = vi.fn();
 
@@ -67,7 +74,8 @@ vi.mock('../lib/api', async () => {
   return {
     ...actual,
     isBackendConfigured: () => true,
-    fetchContacts: (filter: { limit?: number; offset?: number }) => mockFetchContacts(filter),
+    fetchContacts: (filter: { limit?: number; offset?: number; flowId?: string }) =>
+      mockFetchContacts(filter),
   };
 });
 
@@ -76,7 +84,7 @@ describe('ContactsPage — pagination beyond the first page', () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
 
-    render(<ContactsPage />);
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     // First page: contacts 0-19 of 60 shown, later contacts absent.
     await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
@@ -105,7 +113,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
   it('"Waiting on you" toggles the needsReply filter and resets to page one', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
-    render(<ContactsPage />);
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Waiting on you/ }));
@@ -124,7 +132,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
   it('"Recently active" requests the recency sort', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
-    render(<ContactsPage />);
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Recently active/ }));
@@ -139,7 +147,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
     // the "Waiting on you" urgency chip uses.
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
-    render(<ContactsPage />);
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Needs reply' }));
@@ -151,7 +159,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
   it('workspace tags render as chips; picking one filters, picking it again clears', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
-    render(<ContactsPage />);
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByRole('button', { name: /pricing/ })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /pricing/ }));
@@ -163,5 +171,59 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
     await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
       expect.objectContaining({ tag: undefined })
     ));
+  });
+});
+
+/* The audience an automation built.
+ *
+ * Clicking "143 people" on an automation lands here. The filter lives in the
+ * URL rather than in state, so this view is a place: it survives a reload, it
+ * can be sent to someone, and it has to say why these people — a filtered list
+ * with no account of itself is just a list that looks wrong.
+ */
+describe('ContactsPage — filtered to one automation', () => {
+  it('asks for only that automation\'s audience, and names it', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?automation=f1']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenCalledWith(
+      expect.objectContaining({ flowId: 'f1' })));
+    expect(await screen.findByText('Menu comments')).toBeInTheDocument();
+    expect(await screen.findByText('User 0')).toBeInTheDocument();
+    // Everyone else this workspace has is still out there; this view is two
+    // people because the automation reached two, not because it's page one.
+    expect(screen.queryByText('User 5')).not.toBeInTheDocument();
+  });
+
+  it('is as easy to leave as it was to arrive at', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?automation=f1']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText('Menu comments');
+
+    await user.click(screen.getByLabelText('Show all contacts'));
+
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ flowId: undefined })));
+    expect(await screen.findByText('User 19')).toBeInTheDocument();
+  });
+
+  it('shows no audience banner when nothing is filtered', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
+
+    await screen.findByText('User 0');
+    expect(screen.queryByLabelText('Show all contacts')).not.toBeInTheDocument();
   });
 });

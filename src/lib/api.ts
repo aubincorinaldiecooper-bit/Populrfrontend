@@ -697,7 +697,7 @@ export interface ContactDetail {
   events: AutomationEvent[];
 }
 
-/** GET /api/contacts — the caller's own contacts. Filters: stage, platform, tag, needsReply, search. */
+/** GET /api/contacts — the caller's own contacts. Filters: stage, platform, tag, needsReply, search, flowId. */
 export async function fetchContacts(filter: {
   stage?: string;
   platform?: string;
@@ -706,10 +706,24 @@ export async function fetchContacts(filter: {
   search?: string;
   /** 'recent' orders by last activity; default orders by lead score. */
   sort?: 'score' | 'recent';
+  /**
+   * Only the people one automation reached — the audience it built. The
+   * response echoes back which automation that was, so a filtered URL that
+   * arrives by link or bookmark can name it rather than showing a filtered
+   * list with no account of itself.
+   */
+  flowId?: string;
   limit?: number;
   offset?: number;
-} = {}): Promise<{ contacts: ContactRecord[]; total: number; stages: string[]; allTags: string[] }> {
+} = {}): Promise<{
+  contacts: ContactRecord[];
+  total: number;
+  stages: string[];
+  allTags: string[];
+  automation: { id: string; name: string } | null;
+}> {
   const qs = new URLSearchParams();
+  if (filter.flowId) qs.set('flowId', filter.flowId);
   if (filter.stage) qs.set('stage', filter.stage);
   if (filter.platform) qs.set('platform', filter.platform);
   if (filter.tag) qs.set('tag', filter.tag);
@@ -907,6 +921,16 @@ export interface AutomationFlow {
   activatedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Distinct people this automation has reached, all time.
+   *
+   * Sent by the list route only — it is a workspace-wide aggregate, and the
+   * backend deliberately doesn't recompute it on every autosave. Absent
+   * therefore means "not reported here", never "nobody", which is why the
+   * Automations page keeps the counts it fetched separately from the flows
+   * that mutations replace.
+   */
+  audienceCount?: number;
 }
 
 /** A blocking problem Review shows, tied to the step it belongs to. */
