@@ -74,9 +74,14 @@ export default function AIComposer({
     onSubmit(prompt);
   };
 
-  const placeholder = selectedNode
-    ? 'Ask Populr to change this step…'
-    : 'Ask Populr to build or change anything…';
+  // Three states, three sentences. The field is where the creator's attention
+  // already is, so it says what is happening rather than leaving a disabled
+  // box and a spinning button to be read as a stall.
+  const placeholder = composing
+    ? 'Populr is building…'
+    : selectedNode
+      ? 'Ask Populr to change this step…'
+      : 'Ask Populr to build or change anything…';
 
   return (
     <div

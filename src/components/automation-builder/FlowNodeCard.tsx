@@ -198,11 +198,18 @@ function FlowNodeCardInner({ data }: NodeProps) {
         />
       )}
 
+      {/* Selection is the state a creator is in most often, so it reads at a
+          glance rather than on inspection: the lime edge, a soft lime halo
+          around it, and enough elevation to lift the step off the canvas. The
+          halo is what carries at a distance — a 2px border alone disappears
+          on a zoomed-out graph, which is exactly when you need to know where
+          you are. */}
       <div
-        className={`w-[210px] rounded-xl bg-white px-3 py-2.5 transition-[box-shadow,border-color] duration-200
+        className={`w-[210px] rounded-xl bg-white px-3 py-2.5 transition-[box-shadow,border-color]
+          duration-200
           ${selected
-            ? 'border-2 border-[#C5FF3D] shadow-[0_2px_10px_rgba(17,17,17,0.06)]'
-            : 'border border-[#E8E4DF] shadow-[0_1px_3px_rgba(17,17,17,0.04)]'}
+            ? 'border-2 border-[#C5FF3D] shadow-[0_0_0_4px_rgba(197,255,61,0.24),0_4px_14px_rgba(17,17,17,0.10)]'
+            : 'border border-[#E8E4DF] shadow-[0_1px_3px_rgba(17,17,17,0.04)] hover:border-[#D8D3CC] hover:shadow-[0_2px_8px_rgba(17,17,17,0.06)]'}
           ${highlighted ? 'ring-2 ring-[#C5FF3D] ring-offset-2 ring-offset-[#F7F5F2]' : ''}
           ${problem && !selected ? 'border-[#E7C9A8]' : ''}`}
         style={{ padding: selected ? 'calc(0.625rem - 1px) calc(0.75rem - 1px)' : undefined }}

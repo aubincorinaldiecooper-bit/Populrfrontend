@@ -10,7 +10,7 @@ import { useBuilderNotifications } from '../components/automation-builder/useBui
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
 import NodeInspector, { type BuilderQuestion } from '../components/automation-builder/NodeInspector';
 import AIComposer from '../components/automation-builder/AIComposer';
-import BuildingOverlay from '../components/automation-builder/BuildingOverlay';
+import AgentActivity from '../components/automation-builder/AgentActivity';
 import PreviewPanel from '../components/automation-builder/PreviewPanel';
 import NotificationBell from '../components/automation-builder/NotificationBell';
 import { InboxButton } from '../components/inbox/InboxButton';
@@ -53,7 +53,8 @@ export default function AutomationBuilderPage() {
   const builder = useFlowBuilder(flowId);
   const {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
-    saveState, savedAt, delegationWarning, composing, changeCard, setChangeCard, highlighted, history,
+    saveState, savedAt, delegationWarning, composing, changeCard, setChangeCard,
+    activity, clearActivity, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -72,6 +73,14 @@ export default function AutomationBuilderPage() {
   const [activating, setActivating] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [addMenu, setAddMenu] = useState<{ nodeId: string; branch: 'next' | 'yes' | 'no' } | null>(null);
+  /**
+   * Whether the request that is out was asked of an empty canvas.
+   *
+   * Captured when it is sent, not read when it answers: by then the nodes it
+   * created exist, so "is the canvas empty" would say no and the finished
+   * message would call a first build "that change".
+   */
+  const [buildingFromEmpty, setBuildingFromEmpty] = useState(false);
 
   // Arriving at a step from a notification: which one to bring into view, and
   // what Populr is asking about it once we're there.
@@ -164,6 +173,24 @@ export default function AutomationBuilderPage() {
         .map(p => p.message),
     [problems, selectedNodeId, activeQuestion],
   );
+
+  /**
+   * Panels are contextual, and there is one context at a time.
+   *
+   * Preview, Inbox and History are about the automation as a whole, so opening
+   * one closes the step inspector rather than stacking two panels over the
+   * canvas — on a laptop that leaves a strip of canvas between them, which is
+   * the "forms with a canvas squeezed in the middle" this builder is not.
+   *
+   * Notifications is the exception, and deliberately: it is an index of steps,
+   * and every item in it selects one. Closing the inspector it just opened
+   * would undo the thing the creator clicked for.
+   */
+  const togglePanel = useCallback((next: Exclude<SidePanel, null>) => {
+    const opening = panel !== next;
+    setPanel(opening ? next : null);
+    if (opening && next !== 'notifications') setSelectedNodeId(null);
+  }, [panel, setSelectedNodeId]);
 
   const openNotifications = useCallback(async () => {
     setPanel('notifications');
@@ -380,7 +407,7 @@ export default function AutomationBuilderPage() {
               at all; Activate is the only thing here wearing lime. */}
           <button
             type="button"
-            onClick={() => setPanel(panel === 'preview' ? null : 'preview')}
+            onClick={() => togglePanel('preview')}
             disabled={isEmpty}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 md:px-3 py-1.5
               text-[13px] font-medium text-[#111111] transition-colors disabled:opacity-40
@@ -396,7 +423,7 @@ export default function AutomationBuilderPage() {
             <InboxButton
               count={inboxUnread.count}
               open={panel === 'inbox'}
-              onClick={() => setPanel(panel === 'inbox' ? null : 'inbox')}
+              onClick={() => togglePanel('inbox')}
             />
             <NotificationBell
               count={notifications.unresolvedCount}
@@ -461,7 +488,13 @@ export default function AutomationBuilderPage() {
           problems={problems}
           posts={posts}
           activePath={testResult?.steps.map(s => s.nodeId) ?? []}
-          onSelect={id => { setSelectedNodeId(id); setAddMenu(null); }}
+          onSelect={id => {
+            setSelectedNodeId(id);
+            setAddMenu(null);
+            // The mirror of togglePanel: picking a step is choosing the other
+            // context, so the whole-automation panel steps aside.
+            if (id && panel && panel !== 'notifications') setPanel(null);
+          }}
           onMove={moveNode}
           onConnect={connectNodes}
           onAddAfter={onAddAfter}
@@ -470,9 +503,18 @@ export default function AutomationBuilderPage() {
           focusSignal={focus.signal}
         />
 
-        {/* Building an automation takes a few seconds of someone else's
-            computer thinking. Say so on the canvas, where they're looking. */}
-        {composing && <BuildingOverlay building={isEmpty} />}
+        {/* Building takes a few seconds of someone else's computer thinking,
+            and then it is worth saying what came back. Beside the canvas
+            rather than over it: dimming the automation to announce that the
+            automation is being worked on hides the one thing worth watching. */}
+        {(composing || activity.length > 0) && (
+          <AgentActivity
+            composing={composing}
+            building={buildingFromEmpty}
+            lines={activity}
+            onDone={clearActivity}
+          />
+        )}
 
         {isEmpty && !composing && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
@@ -599,10 +641,10 @@ export default function AutomationBuilderPage() {
           aiConfigured={aiConfigured}
           empty={isEmpty}
           historyCount={history.length}
-          onSubmit={compose}
+          onSubmit={prompt => { setBuildingFromEmpty(isEmpty); void compose(prompt); }}
           onUndo={undo}
           onDismissCard={() => setChangeCard(null)}
-          onOpenHistory={() => setPanel('history')}
+          onOpenHistory={() => { setPanel('history'); setSelectedNodeId(null); }}
         />
       </div>
     </div>

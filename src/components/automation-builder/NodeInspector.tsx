@@ -533,22 +533,12 @@ function TriggerInspector({
         </div>
       </Section>
 
-      <Section>
-        <label className="flex items-start gap-2.5 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={cfg.allowMultipleRuns}
-            onChange={e => onChange({ allowMultipleRuns: e.target.checked })}
-            className="mt-0.5 w-4 h-4 rounded border-[#D8D3CC] text-[#111111] focus:ring-[#C5FF3D]"
-          />
-          <span>
-            <span className="block text-[12px] font-medium text-[#111111]">Allow multiple triggers</span>
-            <span className="block text-[11px] text-[#8A857E] leading-snug mt-0.5">
-              Off, someone already partway through this automation won't start it again.
-            </span>
-          </span>
-        </label>
-      </Section>
+      {/* "Allow multiple triggers" used to live here. It asked a creator to
+          decide something they have no way to judge before their automation
+          has ever run, and the answer that isn't a mistake is always the same
+          one: somebody already halfway through a conversation should not be
+          started on it again from the top. That is the rule now — one active
+          run per person per automation — so there is nothing to ask. */}
     </>
   );
 }

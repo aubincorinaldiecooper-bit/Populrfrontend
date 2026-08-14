@@ -6,6 +6,7 @@ import {
 } from '../../lib/api';
 import { emptyGraph, newNodeId, type FlowGraph, type FlowNode, type FlowNodeType } from '../../lib/flowSchema';
 import { layoutGraph, needsLayout } from '../../lib/flowLayout';
+import { activityLines, parseOperations } from '../../lib/composerActivity';
 
 /**
  * All of the builder's state in one place: the graph, what's selected, the
@@ -69,6 +70,14 @@ export function useFlowBuilder(flowId: string | null) {
 
   const [composing, setComposing] = useState(false);
   const [changeCard, setChangeCard] = useState<ChangeCard | null>(null);
+  /**
+   * What the last composer answer actually did, in order.
+   *
+   * Derived from the operations the server validated, applied and saved — not
+   * from anything in flight — so the activity list can only ever describe
+   * changes that are already in the graph.
+   */
+  const [activity, setActivity] = useState<string[]>([]);
   const [highlighted, setHighlighted] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [problems, setProblems] = useState<FlowProblem[]>([]);
@@ -342,9 +351,12 @@ export function useFlowBuilder(flowId: string | null) {
     return () => clearTimeout(timer);
   }, []);
 
+  const clearActivity = useCallback(() => setActivity([]), []);
+
   const compose = useCallback(async (prompt: string) => {
     if (!flowId || composing) return;
     setComposing(true);
+    setActivity([]);
     const before = { graph, name };
     try {
       const result = await composeFlow(flowId, { prompt, selectedNodeId });
@@ -386,6 +398,7 @@ export function useFlowBuilder(flowId: string | null) {
         previousName: before.name,
         source: result.source,
       });
+      setActivity(activityLines(parseOperations(result.operations), result.flow.graph));
       highlight(result.touchedNodeIds ?? []);
     } catch (err) {
       setChangeCard({
@@ -457,7 +470,7 @@ export function useFlowBuilder(flowId: string | null) {
     flow, graph, name, loading, loadError,
     selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning,
-    composing, changeCard, setChangeCard, highlighted, history,
+    composing, changeCard, setChangeCard, activity, clearActivity, highlighted, history,
     problems, refreshValidation,
     updateNodeConfig, moveNode, addNode, deleteNode, connectNodes, disconnect,
     rename, relayout, commitGraph,
