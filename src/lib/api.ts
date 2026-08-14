@@ -416,178 +416,6 @@ export async function fetchPost(id: string): Promise<PostWithDetails> {
 }
 
 // ============================================================
-// Automations — keyword-triggered engagement automation (the beta's core
-// product surface). Talks to populrbackend's /api/automations, which is
-// authenticated and scoped to the caller's own workspace: every one of
-// these calls resolves the caller's own connected accounts and
-// automations server-side, never a client-supplied profile/workspace id.
-// ============================================================
-
-export type AutomationMatchMode = 'exact' | 'contains' | 'starts_with';
-export type AutomationReplyChannel = 'comment' | 'dm' | 'both';
-export type AutomationAiMode = 'auto' | 'suggest';
-
-/** The stored shape returned by the backend (snake_case — this is the raw
- *  connected_accounts row shape, not something this frontend controls). */
-export interface AutomationRecord {
-  id: string;
-  name: string;
-  funnel_id: string | null;
-  account_id: string;
-  platform: string;
-  source_post_id: string | null;
-  all_posts: boolean;
-  trigger_type: string;
-  keywords: string[];
-  match_mode: AutomationMatchMode;
-  reply_channel: AutomationReplyChannel;
-  response_type: string;
-  message_body: string | null;
-  comment_reply_body: string | null;
-  media_url: string | null;
-  link_url: string | null;
-  link_kind: string | null;
-  /** Tappable DM buttons (Zernio sendDM buttons). The engine swaps a
-   *  button's url for the per-contact tracked link when it matches the
-   *  automation's link_url. */
-  buttons: { label: string; url?: string }[] | null;
-  tags: string[];
-  score_delta: number;
-  stage_update: string | null;
-  active: boolean;
-  ai_enabled: boolean;
-  ai_mode: AutomationAiMode;
-  ai_confidence_threshold: string | number;
-  // Creator-authored per-automation guidance. Added by populrbackend PR #24 —
-  // absent on older responses, hence nullable on both storage sides.
-  ai_instructions: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AutomationInput {
-  name: string;
-  accountId: string;
-  platform: string;
-  sourcePostId?: number | null;
-  allPosts?: boolean;
-  keywords: string[];
-  matchMode?: AutomationMatchMode;
-  replyChannel?: AutomationReplyChannel;
-  commentReplyBody?: string | null;
-  messageBody?: string | null;
-  linkUrl?: string | null;
-  linkKind?: string | null;
-  /** Media attached to the DM (Zernio sendDM mediaUrl) — the engine sends it
-   *  capability-gated per platform. responseType tells the backend which
-   *  capability to validate ('image' | 'video' | 'text'). */
-  mediaUrl?: string | null;
-  responseType?: string;
-  buttons?: { label: string; url?: string }[] | null;
-  tags?: string[];
-  scoreDelta?: number;
-  stageUpdate?: string | null;
-  active?: boolean;
-  /** "Automatic" (false) sends the configured reply the instant a keyword
-   *  matches. "Review-first" (true + aiMode: 'suggest') always drafts and
-   *  queues the reply for a human to send instead — the one real backend
-   *  concept for this, reusing Smart Replies' existing suggest mode rather
-   *  than inventing a separate review gate the engine doesn't have. */
-  aiEnabled?: boolean;
-  aiMode?: AutomationAiMode;
-  /** How the automation is triggered — mirrors automations.trigger_type in
-   *  populrbackend/src/db/schema.sql. The wizard sends this explicitly per
-   *  the "type of automation" the creator picked. */
-  triggerType?: TriggerType;
-  /** Creator-authored per-automation guidance (populrbackend PR #24). Send
-   *  null to explicitly clear a previously-saved value; omit to leave it
-   *  unchanged (the backend distinguishes the two via a "was provided"
-   *  boolean, see src/routes/automations.ts:120). */
-  aiInstructions?: string | null;
-}
-
-/** GET /api/automations — the caller's own automations. Filters: accountId, platform, active. */
-export async function fetchAutomations(filter: {
-  accountId?: string;
-  platform?: string;
-  active?: boolean;
-} = {}): Promise<AutomationRecord[]> {
-  const qs = new URLSearchParams();
-  if (filter.accountId) qs.set('accountId', filter.accountId);
-  if (filter.platform) qs.set('platform', filter.platform);
-  if (filter.active !== undefined) qs.set('active', String(filter.active));
-  const query = qs.toString();
-  const data = await apiFetch<{ count: number; automations: AutomationRecord[] }>(
-    `/api/automations${query ? `?${query}` : ''}`
-  );
-  return data.automations;
-}
-
-/** GET /api/automations/:id */
-export async function fetchAutomation(id: string): Promise<AutomationRecord> {
-  const data = await apiFetch<{ automation: AutomationRecord }>(`/api/automations/${id}`);
-  return data.automation;
-}
-
-/** POST /api/automations — validated server-side against the real platform capability matrix. */
-export async function createAutomation(input: AutomationInput): Promise<AutomationRecord> {
-  const data = await apiFetch<{ automation: AutomationRecord }>('/api/automations', {
-    method: 'POST',
-    body: input,
-  });
-  return data.automation;
-}
-
-/** PATCH /api/automations/:id — partial update (e.g. { active: false } to pause). */
-export async function updateAutomation(id: string, patch: Partial<AutomationInput>): Promise<AutomationRecord> {
-  const data = await apiFetch<{ automation: AutomationRecord }>(`/api/automations/${id}`, {
-    method: 'PATCH',
-    body: patch,
-  });
-  return data.automation;
-}
-
-/** DELETE /api/automations/:id */
-export async function deleteAutomation(id: string): Promise<void> {
-  await apiFetch(`/api/automations/${id}`, { method: 'DELETE' });
-}
-
-export interface AutomationEvent {
-  id: string;
-  automation_id: string | null;
-  contact_id: string | null;
-  event_type: string;
-  status: 'ok' | 'failed' | 'skipped';
-  detail: string;
-  error: string | null;
-  contact_handle: string | null;
-  contact_name: string | null;
-  automation_name: string | null;
-  created_at: string;
-}
-
-/** GET /api/automations/:id/events — the user-facing "what did this automation do" log. */
-export async function fetchAutomationEvents(id: string, limit?: number): Promise<AutomationEvent[]> {
-  const qs = limit !== undefined ? `?limit=${limit}` : '';
-  const data = await apiFetch<{ count: number; events: AutomationEvent[] }>(`/api/automations/${id}/events${qs}`);
-  return data.events;
-}
-
-export interface AutomationsSummary {
-  totalCount: number;
-  activeCount: number;
-  interactionsHandled: number;
-  repliesSent: number;
-  failedAutomationsCount: number;
-  bestPerforming: { id: string; name: string; repliesSent: number } | null;
-}
-
-/** GET /api/automations/summary — Home page metrics, real rollups over the caller's own automations. */
-export async function fetchAutomationsSummary(): Promise<AutomationsSummary> {
-  return apiFetch('/api/automations/summary');
-}
-
-// ============================================================
 // Workspace settings — scoped server-side to the caller's own workspace.
 //
 // The pause switch here stops automation for THIS workspace only. Populr also
@@ -838,6 +666,27 @@ export interface ContactLinkClick {
   click_tag: string | null;
 }
 
+/**
+ * One line of a contact's automation history, as carried by ContactDetail.
+ *
+ * The rest of the legacy /api/automations client went with the wizard that
+ * was its only caller; this shape stays because the contact timeline still
+ * renders these events.
+ */
+export interface AutomationEvent {
+  id: string;
+  automation_id: string | null;
+  contact_id: string | null;
+  event_type: string;
+  status: 'ok' | 'failed' | 'skipped';
+  detail: string;
+  error: string | null;
+  contact_handle: string | null;
+  contact_name: string | null;
+  automation_name: string | null;
+  created_at: string;
+}
+
 export interface ContactDetail {
   contact: ContactRecord;
   sourcePost: { id: string; caption: string | null; url: string | null; platform: string } | null;
@@ -1009,261 +858,13 @@ export async function declareOtherAccountsOnPlatform(
 // alias is safe and the wizard/pages read main's real fields verbatim.
 // ============================================================
 
-export type Automation = AutomationRecord;
 export type Post = PostLibraryItem;
 export type Contact = ContactRecord;
-export type ReplyChannel = AutomationReplyChannel;
-
-// Trigger-type surface the wizard offers. Matches the values documented on
-// automations.trigger_type in populrbackend/src/db/schema.sql:221.
-export type TriggerType = 'comment' | 'dm' | 'keyword' | 'post_comment' | 'any_post_comment';
 
 // Lead stages the CRM assigns (mirrors populrbackend/src/config/leadscoring.ts)
 // plus 'needs_reply', which is a UI-only bucket the Contacts page uses to
 // group inbox items that don't have a stage of their own yet.
 export type LeadStage = 'cold' | 'engaged' | 'warm' | 'interested' | 'hot' | 'converted' | 'needs_reply';
-
-/** Shape the wizard's test chat renders. Populated from `/test-reply` plus
- *  client-side keyword matching, so the wizard can preview both "would
- *  this fire?" and "what would AI draft?" without a dedicated dry-run
- *  endpoint (dropped in populrbackend #24 in favour of /test-reply). */
-export interface AutomationTestResult {
-  matched: boolean;
-  keyword?: string | null;
-  needsHuman?: boolean;
-  intent?: string;
-  confidence?: number;
-  reason?: string;
-  /** Subdued informational line (e.g. why there's no AI draft to show).
-   *  Never a failure claim: a missing AI preview doesn't stop the
-   *  automation from replying in production, and the copy must not imply
-   *  that it does. */
-  note?: string | null;
-  publicReply?: string | null;
-  dm?: string | null;
-  /** Media the DM will carry (the automation's attachment) — the engine
-   *  attaches it to every DM send, AI-drafted or not. */
-  dmMediaUrl?: string | null;
-  /** Label of the tappable button attached to the DM, when configured. Like
-   *  media, the engine attaches buttons to every DM send. */
-  dmButtonLabel?: string | null;
-}
-
-export interface AutomationTestInput {
-  platform: string;
-  accountId?: string;
-  triggerType: TriggerType;
-  keywords: string[];
-  replyChannel: AutomationReplyChannel;
-  channel: 'comment' | 'dm';
-  postId?: string;
-  sampleText: string;
-  aiEnabled: boolean;
-  aiInstructions?: string;
-  /** The wizard's configured replies, so the preview shows the actual text
-   *  that will be sent rather than a placeholder. */
-  commentReplyBody?: string;
-  dmBody?: string;
-  linkUrl?: string;
-  mediaUrl?: string;
-  /** Label of the tappable button carrying the tracked link, when set. */
-  buttonLabel?: string;
-}
-
-/** Very small keyword matcher — mirrors populrbackend/src/services/
- *  automationMatch.ts's `keywordMatches` for the wizard's client-side
- *  preview only. The real engine runs the same logic server-side; this
- *  is not the source of truth for production replies. */
-function localKeywordMatch(text: string, keywords: string[], mode: 'contains' | 'exact' | 'starts_with' = 'contains'): string | null {
-  const haystack = text.toLowerCase();
-  for (const raw of keywords) {
-    const k = raw.toLowerCase().trim();
-    if (!k) continue;
-    if (mode === 'exact' && haystack === k) return raw;
-    if (mode === 'contains' && haystack.includes(k)) return raw;
-    if (mode === 'starts_with' && haystack.startsWith(k)) return raw;
-  }
-  return null;
-}
-
-/** Mirrors populrbackend's engineService.renderTemplate for preview only:
- *  {{name}} falls back to "there" exactly like the engine does for an
- *  unnamed contact, and {{link}} becomes the configured destination. */
-function renderPreviewTemplate(text: string, link: string | null): string {
-  return text
-    .replace(/\{\{\s*name\s*\}\}/gi, 'there')
-    .replace(/\{\{\s*link\s*\}\}/gi, link ?? '')
-    // Mirror the engine's seam cleanup for a removed {{link}} ("here: " →
-    // "here") so the preview shows exactly what would go out.
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\s+([.,!?:;])/g, '$1')
-    .replace(/[\s:,-]+$/g, '')
-    .trim();
-}
-
-/** Mirrors the engine's publicSafeAiDraft: the AI answers publicly only when
- *  its draft carries no link — links never appear in public comments (the
- *  tracked URL is per-contact and rides the DM as text and button). */
-function publicSafeDraftPreview(draft: string | null): string | null {
-  if (!draft) return null;
-  const trimmed = draft.trim();
-  if (!trimmed || /\{\{\s*link\s*\}\}/i.test(trimmed) || /https?:\/\//i.test(trimmed)) return null;
-  return trimmed;
-}
-
-/** Test-chat wrapper. Does keyword matching locally, then (when AI is on)
- *  fetches an AI draft from `/api/automations/test-reply`. Non-mutating —
- *  same guarantees as the underlying endpoint. */
-export async function testAutomation(input: AutomationTestInput): Promise<AutomationTestResult> {
-  const keyword = localKeywordMatch(input.sampleText, input.keywords);
-
-  // Mirrors the engine (populrbackend/src/services/automationMatch.ts):
-  // keywords gate matching for EVERY trigger type. The old guard here only
-  // checked them when triggerType === 'keyword' — a value the wizard never
-  // produces ('comment' / 'dm'), so any sample "matched" with a null
-  // keyword, the bubble rendered `Matched keyword ""`, and the preview
-  // claimed a trigger that production would never fire.
-  if (input.keywords.length > 0 && !keyword) {
-    return {
-      matched: false,
-      reason: `None of this automation's trigger keywords appear in the sample ${input.channel === 'dm' ? 'DM' : 'comment'}.`,
-    };
-  }
-
-  // From here the trigger DID match, so in production the automation fires
-  // and replies regardless of whether an AI draft can be previewed — keyword
-  // automations send their configured replies deterministically (see
-  // populrbackend's engine: e2e passes with zero AI calls). A missing AI
-  // preview is therefore a note on a successful match, never a warning that
-  // something is broken or needs a human.
-  const wantsComment = input.replyChannel === 'comment' || input.replyChannel === 'both';
-  const wantsDM = input.replyChannel === 'dm' || input.replyChannel === 'both';
-  const previewLink = input.linkUrl?.trim() || null;
-  // The engine's own fallback when no comment reply is configured. Public
-  // comments never carry links — the engine renders {{link}} to nothing on
-  // the public surface — so the comment preview does the same.
-  const commentPreview = wantsComment
-    ? renderPreviewTemplate(input.commentReplyBody?.trim() || 'Just sent you a DM! 📩', null)
-    : null;
-  const dmPreview = wantsDM && input.dmBody?.trim()
-    ? renderPreviewTemplate(input.dmBody.trim(), previewLink)
-    : null;
-  // The engine attaches the automation's media to every DM it sends,
-  // AI-drafted or deterministic alike — and its buttons, whose url it swaps
-  // for the per-contact tracked link. A button needs a link to carry.
-  const dmMedia = wantsDM && input.mediaUrl?.trim() ? input.mediaUrl.trim() : null;
-  const dmButton = wantsDM && input.buttonLabel?.trim() && input.linkUrl?.trim()
-    ? input.buttonLabel.trim()
-    : null;
-
-  const matchedWithoutPreview = (note: string): AutomationTestResult => ({
-    matched: true, keyword, needsHuman: false,
-    reason: 'Populr will reply automatically.',
-    note,
-    publicReply: commentPreview,
-    dm: dmPreview,
-    dmMediaUrl: dmPreview ? dmMedia : null,
-    dmButtonLabel: dmPreview ? dmButton : null,
-  });
-
-  if (!input.aiEnabled) {
-    return matchedWithoutPreview(
-      'AI drafting is off for this automation, so replies use your configured text as-is.'
-    );
-  }
-
-  let resp:
-    | { available: false; reason: string }
-    | {
-        available: true;
-        decision: {
-          intent: string; confidence: number; replyType: 'dm' | 'comment';
-          replyText: string | null; linkToSend: { key: string; url: string } | null;
-          needsHuman: boolean; shouldAutoReply: boolean; reason: string;
-        };
-      };
-  try {
-    resp = await apiFetch('/api/automations/test-reply', {
-      method: 'POST',
-      body: {
-        platform: input.platform,
-        channel: input.channel,
-        messageText: input.sampleText,
-      },
-    });
-  } catch {
-    // The preview endpoint failing is a preview problem, not an automation
-    // problem — surfacing it as a red test failure (the old behavior)
-    // overstated it.
-    return matchedWithoutPreview(
-      "The AI draft preview couldn't load just now. This doesn't affect the automation itself."
-    );
-  }
-  if (!resp.available) {
-    return matchedWithoutPreview(
-      resp.reason === 'not_configured'
-        ? "Smart Replies isn't set up on this server, so there's no AI draft to show."
-        : resp.reason === 'ai_disabled'
-        ? "AI is turned off in Brand Settings, so there's no AI draft to show."
-        : "The AI draft preview couldn't load just now. This doesn't affect the automation itself."
-    );
-  }
-  const d = resp.decision;
-  if (d.needsHuman) {
-    // Holding reply: for questions the instructions don't cover, the AI
-    // sends a warm fact-free acknowledgment and then queues the
-    // conversation — so the preview shows that reply plus what happens next.
-    // Routed to the channel the automation actually sends on, mirroring the
-    // engine: comment-only automations post it publicly (their DM branch
-    // never runs); everything else DMs it.
-    if (d.replyText) {
-      const postsPublicly = input.replyChannel === 'comment';
-      return {
-        matched: true,
-        keyword,
-        intent: d.intent,
-        confidence: d.confidence,
-        needsHuman: true,
-        reason: d.reason,
-        note: 'After this reply, the conversation is queued for you to follow up personally.',
-        publicReply: postsPublicly ? d.replyText : null,
-        dm: postsPublicly ? null : d.replyText,
-        dmMediaUrl: postsPublicly ? null : dmMedia,
-        dmButtonLabel: postsPublicly ? null : dmButton,
-      };
-    }
-    // Pure escalation: NOTHING is sent. Previews must vanish — with them
-    // present the renderer shows send bubbles instead of the escalation
-    // notice, claiming an auto-reply production would never make.
-    return {
-      matched: true,
-      keyword,
-      intent: d.intent,
-      confidence: d.confidence,
-      needsHuman: true,
-      reason: d.reason,
-      publicReply: null,
-      dm: null,
-    };
-  }
-  return {
-    matched: true,
-    keyword,
-    intent: d.intent,
-    confidence: d.confidence,
-    needsHuman: false,
-    reason: d.reason,
-    // Mirrors the engine: a link-free confident draft IS the public reply;
-    // a draft built around the link stays in the DM and the public reply
-    // falls back to the configured static text (the "check your DMs"
-    // pointer). The DM previews the AI draft with the configured DM as its
-    // fallback.
-    publicReply: wantsComment ? (publicSafeDraftPreview(d.replyText) ?? commentPreview) : null,
-    dm: wantsDM ? (d.replyType === 'dm' && d.replyText ? d.replyText : dmPreview) : null,
-    dmMediaUrl: wantsDM ? dmMedia : null,
-    dmButtonLabel: wantsDM ? dmButton : null,
-  };
-}
 
 /* Note: main's `fetchPosts(tab, limit)` returns draft posts for the Content
  * page and is unrelated to the wizard's "which of my synced Zernio posts
