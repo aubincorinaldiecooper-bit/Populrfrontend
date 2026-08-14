@@ -12,7 +12,7 @@ import { magicLinkClient } from "better-auth/client/plugins";
  * a prod build without VITE_AUTH_URL would send auth traffic to whatever
  * the current page origin is, which is definitely wrong.
  */
-const VITE_AUTH_URL = import.meta.env.VITE_AUTH_URL as string | undefined;
+const VITE_AUTH_URL = import.meta.env.VITE_AUTH_URL;
 
 if (!VITE_AUTH_URL || VITE_AUTH_URL.trim() === "") {
   throw new Error(

@@ -1,7 +1,7 @@
 # Astryx migration — status
 
 Meta's [Astryx](https://github.com/facebook/astryx) design system, being adopted
-incrementally alongside the existing Tailwind/Radix UI. This document tracks what's
+incrementally alongside the existing Tailwind UI. This document tracks what's
 actually done, not the full end-state plan — update it as later phases land.
 
 **Current phase: Phase 3 (core pages) under way.** Phase 1's foundations
@@ -10,8 +10,7 @@ below. `ConnectionsPage.tsx` is now the first page migrated in full — every
 element that has a real Astryx equivalent (Card, Text, Badge, StatusDot,
 ProgressBar, Divider, HStack/VStack, Button, Spinner, Banner, AlertDialog)
 uses it; hand-rolled `pop-*` Tailwind classes remain only for things Astryx
-has no component for (icon tiles, the page-level max-width wrapper). Nothing
-Radix-based has been removed yet — that's still Phase 5.
+has no component for (icon tiles, the page-level max-width wrapper).
 
 ## What's real vs. what's still to do
 
@@ -81,8 +80,9 @@ either the legacy UI or the Astryx side.
 
 Both `Theme` and `LayerProvider` are mounted once, at the true root, outside
 the router — never per-page. `LayerProvider` currently has no toast config
-passed; Populr's existing `sonner`-based `ToastContainer` is untouched and
-still owns toasts (see "Remaining Radix/other dependencies" below).
+passed; toasts are Populr's own, implemented in `AppContext` and rendered by
+`ToastContainer` (the `sonner` package this file once credited was never
+wired up — it lived only in the unused generated kit, and has been removed).
 
 ## CSS layer order (`src/index.css`)
 
@@ -182,13 +182,25 @@ This is now the reference pattern for migrating the remaining pages (Home,
 Automations, Contacts, Settings) per the redesign work in progress — full
 component adoption per page, not scattered primitive swaps.
 
-## Remaining legacy/Radix dependencies
+## Remaining legacy dependencies
 
-Untouched. Every `@radix-ui/*` package, `framer-motion`, `gsap`,
-`sonner`, `cmdk`, `vaul`, `react-day-picker`, etc. are all still in
-`package.json` and still used exactly as before — none were removed, none
-were evaluated for removal. That's Phase 5 work, once each Radix-backed
-primitive has a real Astryx replacement actually in use somewhere.
+Phase 5 turned out to be smaller than planned, because the Radix layer was
+never actually wired into the product. The whole of `src/components/ui/` —
+54 shadcn-style primitives — was imported by nothing outside itself: the app
+was built from its own components plus Astryx, and the generated kit sat
+beside it unused. It has been deleted, along with the 38 packages that
+existed only to serve it (every `@radix-ui/*`, `recharts`, `cmdk`, `vaul`,
+`sonner`, `react-day-picker`, `react-hook-form`, `gsap`, ...).
+
+What that leaves is genuinely in use and stays: `framer-motion` (Sidebar's
+motion and `useReducedMotion`), `@xyflow/react` (the automation canvas),
+`lucide-react`, `@fontsource-variable/*`, and the Astryx packages
+themselves. There is no longer a Radix-backed primitive waiting for an
+Astryx replacement — the mapping table in the migration doc applies only to
+whatever a future page needs, not to code sitting in this repo.
+
+`components.json` (the shadcn config) is deliberately kept, so a single
+primitive can still be pulled in deliberately if a real need appears.
 
 ## Why only Phase 1
 
