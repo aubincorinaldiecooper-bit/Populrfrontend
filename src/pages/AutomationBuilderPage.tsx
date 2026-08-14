@@ -63,7 +63,6 @@ type SidePanel = 'preview' | 'notifications' | 'inbox' | 'history' | null;
  */
 const TWO_COLUMN_MIN_WIDTH = 1180;
 
-/** Read at click time, so it needs no resize listener to stay true. */
 function roomForBothColumns(): boolean {
   return window.innerWidth >= TWO_COLUMN_MIN_WIDTH;
 }
@@ -240,6 +239,34 @@ export default function AutomationBuilderPage() {
   const keepStepBesideFeed = useCallback(() => {
     if (!roomForBothColumns()) setSelectedNodeId(null);
   }, [setSelectedNodeId]);
+
+  /**
+   * The window is not only measured when someone clicks.
+   *
+   * Checking at click time alone was wrong: a creator who opens both at a
+   * comfortable width and then resizes, splits the screen, or rotates a tablet
+   * keeps two 320px columns on a viewport that cannot hold them — landing in
+   * exactly the layout the threshold exists to prevent, by a route the
+   * threshold never watches.
+   *
+   * matchMedia rather than a resize listener because the only thing we care
+   * about is crossing the line, and it fires once on the crossing instead of
+   * on every intermediate pixel.
+   *
+   * The step yields, not the panel. A panel is opened deliberately and closed
+   * deliberately, so taking it away would be undoing something the creator
+   * asked for; a selection is one click on the canvas to get back. This is
+   * also the same direction keepStepBesideFeed already resolves it in.
+   */
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia(`(min-width: ${TWO_COLUMN_MIN_WIDTH}px)`);
+    const reconcile = () => {
+      if (!query.matches) setSelectedNodeId(current => (panel ? null : current));
+    };
+    query.addEventListener('change', reconcile);
+    return () => query.removeEventListener('change', reconcile);
+  }, [panel, setSelectedNodeId]);
 
   const openNotifications = useCallback(async () => {
     setPanel('notifications');

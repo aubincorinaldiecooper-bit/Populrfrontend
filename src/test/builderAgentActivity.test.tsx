@@ -255,6 +255,82 @@ describe('one context at a time', () => {
     await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
   });
 
+  it('and gives the width back when the window shrinks under them', async () => {
+    // The window is not only measured when someone clicks. Opening both at a
+    // comfortable width and then resizing — or splitting the screen, or
+    // rotating a tablet — used to keep two 320px columns on a viewport that
+    // cannot hold them, reaching the bad layout by the one route the
+    // threshold never watched.
+    const listeners: (() => void)[] = [];
+    const media = { matches: true };
+    const realMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true, configurable: true,
+      value: (query: string) => ({
+        get matches() { return media.matches; },
+        media: query,
+        addEventListener: (_e: string, fn: () => void) => { listeners.push(fn); },
+        removeEventListener: () => {},
+      }),
+    });
+    try {
+      setViewportWidth(1440);
+      const user = userEvent.setup();
+      mountBuilder();
+      await screen.findByText('Preview');
+      selectNode('trigger');
+      await screen.findByText('When');
+      await user.click(screen.getByLabelText(/^Notifications,/));
+      expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      expect(screen.getByText('When')).toBeInTheDocument();
+
+      // The viewport crosses below the threshold.
+      media.matches = false;
+      act(() => { listeners.forEach(fn => fn()); });
+
+      // The step yields; the panel the creator deliberately opened stays.
+      await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
+      expect(screen.getByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true, configurable: true, value: realMatchMedia,
+      });
+    }
+  });
+
+  it('but a lone inspector is left alone — one column always fits', async () => {
+    const listeners: (() => void)[] = [];
+    const media = { matches: true };
+    const realMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true, configurable: true,
+      value: (query: string) => ({
+        get matches() { return media.matches; },
+        media: query,
+        addEventListener: (_e: string, fn: () => void) => { listeners.push(fn); },
+        removeEventListener: () => {},
+      }),
+    });
+    try {
+      mountBuilder();
+      await screen.findByText('Preview');
+      selectNode('trigger');
+      await screen.findByText('When');
+
+      media.matches = false;
+      act(() => { listeners.forEach(fn => fn()); });
+
+      // Nothing to reconcile: the inspector alone is the ordinary narrow
+      // case, and closing a creator's open step on a resize would be the
+      // shell throwing away work they were in the middle of.
+      expect(screen.getByText('When')).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true, configurable: true, value: realMatchMedia,
+      });
+    }
+  });
+
   it('and exactly at the threshold, both fit', async () => {
     setViewportWidth(1180);
     const user = userEvent.setup();
