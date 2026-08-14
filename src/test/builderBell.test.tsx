@@ -102,6 +102,16 @@ vi.mock('../lib/api', async () => {
     fetchCapabilities: vi.fn(async () => []),
     fetchFlowBuilderMeta: vi.fn(async () => ({ aiConfigured: true, tags: [] })),
     fetchPostsLibrary: vi.fn(async () => []),
+    // The top bar's Inbox badge asks for the waiting conversations, and the
+    // drawer renders them — so these are shaped like real ones.
+    fetchInbox: vi.fn(async () => ({
+      items: ['jordan', 'maya', 'alex'].map((handle, i) => ({
+        id: `i${i + 1}`, contact_id: `c${i + 1}`, contact_handle: handle, contact_name: handle,
+        platform: 'instagram', channel: 'dm', message_text: `${handle} said something`,
+        needs_reply: true, needs_reply_reason: 'no_rule_matched', suggested_reply: null,
+        post_caption: null, created_at: new Date().toISOString(),
+      })),
+    })),
   };
 });
 
@@ -138,6 +148,27 @@ describe('the builder’s top bar', () => {
     expect(screen.queryByText('Review')).not.toBeInTheDocument();
     expect(screen.getByText('Activate')).toBeInTheDocument();
     expect(screen.getByLabelText(/^Notifications,/)).toBeInTheDocument();
+  });
+
+  it('carries Inbox beside the bell, with its own count', async () => {
+    mountBuilder();
+    // Two different questions, two separate counts: Inbox is who is talking
+    // to you, the bell is what Populr needs from you. They never merge.
+    expect(await screen.findByLabelText('Inbox, 3 waiting')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Notifications, 2 unread')).toBeInTheDocument();
+  });
+
+  it('opens Inbox over the canvas without leaving the automation', async () => {
+    const user = userEvent.setup();
+    mountBuilder();
+
+    await user.click(await screen.findByLabelText('Inbox, 3 waiting'));
+
+    expect(await screen.findByRole('complementary', { name: 'Inbox' })).toBeInTheDocument();
+    // Still on the builder: the automation's own name and Activate are right
+    // where they were.
+    expect(screen.getByText('Activate')).toBeInTheDocument();
+    expect(screen.getByTestId('canvas')).toBeInTheDocument();
   });
 
   it('counts what is unresolved on the bell', async () => {

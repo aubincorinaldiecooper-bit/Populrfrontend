@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Loader2, MessageCircle, Pause, PenLine, Zap,
+  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Eye, Loader2, Pause, PenLine, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
@@ -13,6 +13,9 @@ import AIComposer from '../components/automation-builder/AIComposer';
 import BuildingOverlay from '../components/automation-builder/BuildingOverlay';
 import PreviewPanel from '../components/automation-builder/PreviewPanel';
 import NotificationBell from '../components/automation-builder/NotificationBell';
+import { InboxButton } from '../components/inbox/InboxButton';
+import InboxDrawer from '../components/inbox/InboxDrawer';
+import { useInboxUnread } from '../components/inbox/useInboxQueue';
 import NotificationsPanel from '../components/automation-builder/NotificationsPanel';
 import HistoryDrawer from '../components/automation-builder/HistoryDrawer';
 import {
@@ -34,12 +37,13 @@ import LoadingState from '../components/LoadingState';
  * opened. That restraint is the product: a creator should be looking at their
  * automation, not at the tool.
  *
- * The three things in the top right are deliberately three different
- * questions. Preview: how will this feel? The bell: what does Populr need from
- * me? Activate: put it live. Nothing else earns a place up there.
+ * The controls in the top right are four different questions, and they are
+ * weighted to say so. Preview: how will this feel? Inbox: who is talking to
+ * me? The bell: what does Populr need from me? Activate: put it live — the
+ * only one wearing lime. Nothing else earns a place up there.
  */
 
-type SidePanel = 'preview' | 'notifications' | 'history' | null;
+type SidePanel = 'preview' | 'notifications' | 'inbox' | 'history' | null;
 
 export default function AutomationBuilderPage() {
   const { flowId = null } = useParams<{ flowId: string }>();
@@ -80,6 +84,7 @@ export default function AutomationBuilderPage() {
   const [bellAttention, setBellAttention] = useState(false);
 
   const notifications = useBuilderNotifications(problems, graph);
+  const inboxUnread = useInboxUnread();
 
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -369,23 +374,37 @@ export default function AutomationBuilderPage() {
         <div className="ml-auto flex items-center gap-2">
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
+          {/* Three different jobs, three different weights. Preview is a
+              secondary action and looks like one; Inbox and the bell are
+              chrome that reports rather than acts, so they carry no border
+              at all; Activate is the only thing here wearing lime. */}
           <button
             type="button"
             onClick={() => setPanel(panel === 'preview' ? null : 'preview')}
             disabled={isEmpty}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8E4DF] bg-white
-              px-2.5 md:px-3 py-1.5 text-[13px] font-medium text-[#111111] hover:border-[#D8D3CC]
-              disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 md:px-3 py-1.5
+              text-[13px] font-medium text-[#111111] transition-colors disabled:opacity-40
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]
+              ${panel === 'preview'
+                ? 'border-[#111111] bg-[#F7F5F2]'
+                : 'border-[#E8E4DF] bg-white hover:border-[#D8D3CC]'}`}
           >
-            <MessageCircle size={14} /> <span className="hidden md:inline">Preview</span>
+            <Eye size={14} /> <span className="hidden md:inline">Preview</span>
           </button>
 
-          <NotificationBell
-            count={notifications.unresolvedCount}
-            open={panel === 'notifications'}
-            attention={bellAttention}
-            onClick={() => (panel === 'notifications' ? setPanel(null) : void openNotifications())}
-          />
+          <div className="flex items-center gap-0.5 pl-1">
+            <InboxButton
+              count={inboxUnread.count}
+              open={panel === 'inbox'}
+              onClick={() => setPanel(panel === 'inbox' ? null : 'inbox')}
+            />
+            <NotificationBell
+              count={notifications.unresolvedCount}
+              open={panel === 'notifications'}
+              attention={bellAttention}
+              onClick={() => (panel === 'notifications' ? setPanel(null) : void openNotifications())}
+            />
+          </div>
 
           {live ? (
             <button
@@ -402,10 +421,11 @@ export default function AutomationBuilderPage() {
               type="button"
               onClick={onActivate}
               disabled={isEmpty || activating}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#C5FF3D] px-3 md:px-4 py-1.5
-                text-[13px] font-semibold text-[#111111] hover:bg-[#B9F52E] disabled:opacity-40
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111111]
-                focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#C5FF3D] px-3.5 md:px-4 py-1.5
+                text-[13px] font-semibold text-[#111111] shadow-[0_1px_2px_rgba(17,17,17,0.10)]
+                transition-all hover:bg-[#B9F52E] hover:shadow-[0_2px_6px_rgba(17,17,17,0.12)]
+                disabled:opacity-40 disabled:shadow-none focus-visible:outline-none
+                focus-visible:ring-2 focus-visible:ring-[#111111] focus-visible:ring-offset-1"
             >
               {activating ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
               Activate
@@ -542,6 +562,10 @@ export default function AutomationBuilderPage() {
             onReset={() => setTestResult(null)}
             onClose={() => { setPanel(null); setTestResult(null); }}
           />
+        )}
+
+        {panel === 'inbox' && (
+          <InboxDrawer onClose={() => setPanel(null)} onChanged={inboxUnread.refresh} />
         )}
 
         {panel === 'notifications' && (

@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
 import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
+import InboxLauncher from '../components/inbox/InboxButton';
 import EmptyState from '../components/EmptyState';
 import { TableSkeleton, Skeleton } from '../components/Skeleton';
 import {
@@ -154,11 +155,14 @@ export default function ContactsPage() {
           // someone engages with an automation, and a primary button whose
           // only behavior was a toast explaining it does nothing was a dead
           // affordance — the empty state below carries that explanation.
-          <div className="relative hidden sm:block">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
-              className="pop-search w-56" />
-          </div>
+          <>
+            <InboxLauncher />
+            <div className="relative hidden sm:block">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
+                className="pop-search w-56" />
+            </div>
+          </>
         }
       />
 

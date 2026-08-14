@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   AlertCircle, RefreshCw, Inbox as InboxIcon, Send, Check, Loader2, Sparkles, PenLine,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
 import { ListSkeleton } from '../components/Skeleton';
 import { platformMeta } from '../lib/platformMeta';
-import {
-  isBackendConfigured, fetchInbox, sendInboxReply, setInboxNeedsReply, ApiError,
-} from '../lib/api';
+import { isBackendConfigured } from '../lib/api';
 import type { InboxItem } from '../lib/api';
+import { useInboxQueue, type InboxTab } from '../components/inbox/useInboxQueue';
 
 /**
  * The conversations queue — the surface the backend has fed all along.
@@ -20,8 +18,6 @@ import type { InboxItem } from '../lib/api';
  * This page closes that loop: read the message, send the AI's draft with
  * one tap or write your own, in-channel.
  */
-
-const PAGE_SIZE = 30;
 
 /** Why this conversation needs the creator, in the creator's language. */
 const REASON_LABEL: Record<string, string> = {
@@ -48,107 +44,28 @@ function timeAgo(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
-type Tab = 'needs_you' | 'all';
-
 export default function InboxPage() {
-  const { showToast } = useApp();
   const backendConfigured = isBackendConfigured();
 
-  const [tab, setTab] = useState<Tab>('needs_you');
-  const [items, setItems] = useState<InboxItem[]>([]);
-  const [loading, setLoading] = useState(backendConfigured);
-  const [loadingMore, setLoadingMore] = useState(false);
-  // The API returns no total, so "is there more?" is inferred: a full page
-  // implies there may be another one behind it.
-  const [hasMore, setHasMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Monotonic request id: only the newest in-flight fetch may write state.
-  // Without it, switching tabs while a slow request is in flight lets the
-  // older response land last and show the previous tab's queue under the
-  // newly selected one. Same pattern as ContactsPage.
-  const requestSeq = useRef(0);
+  const [tab, setTab] = useState<InboxTab>('needs_you');
+  // Fetching, paging, sending and resolving are shared with the Inbox drawer
+  // that opens over the builder — see components/inbox/useInboxQueue. This
+  // page owns only how it all looks.
+  const {
+    items, loading, loadingMore, hasMore, error, sending, resolving,
+    load, loadMore, send: sendReply, resolve,
+  } = useInboxQueue(tab);
 
   // Which item has its composer open, and its draft text. One at a time —
   // replying is a focused act, not a spreadsheet.
   const [composerFor, setComposerFor] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState<string | null>(null);
-  const [resolving, setResolving] = useState<string | null>(null);
-
-  const runFetch = useCallback(async ({ offset, append }: { offset: number; append: boolean }) => {
-    if (!backendConfigured) return;
-    const seq = ++requestSeq.current;
-    if (append) setLoadingMore(true);
-    else {
-      setLoading(true);
-      setError(null);
-    }
-    try {
-      const res = await fetchInbox({
-        needsReply: tab === 'needs_you' ? true : undefined,
-        limit: PAGE_SIZE,
-        offset,
-      });
-      if (seq !== requestSeq.current) return; // superseded by a newer fetch
-      setItems(prev => (append ? [...prev, ...res.items] : res.items));
-      setHasMore(res.items.length === PAGE_SIZE);
-    } catch (err) {
-      if (seq !== requestSeq.current) return;
-      const msg = err instanceof Error ? err.message : 'Could not load your inbox.';
-      if (append) showToast(msg, 'error');
-      else setError(msg);
-    } finally {
-      if (seq === requestSeq.current) {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    }
-  }, [backendConfigured, tab, showToast]);
-
-  const load = useCallback(() => runFetch({ offset: 0, append: false }), [runFetch]);
-  const loadMore = useCallback(
-    () => runFetch({ offset: items.length, append: true }),
-    [runFetch, items.length],
-  );
-
-  useEffect(() => {
-    // Data fetch from the backend, not derived state — see ContactsPage.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
 
   const send = async (item: InboxItem, input: { text?: string; useSuggested?: boolean }) => {
-    setSending(item.id);
-    try {
-      const result = await sendInboxReply(item.id, input);
-      showToast(`Reply sent on ${result.channel === 'dm' ? 'DM' : 'the comment thread'}.`, 'success');
-      setComposerFor(null);
-      setDraft('');
-      load();
-    } catch (err) {
-      // 422 means the platform genuinely can't carry this reply — say that,
-      // not a generic failure.
-      const msg = err instanceof ApiError && err.code === 'not_supported_on_platform'
-        ? err.message
-        : err instanceof Error ? err.message : 'Could not send this reply.';
-      showToast(msg, 'error');
-    } finally {
-      setSending(null);
-    }
-  };
-
-  const resolve = async (item: InboxItem) => {
-    setResolving(item.id);
-    try {
-      await setInboxNeedsReply(item.id, false);
-      showToast('Marked handled', 'success');
-      load();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not update this conversation.', 'error');
-    } finally {
-      setResolving(null);
-    }
+    const ok = await sendReply(item, input);
+    if (!ok) return;
+    setComposerFor(null);
+    setDraft('');
   };
 
   if (!backendConfigured) {
@@ -181,7 +98,7 @@ export default function InboxPage() {
       />
 
       <div className="flex gap-1 mb-5">
-        {([['needs_you', 'Needs you'], ['all', 'All conversations']] as [Tab, string][]).map(([key, label]) => (
+        {([['needs_you', 'Needs you'], ['all', 'All conversations']] as [InboxTab, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
