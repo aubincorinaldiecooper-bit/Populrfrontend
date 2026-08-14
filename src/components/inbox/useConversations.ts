@@ -28,6 +28,12 @@ export interface ConversationsState {
   threadLoading: boolean;
   selectedId: string | null;
   sending: boolean;
+  /**
+   * The inbox item the open thread replies through, remembered independently
+   * of the visible list. Searching filters the list; it does not make the
+   * conversation you already have open unanswerable.
+   */
+  replyTarget: string | null;
   select: (contactId: string | null) => void;
   refresh: () => void;
   send: (text: string) => Promise<boolean>;
@@ -45,6 +51,17 @@ export function useConversations(search: string): ConversationsState {
   const [threadLoading, setThreadLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
+  /**
+   * contactId → the inbox item to reply through, accumulated across loads.
+   *
+   * The list is filtered by search; the open conversation is not. Reading the
+   * reply target out of the visible list meant searching for something that
+   * excluded the person you were talking to told you there was nothing to
+   * reply to — and made send fail silently, because it looked them up the
+   * same way. This remembers, so an open thread stays answerable.
+   */
+  const [replyTargets, setReplyTargets] = useState<Map<string, string | null>>(new Map());
+
   // Monotonic request ids. Search is un-debounced and threads are opened by
   // clicking down a list, so without these an older response can land last and
   // show the wrong person's messages under the right person's name.
@@ -60,6 +77,11 @@ export function useConversations(search: string): ConversationsState {
       .then(res => {
         if (seq !== listSeq.current) return;
         setConversations(res.conversations);
+        setReplyTargets(prev => {
+          const next = new Map(prev);
+          for (const c of res.conversations) next.set(c.contactId, c.latestInboxItemId);
+          return next;
+        });
       })
       .catch(err => {
         if (seq !== listSeq.current) return;
@@ -94,8 +116,14 @@ export function useConversations(search: string): ConversationsState {
       });
   }, [showToast]);
 
+  // Mirrors selectedId for the async send path, which must be able to ask
+  // "is this still the open conversation?" after an await — its closure's
+  // captured selectedId is the answer to a question from before the await.
+  const selectedRef = useRef<string | null>(null);
+
   const select = useCallback((contactId: string | null) => {
     setSelectedId(contactId);
+    selectedRef.current = contactId;
     if (!contactId) {
       // Bump the sequence so a thread still in flight can't land on a closed
       // conversation and reopen it.
@@ -107,21 +135,31 @@ export function useConversations(search: string): ConversationsState {
     loadThread(contactId);
   }, [loadThread]);
 
+  const replyTarget = selectedId ? replyTargets.get(selectedId) ?? null : null;
+
   const send = useCallback(async (text: string): Promise<boolean> => {
-    const conversation = conversations.find(c => c.contactId === selectedId);
-    if (!conversation) return false;
-    if (!conversation.latestInboxItemId) {
+    const target = selectedId ? replyTargets.get(selectedId) ?? null : null;
+    if (!target) {
       // Replies go out through an inbox item — it carries the channel and the
-      // message being answered. Saying so is better than a send that fails.
+      // message being answered. Saying so is better than a send that fails,
+      // and better than the silent `return false` this used to do when the
+      // conversation simply wasn't in the filtered list.
       showToast("There's nothing to reply to on this conversation yet.", 'error');
       return false;
     }
+    // Whose conversation this reply belongs to, fixed before the await. The
+    // creator can click another person while this is in flight.
+    const sentFor = selectedId;
     setSending(true);
     try {
-      const result = await sendInboxReply(conversation.latestInboxItemId, { text });
+      const result = await sendInboxReply(target, { text });
       showToast(`Reply sent on ${result.channel === 'dm' ? 'DM' : 'the comment thread'}.`, 'success');
       refresh();
-      if (selectedId) loadThread(selectedId);
+      // Only reload the thread if it is still the open one. Reloading the
+      // conversation we sent from would otherwise land AFTER the newly opened
+      // one and win, showing that person's messages under this person's reply
+      // target — and the next reply would go to the wrong recipient.
+      if (sentFor && selectedRef.current === sentFor) loadThread(sentFor);
       return true;
     } catch (err) {
       // 422 means the platform genuinely can't carry this reply — say that,
@@ -134,10 +172,10 @@ export function useConversations(search: string): ConversationsState {
     } finally {
       setSending(false);
     }
-  }, [conversations, selectedId, showToast, refresh, loadThread]);
+  }, [replyTargets, selectedId, showToast, refresh, loadThread]);
 
   return {
     conversations, loading, error, thread, threadLoading, selectedId, sending,
-    select, refresh, send,
+    replyTarget, select, refresh, send,
   };
 }

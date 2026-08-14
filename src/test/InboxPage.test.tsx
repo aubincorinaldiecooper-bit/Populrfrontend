@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import InboxPage from '../pages/InboxPage';
@@ -170,6 +170,82 @@ describe('InboxPage — conversations, not a queue', () => {
     await waitFor(() =>
       expect(screen.getByText(/nothing to reply to here yet/i)).toBeInTheDocument());
     expect(screen.queryByRole('textbox', { name: /Message/ })).not.toBeInTheDocument();
+  });
+
+  it('never lands a sent thread on top of a conversation opened since', async () => {
+    // The creator replies to Curious Fan, then clicks Other Person while the
+    // send is still in flight. If the post-send reload wins, Curious Fan's
+    // messages sit under Other Person's reply target — and the next reply
+    // goes to the wrong person.
+    const other = contactRecord({ id: 'c2', handle: 'other_person', name: 'Other Person' });
+    mockFetchConversations.mockResolvedValue({
+      conversations: [
+        conversation(),
+        conversation({ contactId: 'c2', handle: 'other_person', name: 'Other Person', latestInboxItemId: 'i2' }),
+      ],
+    });
+    // Distinct from the list previews, so the assertions can only be matching
+    // the open thread.
+    mockFetchContact.mockImplementation(async (id: string) =>
+      id === 'c2'
+        ? detail({ contact: other, messages: [message({ id: 'm9', contact_id: 'c2', text: "other person's message" })] })
+        : detail({ messages: [message({ id: 'm8', text: "curious fan's message" })] }));
+
+    let finishSend!: (v: { sentText: string; channel: string }) => void;
+    mockSendInboxReply.mockImplementation(() => new Promise(r => { finishSend = r; }));
+
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    const box = await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'hello');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    // Mid-send, move to someone else.
+    await user.click(screen.getByRole('button', { name: /Other Person/ }));
+    await screen.findByText("other person's message");
+
+    finishSend({ sentText: 'hello', channel: 'dm' });
+
+    // The open conversation stays the one that is open.
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Reply sent on DM.', 'success'));
+    expect(screen.getByText("other person's message")).toBeInTheDocument();
+    expect(screen.queryByText("curious fan's message")).not.toBeInTheDocument();
+  });
+
+  it('keeps an open conversation answerable when a search filters it out', async () => {
+    mockSendInboxReply.mockResolvedValue({ sentText: 'still here', channel: 'dm' });
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+
+    // A search that matches nobody empties the list — but the person you are
+    // already talking to is still there, and still replyable.
+    mockFetchConversations.mockResolvedValue({ conversations: [] });
+    await user.type(screen.getByRole('searchbox', { name: /Search conversations/ }), 'zzz');
+    await waitFor(() => expect(screen.getByText('No conversations found')).toBeInTheDocument());
+
+    const box = screen.getByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'still here');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { text: 'still here' });
+  });
+
+  it('lets an IME accept a candidate with Enter instead of sending', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    const box = await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'にほん');
+    // Enter while composing accepts the candidate; it must not send.
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true });
+    expect(mockSendInboxReply).not.toHaveBeenCalled();
+
+    // The same key once composition has ended does send.
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { text: 'にほん' }));
   });
 
   it('shows delivery only where the provider actually reported it', async () => {

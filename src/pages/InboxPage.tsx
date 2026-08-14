@@ -35,7 +35,7 @@ export default function InboxPage() {
   const selected = searchParams.get('c');
   const {
     conversations, loading, error, thread, threadLoading, selectedId, sending,
-    select, refresh, send,
+    replyTarget, select, refresh, send,
   } = useConversations(search);
 
   // The URL is the source of truth for which conversation is open, so a
@@ -75,7 +75,11 @@ export default function InboxPage() {
   const waiting = conversations.reduce((n, c) => n + (c.waiting > 0 ? 1 : 0), 0);
 
   return (
-    <div className="p-4 lg:p-6 max-w-[1400px] mx-auto h-[100dvh] md:h-screen flex flex-col">
+    // Below md the layout already pushes content past a fixed 4rem header, so
+    // a full-viewport child hangs that far below the fold — composer included.
+    // Take the remaining height, not the whole viewport.
+    <div className="p-4 lg:p-6 max-w-[1400px] mx-auto flex flex-col
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-screen">
       <PageHeader
         title="Inbox"
         subtitle={loading
@@ -134,9 +138,7 @@ export default function InboxPage() {
                 contactOpen={contactOpen}
                 onOpenContact={() => setContactOpen(v => !v)}
                 onSend={send}
-                replyTarget={
-                  conversations.find(c => c.contactId === selected)?.latestInboxItemId ?? null
-                }
+                replyTarget={replyTarget}
               />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">

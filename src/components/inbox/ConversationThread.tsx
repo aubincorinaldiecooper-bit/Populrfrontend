@@ -187,6 +187,11 @@ export default function ConversationThread({
               onKeyDown={e => {
                 // Enter sends, Shift+Enter is a newline — the convention every
                 // messaging product has already taught the creator.
+                //
+                // Except while an IME is composing: typing Japanese, Chinese or
+                // Korean means pressing Enter to accept a candidate, and
+                // treating that as Send fires off the half-written draft.
+                if (e.nativeEvent.isComposing) return;
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); }
               }}
               rows={1}
