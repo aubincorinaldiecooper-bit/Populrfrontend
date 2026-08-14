@@ -6,7 +6,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { FlowNodeCard, type FlowNodeData } from './FlowNodeCard';
+import DrawnEdge, { type DrawnEdgeData } from './DrawnEdge';
 import { NODE_HEIGHT, NODE_WIDTH } from '../../lib/flowLayout';
+import { useNodeEntrance } from '../../lib/nodeEntrance';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
 
@@ -20,6 +22,7 @@ import type { FlowProblem, PostLibraryItem } from '../../lib/api';
  */
 
 const nodeTypes = { step: FlowNodeCard };
+const edgeTypes = { drawn: DrawnEdge };
 
 export interface FlowCanvasProps {
   graph: FlowGraph;
@@ -58,6 +61,12 @@ function CanvasInner({
 
   const postById = useMemo(() => new Map(posts.map(p => [String(p.id), p])), [posts]);
 
+  // Which steps and connectors are arriving on this paint, and in what order.
+  // A connector takes its cue from the step it points at, so the line arrives
+  // with its destination rather than chasing it.
+  const nodeDelays = useNodeEntrance(graph.nodes.map(n => n.id));
+  const arrivingEdges = useNodeEntrance(graph.edges.map(e => e.id));
+
   const hasOutgoing = useCallback(
     (nodeId: string, branch: 'next' | 'yes' | 'no') =>
       graph.edges.some(e => e.source === nodeId && e.branch === branch),
@@ -78,6 +87,7 @@ function CanvasInner({
         node,
         selected: node.id === selectedNodeId,
         highlighted: highlighted.includes(node.id),
+        enterDelay: nodeDelays.get(node.id) ?? null,
         problem: problemByNode.get(node.id) ?? null,
         post: node.type === 'trigger'
           ? postById.get(String((node.config as { postId?: string }).postId ?? '')) ?? null
@@ -86,7 +96,8 @@ function CanvasInner({
         hasOutgoing,
       } satisfies FlowNodeData,
     })),
-    [graph.nodes, selectedNodeId, highlighted, problemByNode, postById, onAddAfter, hasOutgoing],
+    [graph.nodes, selectedNodeId, highlighted, problemByNode, postById, onAddAfter, hasOutgoing,
+      nodeDelays],
   );
 
   const edges: Edge[] = useMemo(
@@ -100,23 +111,16 @@ function CanvasInner({
         source: edge.source,
         target: edge.target,
         sourceHandle: edge.branch,
-        type: 'smoothstep',
+        type: 'drawn',
         animated: active,
-        // Yes/No live on the edge itself, close to the connector, so the
-        // answer reads without tracing the line to its end.
-        label: edge.branch === 'next' ? undefined : edge.branch === 'yes' ? 'Yes' : 'No',
-        labelShowBg: true,
-        labelBgPadding: [5, 2] as [number, number],
-        labelBgBorderRadius: 4,
-        labelBgStyle: { fill: '#FFFFFF', stroke: '#E8E4DF' },
-        labelStyle: { fill: '#6B6B6B', fontSize: 10, fontWeight: 500 },
-        style: {
-          stroke: active ? '#C5FF3D' : '#D8D3CC',
-          strokeWidth: active ? 2.5 : 1.5,
-        },
+        data: {
+          drawDelay: arrivingEdges.has(edge.id) ? nodeDelays.get(edge.target) ?? 0 : null,
+          active,
+          branch: edge.branch,
+        } satisfies DrawnEdgeData,
       };
     }),
-    [graph.edges, activePath],
+    [graph.edges, activePath, arrivingEdges, nodeDelays],
   );
 
   // Fit once the nodes have been measured, and again whenever the parent asks
@@ -166,6 +170,7 @@ function CanvasInner({
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onNodesChange={handleNodesChange}
       onConnect={handleConnect}
       onNodeClick={(_, node) => onSelect(node.id)}
@@ -180,7 +185,7 @@ function CanvasInner({
       selectionOnDrag={false}
       minZoom={0.35}
       maxZoom={1.6}
-      defaultEdgeOptions={{ type: 'smoothstep' }}
+      defaultEdgeOptions={{ type: 'drawn' }}
       className="bg-[#F7F5F2]"
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />

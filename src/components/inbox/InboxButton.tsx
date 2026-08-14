@@ -39,9 +39,15 @@ export function InboxButton({ count, open, onClick }: InboxButtonProps) {
         // The number is already in the button's label; announcing it twice
         // helps nobody.
         <span
+          // Keyed on the count so a change remounts it and the bump replays:
+          // someone messaging you while you are mid-build is the whole reason
+          // this control exists, and a number that changes invisibly doesn't
+          // tell them.
+          key={count}
           aria-hidden="true"
           className="absolute -top-1 -right-1 h-[15px] min-w-[15px] rounded-full bg-[#111111]
-            px-1 text-center text-[9.5px] font-semibold leading-[15px] text-white"
+            px-1 text-center text-[9.5px] font-semibold leading-[15px] text-white
+            motion-safe:animate-[pop-badge-bump_320ms_ease-out]"
         >
           {count > 9 ? '9+' : count}
         </span>

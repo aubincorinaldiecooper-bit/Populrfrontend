@@ -302,6 +302,55 @@
   to { transform: translateX(100%); }
 }
 
+/* ─── Canvas motion ───
+ * A built automation should look like it was built. These three keyframes,
+ * staggered per step by the canvas, are what turn "the page already had four
+ * steps on it" into "Populr just made these, in this order".
+ *
+ * All three are applied through `motion-safe:` at the call site AND collapsed
+ * by the reduced-motion rule below — belt and braces, because `both` fill mode
+ * means a skipped animation must still land on its end state rather than leave
+ * a node at opacity 0. */
+@keyframes pop-node-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The connector draws itself from source to destination. `pathLength: 1` on
+ * the path (see DrawnEdge) normalises every shape to one unit, so a short hop
+ * and a long sweep draw at the same speed rather than the long one crawling. */
+@keyframes pop-edge-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes pop-marker-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* A count that changed. Small enough to catch the eye at the edge of vision
+ * without asking to be looked at — a badge that bounced would. */
+@keyframes pop-badge-bump {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+/* ─── Canvas reflow ───
+ * Adding a step re-lays out everything after it. Without this the graph
+ * teleports into its new shape, and a creator has to re-find the step they
+ * were looking at; with it, the steps they know slide to where they now live.
+ *
+ * Dragging is exempt: a node that eases toward the cursor feels broken, and
+ * React Flow marks the node it is dragging for exactly this reason. */
+.react-flow__node {
+  transition: transform 300ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.react-flow__node.dragging {
+  transition: none;
+}
+
 /* ─── Reduced motion ───
  * Populr animates in several independent systems — Tailwind utilities,
  * tailwindcss-animate, Framer Motion, and the shimmer above — so honoring

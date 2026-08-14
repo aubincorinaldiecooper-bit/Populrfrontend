@@ -46,6 +46,8 @@ export interface FlowNodeData extends Record<string, unknown> {
   highlighted: boolean;
   /** A validation problem belonging to this step, if any. */
   problem: string | null;
+  /** Milliseconds before this step animates in; null if it was already here. */
+  enterDelay: number | null;
   post: PostLibraryItem | null;
   onAddAfter: (nodeId: string, branch: 'next' | 'yes' | 'no') => void;
   hasOutgoing: (nodeId: string, branch: 'next' | 'yes' | 'no') => boolean;
@@ -176,7 +178,7 @@ function AddButton({
 }
 
 function FlowNodeCardInner({ data }: NodeProps) {
-  const { node, selected, highlighted, problem, post, onAddAfter, hasOutgoing } =
+  const { node, selected, highlighted, problem, enterDelay, post, onAddAfter, hasOutgoing } =
     data as unknown as FlowNodeData;
   const [hovered, setHovered] = useState(false);
   const showControls = hovered || selected;
@@ -186,7 +188,9 @@ function FlowNodeCardInner({ data }: NodeProps) {
 
   return (
     <div
-      className="relative"
+      className={`relative ${enterDelay !== null
+        ? 'motion-safe:animate-[pop-node-in_220ms_ease-out_both]' : ''}`}
+      style={enterDelay !== null ? { animationDelay: `${enterDelay}ms` } : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -214,6 +218,18 @@ function FlowNodeCardInner({ data }: NodeProps) {
           ${problem && !selected ? 'border-[#E7C9A8]' : ''}`}
         style={{ padding: selected ? 'calc(0.625rem - 1px) calc(0.75rem - 1px)' : undefined }}
       >
+        {/* Populr needs something about this step. The message is printed
+            below, but at anything under full zoom it is unreadable — and this
+            is exactly when a creator is looking at the whole automation
+            wondering which step the bell means. The dot survives that. */}
+        {problem && (
+          <span
+            aria-hidden
+            className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-[#E8A33D]
+              ring-2 ring-[#F7F5F2] motion-safe:animate-[pop-marker-in_220ms_ease-out_both]"
+          />
+        )}
+
         <div className="flex items-center gap-1.5 text-[#111111]">
           <NodeIcon node={node} />
           <span className="text-[11px] font-semibold tracking-wide uppercase">{heading(node)}</span>
