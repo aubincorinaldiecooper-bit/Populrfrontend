@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { X, Send, Check, Loader2, PenLine, Sparkles, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router';
-import PlatformDot from '../PlatformDot';
+import Avatar from './Avatar';
 import { platformMeta } from '../../lib/platformMeta';
 import { useInboxQueue } from './useInboxQueue';
+import { shortAgo } from '../../lib/timeAgo';
 import type { InboxItem } from '../../lib/api';
 
 /**
@@ -18,17 +19,12 @@ import type { InboxItem } from '../../lib/api';
  * Same data, same endpoints, same send path as the page (useInboxQueue).
  * What differs is the shape: compact rows, and the roomier detail only for
  * the one you opened.
+ *
+ * It shows people the way the full Inbox does — a face, then their name —
+ * because a creator recognising who is waiting should not depend on which
+ * of the two surfaces they happen to be looking at. Anything longer than a
+ * line belongs in the conversation, and every row offers the way there.
  */
-
-function shortAgo(iso: string | null): string {
-  if (!iso) return '';
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
 
 export interface InboxDrawerProps {
   onClose: () => void;
@@ -103,7 +99,10 @@ export default function InboxDrawer({ onClose, onChanged }: InboxDrawerProps) {
         )}
 
         {queue.items.map(item => {
-          const person = item.contact_handle ? `@${item.contact_handle}` : item.contact_name || 'Someone';
+          // Their name first, handle as the fallback — the same way the
+          // conversation list names people.
+          const person = item.contact_name?.trim()
+            || (item.contact_handle ? `@${item.contact_handle}` : 'Someone');
           const open = openId === item.id;
           const busy = queue.sending === item.id;
 
@@ -116,9 +115,13 @@ export default function InboxDrawer({ onClose, onChanged }: InboxDrawerProps) {
                 className="flex w-full items-start gap-2.5 px-4 py-3 text-left transition-colors
                   hover:bg-[#FAF9F7] focus-visible:outline-none focus-visible:bg-[#FAF9F7]"
               >
-                <span className="mt-1 shrink-0">
-                  <PlatformDot platform={item.platform} size={7} />
-                </span>
+                <Avatar
+                  handle={item.contact_handle}
+                  name={item.contact_name}
+                  platform={item.platform}
+                  size="sm"
+                  showPlatform
+                />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
                     <span className="text-[13px] font-medium text-[#111111] truncate">{person}</span>
@@ -194,6 +197,20 @@ export default function InboxDrawer({ onClose, onChanged }: InboxDrawerProps) {
                           : <Check size={11} />}
                         Mark handled
                       </button>
+                    )}
+                    {item.contact_id && (
+                      // The drawer answers in one line. Anything longer is a
+                      // conversation, and this is the door to it — the same
+                      // person, opened in the full Inbox.
+                      <Link
+                        to={`/inbox?c=${item.contact_id}`}
+                        onClick={onClose}
+                        className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-[#8A857E]
+                          hover:text-[#111111] focus-visible:outline-none focus-visible:ring-2
+                          focus-visible:ring-[#C5FF3D] rounded px-1"
+                      >
+                        Open conversation <ArrowUpRight size={11} />
+                      </Link>
                     )}
                   </div>
                 </div>

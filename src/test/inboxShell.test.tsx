@@ -23,9 +23,11 @@ import type { InboxItem } from '../lib/api';
 const fetchInboxMock = vi.fn();
 const sendInboxReplyMock = vi.fn();
 
-function item(id: string, handle: string, text: string): InboxItem {
+/** `name` may be null, which is how the handle-only fallback gets exercised. */
+function item(id: string, handle: string, text: string, name?: string | null): InboxItem {
   return {
-    id, contact_id: `c_${id}`, contact_handle: handle, contact_name: handle,
+    id, contact_id: `c_${id}`, contact_handle: handle,
+    contact_name: name === undefined ? `${handle[0]!.toUpperCase()}${handle.slice(1)}` : name,
     platform: 'instagram', channel: 'dm', message_text: text,
     needs_reply: true, needs_reply_reason: 'no_rule_matched',
     suggested_reply: null, post_caption: null,
@@ -104,9 +106,30 @@ describe('the Inbox control', () => {
 
     const drawer = await screen.findByLabelText('Inbox');
     expect(drawer).toBeInTheDocument();
-    expect(screen.getByText('@jordan')).toBeInTheDocument();
+    // Their name, the way the full Inbox names them — a creator shouldn't have
+    // to recognise people differently depending on which surface they're on.
+    expect(screen.getByText('Jordan')).toBeInTheDocument();
     expect(screen.getByText('Can you send me the menu?')).toBeInTheDocument();
-    expect(screen.getByText('@maya')).toBeInTheDocument();
+    expect(screen.getByText('Maya')).toBeInTheDocument();
+  });
+
+  it('falls back to the handle for someone whose name we never learned', async () => {
+    fetchInboxMock.mockResolvedValue({ items: [item('1', 'jordan', 'hi', null)] });
+    const user = userEvent.setup();
+    render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
+
+    await user.click(await screen.findByLabelText('Inbox, 1 waiting'));
+    expect(await screen.findByText('@jordan')).toBeInTheDocument();
+  });
+
+  it('offers the way into the full conversation with that person', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
+    await user.click(await screen.findByLabelText('Inbox, 2 waiting'));
+
+    await user.click(screen.getByText('Jordan'));
+    expect(await screen.findByRole('link', { name: /Open conversation/ }))
+      .toHaveAttribute('href', '/inbox?c=c_1');
   });
 
   it('sends a reply through the same endpoint the full page uses', async () => {
@@ -115,8 +138,8 @@ describe('the Inbox control', () => {
     await user.click(await screen.findByLabelText('Inbox, 2 waiting'));
 
     // One conversation open at a time — replying is a focused act.
-    await user.click(screen.getByText('@jordan'));
-    await user.type(await screen.findByLabelText('Reply to @jordan'), 'On its way!');
+    await user.click(screen.getByText('Jordan'));
+    await user.type(await screen.findByLabelText('Reply to Jordan'), 'On its way!');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
     await waitFor(() => expect(sendInboxReplyMock).toHaveBeenCalledWith('1', { text: 'On its way!' }));

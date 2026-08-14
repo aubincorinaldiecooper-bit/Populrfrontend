@@ -63,6 +63,17 @@ const mockFetchContacts = vi.fn(
   },
 );
 
+const mockFetchContact = vi.fn(async (id: string) => ({
+  contact: { ...makeContact(0), id },
+  sourcePost: null,
+  sourceAutomation: null,
+  automations: [],
+  messages: [],
+  scoreEvents: [],
+  clicks: [],
+  events: [],
+}));
+
 const mockUseApp = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
@@ -76,6 +87,7 @@ vi.mock('../lib/api', async () => {
     isBackendConfigured: () => true,
     fetchContacts: (filter: { limit?: number; offset?: number; flowId?: string }) =>
       mockFetchContacts(filter),
+    fetchContact: (id: string) => mockFetchContact(id),
   };
 });
 
@@ -225,5 +237,65 @@ describe('ContactsPage — filtered to one automation', () => {
 
     await screen.findByText('User 0');
     expect(screen.queryByLabelText('Show all contacts')).not.toBeInTheDocument();
+  });
+});
+
+/* A contact and a conversation are the same person, so each has to be one
+ * move from the other. The Inbox's contact panel links to `/contacts?contact=
+ * <id>` rather than a second profile route, which only works if a contact is
+ * a URL — and the return path has to open the conversation, never send into
+ * it. */
+describe('ContactsPage — a contact is a place, and a conversation is one move away', () => {
+  it('opens the person named in the URL, so a link to them works', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?contact=c_7']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c_7'));
+    expect(await screen.findByRole('button', { name: /Back to contacts/ })).toBeInTheDocument();
+  });
+
+  it('clicking a row puts that person in the URL', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><ContactsPage /></MemoryRouter>);
+
+    await screen.findByText('User 0');
+    await user.click(screen.getByText('User 0'));
+
+    await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c_0'));
+  });
+
+  it('offers the conversation as a link, never as a send', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?contact=c_3']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+
+    const message = await screen.findByRole('link', { name: 'Message' });
+    // A link that OPENS the thread. Opening someone must never send anything.
+    expect(message).toHaveAttribute('href', '/inbox?c=c_3');
+  });
+
+  it('keeps the external profile explicit, labelled and secondary', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?contact=c_4']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+
+    const external = await screen.findByRole('link', { name: /View on Instagram/ });
+    expect(external).toHaveAttribute('href', 'https://instagram.com/user0');
+    expect(external).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 });

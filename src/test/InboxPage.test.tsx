@@ -1,33 +1,70 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Routes, Route } from 'react-router';
 import InboxPage from '../pages/InboxPage';
-import type { InboxItem } from '../lib/api';
+import type { Conversation, ContactDetail, ContactRecord, ContactMessage } from '../lib/api';
 
-/* The Inbox closes the holding-reply loop: an uncovered question gets a warm
- * automatic acknowledgment, lands here with the reason visible, and the
- * creator answers with one tap — the AI's parked draft via the backend's
- * useSuggested path — or writes their own. The backend queue has existed
- * (and been workspace-scoped) all along; this page is its first full
- * surface, replacing a "not available yet" stub. */
+/* The Inbox is a messaging product, not a work queue.
+ *
+ * What these tests hold in place is the part that is easy to regress back
+ * into a CRM: a conversation is a person, opening one is a URL you can link
+ * to and reload, the person's identity is one click from the conversation —
+ * and that click goes to Populr's Contact, never straight out to Instagram.
+ * The old queue (needs-reply reasons, suggested drafts, Mark handled, Load
+ * more) is gone deliberately; the drawer in the top bar is where a one-line
+ * reply without leaving your work still lives. */
 
-function item(overrides: Partial<InboxItem>): InboxItem {
+function contactRecord(over: Partial<ContactRecord> = {}): ContactRecord {
   return {
-    id: 'i1', contact_id: 'c1', account_id: 'acc1', platform: 'instagram',
-    channel: 'dm', status: 'open', needs_reply: true,
-    needs_reply_reason: 'ai_handoff', automation_status: 'replied',
-    suggested_reply: null, ai_intent: null, ai_confidence: null,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    message_text: 'do you ship to Canada?', message_direction: 'inbound',
-    contact_handle: 'curious_fan', contact_name: 'Curious Fan',
-    lead_score: 10, stage: 'interested', post_caption: null, automation_name: 'Guide automation',
-    ...overrides,
+    id: 'c1', platform: 'instagram', account_id: 'acc1', external_user_id: 'ig_1',
+    handle: 'curious_fan', name: 'Curious Fan', avatar_url: null,
+    lead_score: 10, stage: 'interested', needs_reply: true, notes: null,
+    custom_fields: {}, source_platform: null, source_account_id: null,
+    source_post_id: null, source_post_url: null, source_automation_id: null,
+    source_funnel_id: null, source_type: null,
+    first_seen: '2026-08-01T10:00:00.000Z', last_seen: '2026-08-14T10:00:00.000Z',
+    last_message_at: '2026-08-14T10:00:00.000Z', tags: [], created_at: '2026-08-01T10:00:00.000Z',
+    ...over,
+  } as ContactRecord;
+}
+
+function message(over: Partial<ContactMessage> = {}): ContactMessage {
+  return {
+    id: 'm1', contact_id: 'c1', account_id: 'acc1', platform: 'instagram',
+    channel: 'dm', direction: 'inbound', text: 'do you ship to Canada?',
+    media_url: null, external_id: null, status: 'received', in_reply_to: null,
+    source_post_id: null, source_automation_id: null,
+    created_at: '2026-08-14T10:00:00.000Z',
+    ...over,
+  } as ContactMessage;
+}
+
+function conversation(over: Partial<Conversation> = {}): Conversation {
+  return {
+    contactId: 'c1', handle: 'curious_fan', name: 'Curious Fan', avatarUrl: null,
+    platform: 'instagram',
+    lastMessage: {
+      text: 'do you ship to Canada?', direction: 'inbound', channel: 'dm',
+      at: '2026-08-14T10:00:00.000Z',
+    },
+    waiting: 1, latestInboxItemId: 'i1',
+    ...over,
   };
 }
 
-const mockFetchInbox = vi.fn();
+function detail(over: Partial<ContactDetail> = {}): ContactDetail {
+  return {
+    contact: contactRecord(),
+    sourcePost: null, sourceAutomation: null, automations: [],
+    messages: [message()], scoreEvents: [], clicks: [], events: [],
+    ...over,
+  };
+}
+
+const mockFetchConversations = vi.fn();
+const mockFetchContact = vi.fn();
 const mockSendInboxReply = vi.fn();
-const mockSetInboxNeedsReply = vi.fn();
 const mockShowToast = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
@@ -39,123 +76,313 @@ vi.mock('../lib/api', async () => {
   return {
     ...actual,
     isBackendConfigured: () => true,
-    fetchInbox: (f: unknown) => mockFetchInbox(f),
+    fetchConversations: (f: unknown) => mockFetchConversations(f),
+    fetchContact: (id: string) => mockFetchContact(id),
     sendInboxReply: (id: string, input: unknown) => mockSendInboxReply(id, input),
-    setInboxNeedsReply: (id: string, v: boolean) => mockSetInboxNeedsReply(id, v),
   };
 });
 
+/** Render at a URL, with a Contacts route so "View full profile" can land. */
+function renderInbox(url = '/inbox') {
+  return render(
+    <MemoryRouter initialEntries={[url]}>
+      <Routes>
+        <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/contacts" element={<div>Contacts page</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFetchConversations.mockResolvedValue({ conversations: [conversation()] });
+  mockFetchContact.mockResolvedValue(detail());
 });
 
-describe('InboxPage — the holding-reply loop, closed', () => {
-  it('shows the conversation with why it needs the creator', async () => {
-    mockFetchInbox.mockResolvedValue({ count: 1, items: [item({})] });
-    render(<InboxPage />);
-    await waitFor(() => expect(screen.getByText('@curious_fan')).toBeInTheDocument());
+describe('InboxPage — conversations, not a queue', () => {
+  it('lists people with what was last said and marks the ones waiting', async () => {
+    renderInbox();
+
+    await waitFor(() => expect(screen.getByText('Curious Fan')).toBeInTheDocument());
     expect(screen.getByText(/do you ship to Canada\?/)).toBeInTheDocument();
-    expect(screen.getByText('AI asked for you')).toBeInTheDocument();
+    // Waiting is weight and a dot, not a reason code or a stage.
+    expect(screen.getByLabelText('1 waiting')).toBeInTheDocument();
+    expect(screen.queryByText(/AI asked for you/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lead score/i)).not.toBeInTheDocument();
   });
 
-  it('sends the AI draft with one tap via the backend useSuggested path', async () => {
-    mockFetchInbox.mockResolvedValue({
-      count: 1,
-      items: [item({ suggested_reply: 'We ship worldwide — details here soon!' })],
+  it('marks your own last message as yours', async () => {
+    mockFetchConversations.mockResolvedValue({
+      conversations: [conversation({
+        lastMessage: {
+          text: 'Sent you the link!', direction: 'outbound', channel: 'dm',
+          at: '2026-08-14T10:00:00.000Z',
+        },
+      })],
     });
-    mockSendInboxReply.mockResolvedValue({ sentText: 'We ship worldwide — details here soon!', channel: 'dm' });
+    renderInbox();
+
+    await waitFor(() => expect(screen.getByText('You:')).toBeInTheDocument());
+  });
+
+  it('opening a conversation puts the person in the URL and loads their thread', async () => {
     const user = userEvent.setup();
-    render(<InboxPage />);
+    renderInbox();
 
-    await waitFor(() => expect(screen.getByText('We ship worldwide — details here soon!')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /Send suggested reply/ }));
+    await waitFor(() => expect(screen.getByText('Curious Fan')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Curious Fan/ }));
 
-    expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { useSuggested: true });
+    await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c1'));
+    // The composer is addressed to them — the thread is open, not just fetched.
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /Message Curious Fan/ })).toBeInTheDocument());
+  });
+
+  it('a conversation in the URL opens on arrival, so a link to it works', async () => {
+    renderInbox('/inbox?c=c1');
+
+    await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c1'));
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /Message Curious Fan/ })).toBeInTheDocument());
+  });
+
+  it('sends through the thread\'s inbox item and clears the composer', async () => {
+    mockSendInboxReply.mockResolvedValue({ sentText: 'We do!', channel: 'dm' });
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    const box = await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'We do!');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { text: 'We do!' });
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Reply sent on DM.', 'success'));
+    await waitFor(() => expect(box).toHaveValue(''));
   });
 
-  it('Edit & send prefills the composer with the AI draft and sends the edited text', async () => {
-    mockFetchInbox.mockResolvedValue({
-      count: 1,
-      items: [item({ suggested_reply: 'Draft text' })],
+  it('says so rather than offering a composer that cannot send', async () => {
+    mockFetchConversations.mockResolvedValue({
+      conversations: [conversation({ latestInboxItemId: null })],
     });
-    mockSendInboxReply.mockResolvedValue({ sentText: 'Edited text', channel: 'dm' });
+    renderInbox('/inbox?c=c1');
+
+    await waitFor(() =>
+      expect(screen.getByText(/nothing to reply to here yet/i)).toBeInTheDocument());
+    expect(screen.queryByRole('textbox', { name: /Message/ })).not.toBeInTheDocument();
+  });
+
+  it('never lands a sent thread on top of a conversation opened since', async () => {
+    // The creator replies to Curious Fan, then clicks Other Person while the
+    // send is still in flight. If the post-send reload wins, Curious Fan's
+    // messages sit under Other Person's reply target — and the next reply
+    // goes to the wrong person.
+    const other = contactRecord({ id: 'c2', handle: 'other_person', name: 'Other Person' });
+    mockFetchConversations.mockResolvedValue({
+      conversations: [
+        conversation(),
+        conversation({ contactId: 'c2', handle: 'other_person', name: 'Other Person', latestInboxItemId: 'i2' }),
+      ],
+    });
+    // Distinct from the list previews, so the assertions can only be matching
+    // the open thread.
+    mockFetchContact.mockImplementation(async (id: string) =>
+      id === 'c2'
+        ? detail({ contact: other, messages: [message({ id: 'm9', contact_id: 'c2', text: "other person's message" })] })
+        : detail({ messages: [message({ id: 'm8', text: "curious fan's message" })] }));
+
+    let finishSend!: (v: { sentText: string; channel: string }) => void;
+    mockSendInboxReply.mockImplementation(() => new Promise(r => { finishSend = r; }));
+
     const user = userEvent.setup();
-    render(<InboxPage />);
+    renderInbox('/inbox?c=c1');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Edit & send/ })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /Edit & send/ }));
-    const box = screen.getByRole('textbox', { name: /Reply to @curious_fan/ });
-    expect(box).toHaveValue('Draft text');
-    await user.clear(box);
-    await user.type(box, 'Edited text');
-    await user.click(screen.getByRole('button', { name: /^Send$/ }));
+    const box = await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'hello');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { text: 'Edited text' });
+    // Mid-send, move to someone else.
+    await user.click(screen.getByRole('button', { name: /Other Person/ }));
+    await screen.findByText("other person's message");
+
+    finishSend({ sentText: 'hello', channel: 'dm' });
+
+    // The open conversation stays the one that is open.
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Reply sent on DM.', 'success'));
+    expect(screen.getByText("other person's message")).toBeInTheDocument();
+    expect(screen.queryByText("curious fan's message")).not.toBeInTheDocument();
   });
 
-  it('Mark handled resolves without replying', async () => {
-    mockFetchInbox.mockResolvedValue({ count: 1, items: [item({})] });
-    mockSetInboxNeedsReply.mockResolvedValue({ id: 'i1', needsReply: false });
+  it('keeps an open conversation answerable when a search filters it out', async () => {
+    mockSendInboxReply.mockResolvedValue({ sentText: 'still here', channel: 'dm' });
     const user = userEvent.setup();
-    render(<InboxPage />);
+    renderInbox('/inbox?c=c1');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Mark handled/ })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /Mark handled/ }));
-    expect(mockSetInboxNeedsReply).toHaveBeenCalledWith('i1', false);
+    await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+
+    // A search that matches nobody empties the list — but the person you are
+    // already talking to is still there, and still replyable.
+    mockFetchConversations.mockResolvedValue({ conversations: [] });
+    await user.type(screen.getByRole('searchbox', { name: /Search conversations/ }), 'zzz');
+    await waitFor(() => expect(screen.getByText('No conversations found')).toBeInTheDocument());
+
+    const box = screen.getByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'still here');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { text: 'still here' });
   });
 
-  it('an empty needs-you queue says so honestly', async () => {
-    mockFetchInbox.mockResolvedValue({ count: 0, items: [] });
-    render(<InboxPage />);
-    await waitFor(() => expect(screen.getByText(/all caught up/i)).toBeInTheDocument());
-  });
-
-  it('a full page offers Load more, and clicking it fetches the next offset', async () => {
-    const fullPage = Array.from({ length: 30 }, (_, i) => item({ id: `p1_${i}`, contact_handle: `fan_${i}` }));
-    mockFetchInbox
-      .mockResolvedValueOnce({ count: 30, items: fullPage })
-      .mockResolvedValueOnce({ count: 1, items: [item({ id: 'p2_0', contact_handle: 'page_two_fan' })] });
+  it('lets an IME accept a candidate with Enter instead of sending', async () => {
     const user = userEvent.setup();
-    render(<InboxPage />);
+    renderInbox('/inbox?c=c1');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Load more/ })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /Load more/ }));
+    const box = await screen.findByRole('textbox', { name: /Message Curious Fan/ });
+    await user.type(box, 'にほん');
+    // Enter while composing accepts the candidate; it must not send.
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true });
+    expect(mockSendInboxReply).not.toHaveBeenCalled();
 
-    expect(mockFetchInbox).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 30 }));
-    await waitFor(() => expect(screen.getByText('@page_two_fan')).toBeInTheDocument());
-    // The first page is still there — appended, not replaced.
-    expect(screen.getByText('@fan_0')).toBeInTheDocument();
-    // A short second page means the well is dry: no further Load more.
-    expect(screen.queryByRole('button', { name: /Load more/ })).not.toBeInTheDocument();
+    // The same key once composition has ended does send.
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(mockSendInboxReply).toHaveBeenCalledWith('i1', { text: 'にほん' }));
   });
 
-  it('a short page never offers Load more', async () => {
-    mockFetchInbox.mockResolvedValue({ count: 1, items: [item({})] });
-    render(<InboxPage />);
-    await waitFor(() => expect(screen.getByText('@curious_fan')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /Load more/ })).not.toBeInTheDocument();
+  it('shows delivery only where the provider actually reported it', async () => {
+    mockFetchContact.mockResolvedValue(detail({
+      messages: [
+        message({ id: 'm1', direction: 'outbound', text: 'handed over', status: 'sent' }),
+        message({ id: 'm2', direction: 'outbound', text: 'arrived', status: 'delivered' }),
+      ],
+    }));
+    renderInbox('/inbox?c=c1');
+
+    await waitFor(() => expect(screen.getByText('arrived')).toBeInTheDocument());
+    expect(screen.getByText(/Delivered/)).toBeInTheDocument();
+    // 'sent' is our own record of handing it over and says nothing about
+    // arrival, so it claims nothing.
+    expect(screen.queryByText(/Seen/)).not.toBeInTheDocument();
   });
 
-  it('a stale response from the previous tab never overwrites the current one', async () => {
-    let resolveFirst!: (v: { count: number; items: InboxItem[] }) => void;
-    mockFetchInbox
-      // Needs-you fetch: deliberately left hanging while the user moves on.
-      .mockImplementationOnce(() => new Promise(r => { resolveFirst = r; }))
-      // All-conversations fetch: resolves immediately.
-      .mockResolvedValueOnce({
-        count: 1,
-        items: [item({ id: 'all1', contact_handle: 'all_tab_fan', needs_reply: false, needs_reply_reason: null })],
+  it('names the automation that spoke, without exposing the run behind it', async () => {
+    mockFetchContact.mockResolvedValue(detail({
+      automations: [{ id: 'f1', name: 'Guide automation', status: 'live', firstEnteredAt: '2026-08-01T10:00:00.000Z' }],
+      messages: [message({
+        id: 'm2', direction: 'outbound', text: 'Here is the guide!', source_automation_id: 'f1',
+      })],
+    }));
+    renderInbox('/inbox?c=c1');
+
+    await waitFor(() => expect(screen.getByText(/Populr · Guide automation/)).toBeInTheDocument());
+  });
+});
+
+describe('InboxPage — the conversation is one click from the person', () => {
+  it('opens Populr\'s own contact, not their Instagram', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    const identity = await screen.findByRole('button', { name: /About Curious Fan/ });
+    // The identity block is not an outbound link.
+    expect(identity.tagName).toBe('BUTTON');
+    await user.click(identity);
+
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+    expect(within(panel).getByText('View full profile')).toBeInTheDocument();
+  });
+
+  it('offers the external profile as a labelled second action', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    const external = within(panel).getByRole('link', { name: /View on Instagram/ });
+    expect(external).toHaveAttribute('href', 'https://instagram.com/curious_fan');
+    expect(external).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('links the full profile to the existing Contacts route, not a second one', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    expect(within(panel).getByRole('link', { name: 'View full profile' }))
+      .toHaveAttribute('href', '/contacts?contact=c1');
+  });
+
+  it('the panel closes as easily as it opened — it is never permanent', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    // Not there until asked for.
+    await screen.findByRole('button', { name: /About Curious Fan/ });
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /About Curious Fan/ }));
+    await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    await user.click(screen.getByRole('button', { name: 'Close contact' }));
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument());
+  });
+
+  it('shows how they were acquired without leading with lead score or stage', async () => {
+    const user = userEvent.setup();
+    mockFetchContact.mockResolvedValue(detail({
+      automations: [{ id: 'f1', name: 'Guide automation', status: 'live', firstEnteredAt: '2026-08-01T10:00:00.000Z' }],
+    }));
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    expect(within(panel).getByText('From')).toBeInTheDocument();
+    expect(within(panel).getAllByRole('link', { name: 'Guide automation' })[0])
+      .toHaveAttribute('href', '/automations/f1');
+    expect(within(panel).queryByText(/Lead score/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/Stage/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('InboxPage — honest states', () => {
+  it('an empty inbox explains where conversations come from', async () => {
+    mockFetchConversations.mockResolvedValue({ conversations: [] });
+    renderInbox();
+
+    await waitFor(() => expect(screen.getByText('No conversations yet')).toBeInTheDocument());
+  });
+
+  it('a failed load offers a retry that refetches', async () => {
+    mockFetchConversations.mockRejectedValueOnce(new Error('Network down'));
+    const user = userEvent.setup();
+    renderInbox();
+
+    await waitFor(() => expect(screen.getByText('Network down')).toBeInTheDocument());
+    mockFetchConversations.mockResolvedValue({ conversations: [conversation()] });
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.getByText('Curious Fan')).toBeInTheDocument());
+  });
+
+  it('a stale search response never overwrites a newer one', async () => {
+    let resolveSlow!: (v: { conversations: Conversation[] }) => void;
+    mockFetchConversations
+      // The initial load, deliberately left hanging while the creator types.
+      .mockImplementationOnce(() => new Promise(r => { resolveSlow = r; }))
+      .mockResolvedValue({
+        conversations: [conversation({ contactId: 'c2', name: 'Newer Result' })],
       });
     const user = userEvent.setup();
-    render(<InboxPage />);
+    renderInbox();
 
-    await user.click(screen.getByRole('button', { name: /All conversations/ }));
-    await waitFor(() => expect(screen.getByText('@all_tab_fan')).toBeInTheDocument());
+    await user.type(screen.getByRole('searchbox', { name: /Search conversations/ }), 'new');
+    await waitFor(() => expect(screen.getByText('Newer Result')).toBeInTheDocument());
 
-    // The slow needs-you response lands last — and must be ignored.
-    resolveFirst({ count: 1, items: [item({ id: 'stale1', contact_handle: 'stale_fan' })] });
-    await waitFor(() => expect(screen.queryByText('@stale_fan')).not.toBeInTheDocument());
-    expect(screen.getByText('@all_tab_fan')).toBeInTheDocument();
+    resolveSlow({ conversations: [conversation({ contactId: 'c9', name: 'Stale Result' })] });
+    await waitFor(() => expect(screen.queryByText('Stale Result')).not.toBeInTheDocument());
+    expect(screen.getByText('Newer Result')).toBeInTheDocument();
   });
 });

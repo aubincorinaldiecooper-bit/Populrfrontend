@@ -687,10 +687,22 @@ export interface AutomationEvent {
   created_at: string;
 }
 
+/** An automation this person has entered — one row per automation, however
+ *  many times they triggered it. */
+export interface ContactAutomation {
+  id: string;
+  name: string;
+  status: FlowStatus;
+  /** When they first entered it; the oldest one is how they were acquired. */
+  firstEnteredAt: string;
+}
+
 export interface ContactDetail {
   contact: ContactRecord;
   sourcePost: { id: string; caption: string | null; url: string | null; platform: string } | null;
   sourceAutomation: { id: string; name: string } | null;
+  /** Automations entered, oldest first. Empty for a contact no automation reached. */
+  automations: ContactAutomation[];
   messages: ContactMessage[];
   scoreEvents: ContactScoreEvent[];
   clicks: ContactLinkClick[];
@@ -734,6 +746,47 @@ export async function fetchContacts(filter: {
   if (filter.offset !== undefined) qs.set('offset', String(filter.offset));
   const query = qs.toString();
   return apiFetch(`/api/contacts${query ? `?${query}` : ''}`);
+}
+
+/**
+ * One conversation — which is to say, one person.
+ *
+ * The API groups by contact rather than by message because that is what the
+ * schema already is: `messages` is keyed on contact_id with both directions in
+ * one table. A thread and a contact are the same thing here, which is what
+ * makes "who am I talking to" answerable in one click.
+ */
+export interface Conversation {
+  contactId: string;
+  handle: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+  platform: string;
+  lastMessage: {
+    text: string | null;
+    direction: 'inbound' | 'outbound' | null;
+    channel: string | null;
+    at: string;
+  };
+  /** Messages on this thread still flagged for a reply. 0 = nothing waiting. */
+  waiting: number;
+  /**
+   * The inbox item a reply is sent through. Null when the thread has none —
+   * the composer says so rather than failing on send.
+   */
+  latestInboxItemId: string | null;
+}
+
+/** GET /api/inbox/conversations — the workspace's threads, newest first. */
+export async function fetchConversations(
+  filter: { search?: string; limit?: number; offset?: number } = {},
+): Promise<{ conversations: Conversation[] }> {
+  const qs = new URLSearchParams();
+  if (filter.search) qs.set('search', filter.search);
+  if (filter.limit !== undefined) qs.set('limit', String(filter.limit));
+  if (filter.offset !== undefined) qs.set('offset', String(filter.offset));
+  const query = qs.toString();
+  return apiFetch(`/api/inbox/conversations${query ? `?${query}` : ''}`);
 }
 
 /** GET /api/contacts/:id — full timeline: messages, score history, link clicks, automation events. */

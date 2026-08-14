@@ -1,83 +1,70 @@
-import { useState } from 'react';
-import {
-  AlertCircle, RefreshCw, Inbox as InboxIcon, Send, Check, Loader2, Sparkles, PenLine,
-} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { AlertCircle, ArrowLeft, MessagesSquare } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
-import PlatformDot from '../components/PlatformDot';
-import { ListSkeleton } from '../components/Skeleton';
-import { platformMeta } from '../lib/platformMeta';
+import ConversationList from '../components/inbox/ConversationList';
+import ConversationThread from '../components/inbox/ConversationThread';
+import ContactPanel from '../components/inbox/ContactPanel';
+import { useConversations } from '../components/inbox/useConversations';
 import { isBackendConfigured } from '../lib/api';
-import type { InboxItem } from '../lib/api';
-import { useInboxQueue, type InboxTab } from '../components/inbox/useInboxQueue';
 
 /**
- * The conversations queue — the surface the backend has fed all along.
- * Items land here when the AI sends a holding reply for a question the
- * automation's instructions don't cover, when an escalation keyword or the
- * AI routes something to a human, or when a reply is parked for review.
- * This page closes that loop: read the message, send the AI's draft with
- * one tap or write your own, in-channel.
+ * Inbox — the full workspace.
+ *
+ * The top-bar drawer is for the one-line reply you send without leaving what
+ * you were doing. This is the other half: a place to sit with conversations,
+ * search them, and understand who you are talking to.
+ *
+ * Two panes by default — conversations, and the conversation — because the
+ * conversation is the primary experience. The contact is a third pane that
+ * appears when asked for and closes as easily; a permanently visible contact
+ * sidebar would make this a CRM with messaging attached, which is precisely
+ * the thing it isn't.
+ *
+ * The open conversation lives in the URL (?c=<contactId>), which is what
+ * makes a conversation a place: reloadable, linkable, and reachable from a
+ * contact's own profile.
  */
-
-/** Why this conversation needs the creator, in the creator's language. */
-const REASON_LABEL: Record<string, string> = {
-  no_rule_matched: 'No automation matched',
-  ai_handoff: 'AI asked for you',
-  ai_needs_review: 'Draft ready for review',
-  escalation_keyword: 'Sensitive keyword',
-  automation_failed: 'Automation failed',
-  unsupported_action: "Couldn't send automatically",
-  user_replied: 'They replied',
-  score_threshold: 'Hot lead',
-  manual: 'Flagged by you',
-};
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return '';
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 60) return `${Math.max(mins, 0)}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
 
 export default function InboxPage() {
   const backendConfigured = isBackendConfigured();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState('');
+  const [contactOpen, setContactOpen] = useState(false);
 
-  const [tab, setTab] = useState<InboxTab>('needs_you');
-  // Fetching, paging, sending and resolving are shared with the Inbox drawer
-  // that opens over the builder — see components/inbox/useInboxQueue. This
-  // page owns only how it all looks.
+  const selected = searchParams.get('c');
   const {
-    items, loading, loadingMore, hasMore, error, sending, resolving,
-    load, loadMore, send: sendReply, resolve,
-  } = useInboxQueue(tab);
+    conversations, loading, error, thread, threadLoading, selectedId, sending,
+    replyTarget, select, refresh, send,
+  } = useConversations(search);
 
-  // Which item has its composer open, and its draft text. One at a time —
-  // replying is a focused act, not a spreadsheet.
-  const [composerFor, setComposerFor] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
+  // The URL is the source of truth for which conversation is open, so a
+  // reload, a link, or arriving from a contact all land in the same place.
+  useEffect(() => {
+    if (selected !== selectedId) select(selected);
+  }, [selected, selectedId, select]);
 
-  const send = async (item: InboxItem, input: { text?: string; useSuggested?: boolean }) => {
-    const ok = await sendReply(item, input);
-    if (!ok) return;
-    setComposerFor(null);
-    setDraft('');
-  };
+  const open = useCallback((contactId: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (contactId) next.set('c', contactId);
+    else next.delete('c');
+    setSearchParams(next, { replace: true });
+    // Opening a different person closes the panel about the last one.
+    setContactOpen(false);
+  }, [searchParams, setSearchParams]);
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page max-w-[760px]">
-        <PageHeader title="Inbox" subtitle="Conversations that need you, with AI drafts ready to send." />
+      <div className="pop-page">
+        <PageHeader title="Inbox" subtitle="The people talking to you." />
         <div className="pop-card p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[13px] font-semibold text-[#111111]">
+              Populr isn&apos;t connected to a backend yet
+            </p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
-              Populr can&apos;t reach its server, so your conversations can&apos;t be loaded right now.
+              Populr can&apos;t reach its server, so your conversations can&apos;t be loaded.
             </p>
           </div>
         </div>
@@ -85,165 +72,105 @@ export default function InboxPage() {
     );
   }
 
+  const waiting = conversations.reduce((n, c) => n + (c.waiting > 0 ? 1 : 0), 0);
+
   return (
-    <div className="pop-page max-w-[760px]">
+    // Below md the layout already pushes content past a fixed 4rem header, so
+    // a full-viewport child hangs that far below the fold — composer included.
+    // Take the remaining height, not the whole viewport.
+    <div className="p-4 lg:p-6 max-w-[1400px] mx-auto flex flex-col
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-screen">
       <PageHeader
         title="Inbox"
-        subtitle="Conversations that need you, with AI drafts ready to send."
-        action={
-          <button onClick={load} disabled={loading} className="pop-btn-ghost text-[12px] py-1.5 px-3 disabled:opacity-50">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Refresh
-          </button>
-        }
+        subtitle={loading
+          ? 'Loading…'
+          : waiting > 0
+            ? `${waiting} waiting on you · ${conversations.length} conversation${conversations.length === 1 ? '' : 's'}`
+            : `${conversations.length} conversation${conversations.length === 1 ? '' : 's'}`}
       />
 
-      <div className="flex gap-1 mb-5">
-        {([['needs_you', 'Needs you'], ['all', 'All conversations']] as [InboxTab, string][]).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-3 py-1.5 rounded-xl text-[12px] font-medium transition-all ${tab === key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {loading && <ListSkeleton count={4} label="Loading your conversations" />}
-
-      {!loading && error && (
-        <div className="pop-card p-4 flex items-center gap-3">
+      {error && (
+        <div className="pop-card p-4 mb-4 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
-          <button onClick={load} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Retry</button>
+          <button onClick={refresh} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Retry</button>
         </div>
       )}
 
-      {!loading && !error && items.length === 0 && (
-        <div className="pop-card p-8 text-center">
-          <InboxIcon size={24} className="text-[#9B9B8F] mx-auto mb-3" />
-          <p className="text-[14px] font-bold text-[#111111]">
-            {tab === 'needs_you' ? "You're all caught up" : 'No conversations yet'}
-          </p>
-          <p className="text-[12px] text-[#6B6B6B] mt-1.5 max-w-sm mx-auto">
-            {tab === 'needs_you'
-              ? 'Nothing needs a personal reply right now. Questions your automations can’t answer land here with an AI draft ready to go.'
-              : 'Conversations appear here once your automations start talking to people.'}
-          </p>
-        </div>
-      )}
-
-      {!loading && !error && items.length > 0 && (
-        <div className="space-y-3">
-          {items.map(item => {
-            const personLabel = item.contact_handle ? `@${item.contact_handle}` : item.contact_name || 'Unknown person';
-            const reason = item.needs_reply_reason ? REASON_LABEL[item.needs_reply_reason] ?? item.needs_reply_reason : null;
-            const composing = composerFor === item.id;
-            const busy = sending === item.id;
-            return (
-              <div key={item.id} className="pop-card p-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-[#111111]">{personLabel}</span>
-                  <PlatformDot platform={item.platform} size={7} />
-                  {/* Display name, not the internal id — `twitter` must read as "X". */}
-                  <span className="text-[11px] text-[#9B9B8F]">{platformMeta(item.platform).name} {item.channel === 'dm' ? 'DM' : 'comment'}</span>
-                  <span className="text-[11px] text-[#9B9B8F]">· {timeAgo(item.created_at)}</span>
-                  {item.needs_reply && reason && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFF3E0] text-[#D97706] ml-auto">
-                      {reason}
-                    </span>
-                  )}
-                </div>
-
-                {item.message_text && (
-                  <p className="text-[13px] text-[#111111] mt-2 leading-relaxed">&ldquo;{item.message_text}&rdquo;</p>
-                )}
-                {item.post_caption && (
-                  <p className="text-[11px] text-[#9B9B8F] mt-1 line-clamp-1">On: {item.post_caption}</p>
-                )}
-
-                {/* The AI's parked draft: one tap sends it exactly as written
-                    (the backend's useSuggested path), or edit it first. */}
-                {item.suggested_reply && !composing && (
-                  <div className="mt-3 bg-[#FAFAF8] rounded-xl p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9B9B8F] mb-1 flex items-center gap-1">
-                      <Sparkles size={11} /> Suggested reply
-                    </p>
-                    <p className="text-[13px] text-[#111111] leading-relaxed">{item.suggested_reply}</p>
-                  </div>
-                )}
-
-                {composing ? (
-                  <div className="mt-3 space-y-2">
-                    <textarea
-                      value={draft}
-                      onChange={e => setDraft(e.target.value)}
-                      rows={3}
-                      autoFocus
-                      aria-label={`Reply to ${personLabel}`}
-                      placeholder="Write your reply..."
-                      className="w-full bg-white border border-[#E8E4DF] rounded-xl px-3.5 py-2.5 text-[13px] placeholder:text-[#9B9B8F] outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/40 resize-y"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => send(item, { text: draft.trim() })}
-                        disabled={!draft.trim() || busy}
-                        className="pop-btn-primary text-[12px] py-1.5 px-3 disabled:opacity-40"
-                      >
-                        {busy ? <><Loader2 size={13} className="animate-spin" />Sending…</> : <><Send size={13} />Send</>}
-                      </button>
-                      <button
-                        onClick={() => { setComposerFor(null); setDraft(''); }}
-                        disabled={busy}
-                        className="pop-btn-ghost text-[12px] py-1.5 px-3 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 mt-3 flex-wrap">
-                    {item.suggested_reply && (
-                      <button
-                        onClick={() => send(item, { useSuggested: true })}
-                        disabled={busy}
-                        className="pop-btn-primary text-[12px] py-1.5 px-3 disabled:opacity-50"
-                      >
-                        {busy ? <><Loader2 size={13} className="animate-spin" />Sending…</> : <><Send size={13} />Send suggested reply</>}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => { setComposerFor(item.id); setDraft(item.suggested_reply ?? ''); }}
-                      className="pop-btn-tertiary text-[12px] py-1.5 px-3"
-                    >
-                      <PenLine size={13} />{item.suggested_reply ? 'Edit & send' : 'Reply'}
-                    </button>
-                    {item.needs_reply && (
-                      <button
-                        onClick={() => resolve(item)}
-                        disabled={resolving === item.id}
-                        className="pop-btn-ghost text-[12px] py-1.5 px-3 disabled:opacity-50"
-                      >
-                        {resolving === item.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Mark handled
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {!loading && !error && hasMore && (
-        <div className="flex justify-center mt-4">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="pop-btn-tertiary text-[12px] py-1.5 px-4 disabled:opacity-50"
+      {!error && (
+        <div className="flex-1 min-h-0 pop-card overflow-hidden flex">
+          {/* --------------------------------------------------- conversations */}
+          <div
+            className={`w-full md:w-[300px] md:shrink-0 md:border-r border-[#EFECE6] min-h-0
+              ${selected ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
           >
-            {loadingMore ? 'Loading…' : 'Load more'}
-          </button>
+            <ConversationList
+              conversations={conversations}
+              selectedId={selected}
+              search={search}
+              loading={loading}
+              onSearch={setSearch}
+              onSelect={open}
+            />
+          </div>
+
+          {/* ---------------------------------------------------- conversation */}
+          <div className={`flex-1 min-w-0 min-h-0 ${selected ? 'flex flex-col' : 'hidden md:flex md:flex-col'}`}>
+            {/* Narrow screens are one pane at a time: the list, then the
+                conversation, with a way back. Three panes in 380px would be
+                three unusable columns. */}
+            {selected && (
+              <button
+                type="button"
+                onClick={() => open(null)}
+                className="md:hidden shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-[13px]
+                  text-[#6B6B6B] border-b border-[#EFECE6] hover:text-[#111111] transition-colors"
+              >
+                <ArrowLeft size={15} /> Conversations
+              </button>
+            )}
+
+            {thread ? (
+              <ConversationThread
+                detail={thread}
+                loading={threadLoading}
+                sending={sending}
+                contactOpen={contactOpen}
+                onOpenContact={() => setContactOpen(v => !v)}
+                onSend={send}
+                replyTarget={replyTarget}
+              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+                <MessagesSquare size={22} className="text-[#D8D3CC]" />
+                <p className="text-[13px] text-[#8A857E]">
+                  {threadLoading ? 'Opening…' : 'Pick a conversation'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* --------------------------------------------------------- contact */}
+          {thread && contactOpen && (
+            <>
+              {/* Wide: a third pane. Narrow: an overlay, because a 280px column
+                  beside a conversation is neither. One panel either way — two
+                  copies would put the same person in the accessibility tree
+                  twice, with two of every control inside. */}
+              <div
+                aria-hidden="true"
+                onClick={() => setContactOpen(false)}
+                className="lg:hidden fixed inset-0 z-[60] bg-[#111111]/10"
+              />
+              <div className="fixed inset-y-0 right-0 z-[70] w-full max-w-[340px] bg-white
+                shadow-[0_0_40px_rgba(17,17,17,0.12)]
+                motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200
+                lg:static lg:z-auto lg:w-[280px] lg:max-w-none lg:shrink-0 lg:min-h-0
+                lg:border-l lg:border-[#EFECE6] lg:shadow-none lg:animate-none">
+                <ContactPanel detail={thread} onClose={() => setContactOpen(false)} />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
