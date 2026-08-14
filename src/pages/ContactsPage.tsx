@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   Search, ArrowLeft, AlertCircle, X, Plus, Reply, Clock, Tag, Zap,
+  MessageSquare, ArrowUpRight,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
@@ -13,6 +14,7 @@ import { TableSkeleton, Skeleton } from '../components/Skeleton';
 import {
   isBackendConfigured, fetchContacts, fetchContact, updateContact, updateContactTag,
 } from '../lib/api';
+import { externalProfile } from '../lib/profileUrl';
 import type { Contact, ContactDetail, LeadStage } from '../lib/api';
 
 const PAGE_SIZE = 20;
@@ -59,6 +61,14 @@ export default function ContactsPage() {
   const automationId = searchParams.get('automation');
   const [automation, setAutomation] = useState<{ id: string; name: string } | null>(null);
 
+  /**
+   * The open contact, for the same reason the audience filter is in the URL:
+   * a person is a place. It survives a reload, it can be linked, and it is
+   * what the Inbox's contact panel opens when you ask for the full profile —
+   * so there is exactly one Contact route, not a second one built for Inbox.
+   */
+  const detailId = searchParams.get('contact');
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -74,7 +84,14 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
 
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const setDetailId = useCallback((id: string | null) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set('contact', id);
+      else next.delete('contact');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Monotonic request id: search is un-debounced (one fetch per keystroke), so
   // without this a slower earlier response could resolve last and show results
@@ -418,6 +435,10 @@ function ContactDetailView({
     }
   };
 
+  const external = detail
+    ? externalProfile(detail.contact.platform, detail.contact.handle)
+    : null;
+
   return (
     <div className="pop-page max-w-[800px]">
       <button onClick={onBack} className="pop-btn-ghost mb-5">
@@ -469,6 +490,38 @@ function ContactDetailView({
                   <PlatformDot platform={detail.contact.platform} size={8} />
                 </div>
                 {detail.contact.handle && <p className="pop-body">@{detail.contact.handle}</p>}
+
+                {/* The other half of the identity link. A contact and a
+                    conversation are the same person, so getting from one to
+                    the other should not mean going back to a list — but it
+                    OPENS the conversation, it doesn't send anything. */}
+                <div className="flex items-center gap-2 mt-2.5">
+                  <Link
+                    to={`/inbox?c=${detail.contact.id}`}
+                    className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#111111]
+                      rounded-lg border border-[#E8E4DF] px-2.5 py-1.5 hover:bg-[#FAF9F7]
+                      transition-colors focus-visible:outline-none focus-visible:ring-2
+                      focus-visible:ring-chartreuse"
+                  >
+                    <MessageSquare size={13} className="text-[#6B6B6B]" />
+                    Message
+                  </Link>
+                  {external && (
+                    // Explicit, labelled, and second — never the avatar's job.
+                    <a
+                      href={external.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#4A4A4A]
+                        rounded-lg px-2 py-1.5 hover:text-[#111111] hover:bg-[#FAF9F7]
+                        transition-colors focus-visible:outline-none focus-visible:ring-2
+                        focus-visible:ring-chartreuse"
+                    >
+                      {external.label}
+                      <ArrowUpRight size={13} className="text-[#8A857E]" />
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
             <div className="text-right">
