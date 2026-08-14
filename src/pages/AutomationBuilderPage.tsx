@@ -45,6 +45,29 @@ import LoadingState from '../components/LoadingState';
 
 type SidePanel = 'preview' | 'notifications' | 'inbox' | 'history' | null;
 
+/**
+ * The width at which the notifications feed and a step's settings can be open
+ * at the same time.
+ *
+ * This is arithmetic, not taste. The rail is 60 and each column is 320, so
+ * two of them cost 700px of chrome; a canvas narrower than about 480 cannot
+ * show a step and its next step at once, which is the least a flow editor can
+ * be. 60 + 320 + 320 + 480 = 1180.
+ *
+ * It has to be this high because the panels are real columns now. As overlays
+ * they floated over the canvas and cost it nothing, so two could be open on a
+ * small laptop harmlessly; as columns they take the width away. Below this,
+ * the exception is off and it is one thing at a time — which is the honest
+ * trade, because two columns on a 900px screen leaves 200px of canvas and the
+ * creator can no longer see the step the feed just sent them to.
+ */
+const TWO_COLUMN_MIN_WIDTH = 1180;
+
+/** Read at click time, so it needs no resize listener to stay true. */
+function roomForBothColumns(): boolean {
+  return window.innerWidth >= TWO_COLUMN_MIN_WIDTH;
+}
+
 export default function AutomationBuilderPage() {
   const { flowId = null } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
@@ -208,17 +231,14 @@ export default function AutomationBuilderPage() {
   }, [panel, setSelectedNodeId]);
 
   /**
-   * Room for two, or the exception is off.
+   * Opening the feed: keep the step beside it, or drop the step.
    *
-   * "Beside" is a width claim: the feed and the inspector are a column each,
-   * and below 640px the region is a single overlay. Keeping both there would
-   * stack them, so the creator would see neither the list nor the step —
-   * losing the exact thing the exception exists to preserve. Read at click
-   * time rather than during render, so it reflects the width the creator is
-   * actually looking at without a resize listener.
+   * "Beside" is a width claim — see TWO_COLUMN_MIN_WIDTH. Without the room,
+   * keeping both would leave the creator seeing neither the list nor the
+   * step, which is the exact thing the exception exists to preserve.
    */
   const keepStepBesideFeed = useCallback(() => {
-    if (window.innerWidth < 640) setSelectedNodeId(null);
+    if (!roomForBothColumns()) setSelectedNodeId(null);
   }, [setSelectedNodeId]);
 
   const openNotifications = useCallback(async () => {
@@ -246,10 +266,12 @@ export default function AutomationBuilderPage() {
           }
         : null,
     );
+    // The mirror of keepStepBesideFeed, for the other direction of arrival.
     // Wide enough for both, the feed stays open beside the step — it is an
     // index, and closing it would cost the creator their place in the list.
-    // Narrow, the two would be stacked on top of each other.
-    if (window.innerWidth < 640) setPanel(null);
+    // Otherwise the step wins: they clicked to go somewhere, and the place
+    // they landed matters more than the list they left.
+    if (!roomForBothColumns()) setPanel(null);
   }, [setSelectedNodeId]);
 
   useEffect(() => {
