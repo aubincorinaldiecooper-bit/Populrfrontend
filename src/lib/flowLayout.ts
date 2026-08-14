@@ -138,3 +138,33 @@ export function needsLayout(graph: FlowGraph): boolean {
   const first = graph.nodes[0].position;
   return graph.nodes.every(n => n.position.x === first.x && n.position.y === first.y);
 }
+
+/** React Flow's viewport, in the only terms this module needs. */
+export interface Viewport { x: number; y: number; zoom: number }
+
+/**
+ * Hold the middle still while the canvas changes width.
+ *
+ * The contextual panel is a real column now, not an overlay, so opening one
+ * takes ~320px off the canvas and closing gives it back. Left alone, the
+ * viewport's origin stays put and every step slides sideways — the creator
+ * asked to look at a step's settings and the step itself drifted off toward
+ * the panel that was supposed to be about it.
+ *
+ * Re-fitting instead would be worse: it discards the zoom and pan they chose,
+ * so a creator inspecting one corner of a large flow gets thrown back to the
+ * whole graph for having opened a panel. Shifting by half the delta keeps
+ * both — same zoom, same steps in the middle, just a narrower window onto
+ * them. Which is what "the canvas reflows" should mean.
+ *
+ * In screen pixels, so it is independent of zoom: `x` is a screen-space
+ * translation in React Flow's transform, and the visible centre moves by half
+ * of whatever the container gained or lost regardless of scale.
+ */
+export function viewportAfterResize(
+  viewport: Viewport,
+  previousWidth: number,
+  nextWidth: number,
+): Viewport {
+  return { ...viewport, x: viewport.x + (nextWidth - previousWidth) / 2 };
+}

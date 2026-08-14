@@ -169,9 +169,10 @@ export default function NodeInspector({
   return (
     <aside
       ref={panelRef}
-      className="absolute left-0 top-0 bottom-0 z-20 w-[300px] max-w-[85vw] bg-white
-        border-r border-[#E8E4DF] shadow-[4px_0_24px_rgba(17,17,17,0.05)]
-        flex flex-col animate-in slide-in-from-left-2 fade-in duration-150"
+      // Sizing and entrance belong to the contextual region that owns this
+      // slot (see AutomationBuilderPage), not to each panel — otherwise every
+      // panel has its own opinion about how wide the right side is.
+      className="flex h-full w-full flex-col bg-white"
       aria-label={`${NODE_LABEL[node.type]} settings`}
     >
       <header className="flex items-center justify-between px-4 py-3 border-b border-[#F0EDE8]">

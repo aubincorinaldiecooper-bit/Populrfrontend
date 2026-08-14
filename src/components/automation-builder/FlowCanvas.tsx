@@ -7,7 +7,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { FlowNodeCard, type FlowNodeData } from './FlowNodeCard';
 import DrawnEdge, { type DrawnEdgeData } from './DrawnEdge';
-import { NODE_HEIGHT, NODE_WIDTH } from '../../lib/flowLayout';
+import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayout';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
@@ -48,8 +48,32 @@ function CanvasInner({
   graph, selectedNodeId, highlighted, problems, posts, activePath,
   onSelect, onMove, onConnect, onAddAfter, fitSignal, focusNodeId = null, focusSignal = 0,
 }: FlowCanvasProps) {
-  const { fitView, setCenter } = useReactFlow();
+  const { fitView, setCenter, getViewport, setViewport } = useReactFlow();
   const initialized = useNodesInitialized();
+
+  // The canvas is a real column beside the contextual panel, so its width
+  // changes whenever one opens or closes. Keep whatever is in the middle in
+  // the middle — see viewportAfterResize for why this is a shift and not a
+  // re-fit. Width only: the panel never changes the canvas's height.
+  const host = useRef<HTMLDivElement>(null);
+  const lastWidth = useRef<number | null>(null);
+  useEffect(() => {
+    const element = host.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      // A zero width is the panel being unmounted or the tab being hidden,
+      // not a resize. Recording it would make the next real measurement look
+      // like a huge gain and throw the viewport across the screen.
+      if (!width) return;
+      const previous = lastWidth.current;
+      lastWidth.current = width;
+      if (previous === null || previous === width) return;
+      setViewport(viewportAfterResize(getViewport(), previous, width));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [getViewport, setViewport]);
 
   const problemByNode = useMemo(() => {
     const map = new Map<string, string>();
@@ -166,6 +190,7 @@ function CanvasInner({
   }, [onConnect]);
 
   return (
+    <div ref={host} className="h-full w-full">
     <ReactFlow
       nodes={nodes}
       edges={edges}
@@ -190,6 +215,7 @@ function CanvasInner({
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />
     </ReactFlow>
+    </div>
   );
 }
 
