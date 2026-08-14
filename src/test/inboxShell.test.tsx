@@ -24,9 +24,11 @@ const fetchInboxMock = vi.fn();
 const sendInboxReplyMock = vi.fn();
 
 /** `name` may be null, which is how the handle-only fallback gets exercised. */
-function item(id: string, handle: string, text: string, name?: string | null): InboxItem {
+function item(
+  id: string, handle: string, text: string, name?: string | null, avatarUrl: string | null = null,
+): InboxItem {
   return {
-    id, contact_id: `c_${id}`, contact_handle: handle,
+    id, contact_id: `c_${id}`, contact_handle: handle, contact_avatar_url: avatarUrl,
     contact_name: name === undefined ? `${handle[0]!.toUpperCase()}${handle.slice(1)}` : name,
     platform: 'instagram', channel: 'dm', message_text: text,
     needs_reply: true, needs_reply_reason: 'no_rule_matched',
@@ -182,5 +184,34 @@ describe('the Inbox control', () => {
     await user.click(screen.getByLabelText('Close inbox'));
 
     await waitFor(() => expect(screen.queryByLabelText('Inbox')).not.toBeInTheDocument());
+  });
+});
+
+/* The drawer shows people the way the full Inbox does — which means their
+ * face when we have one. It reads inbox_items rather than conversations, and
+ * that path missed the avatar twice over: the query never selected it and the
+ * component never passed it, so the drawer could not have drawn a picture
+ * however well the rest of the avatar work landed. */
+describe('the Inbox drawer shows faces', () => {
+  it('renders a contact photo when the item carries one', async () => {
+    fetchInboxMock.mockResolvedValue({
+      items: [item('1', 'jordan', 'hi', 'Jordan', 'https://cdn.example.com/jordan.jpg')],
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
+
+    await user.click(await screen.findByLabelText('Inbox, 1 waiting'));
+    const img = await screen.findByRole('presentation', { hidden: true });
+    expect(img).toHaveAttribute('src', 'https://cdn.example.com/jordan.jpg');
+  });
+
+  it('falls back to their initial when there is no photo', async () => {
+    fetchInboxMock.mockResolvedValue({ items: [item('1', 'jordan', 'hi', 'Jordan', null)] });
+    const user = userEvent.setup();
+    render(<MemoryRouter><InboxLauncher /></MemoryRouter>);
+
+    await user.click(await screen.findByLabelText('Inbox, 1 waiting'));
+    expect(await screen.findByText('J')).toBeInTheDocument();
+    expect(screen.queryByRole('presentation', { hidden: true })).not.toBeInTheDocument();
   });
 });
