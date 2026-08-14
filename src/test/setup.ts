@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 
 // Provide the client-visible env var authClient.ts requires. Any test
 // that needs a different value can override via vi.stubEnv().
-if (!(import.meta as any).env.VITE_AUTH_URL) {
+if (!import.meta.env.VITE_AUTH_URL) {
   vi.stubEnv('VITE_AUTH_URL', 'http://localhost:4001');
 }
 

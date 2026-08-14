@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  activateFlow, composeFlow, createFlow, fetchFlow, fetchFlowValidation, pauseFlow, updateFlow,
+  activateFlow, composeFlow, fetchFlow, fetchFlowValidation, pauseFlow, updateFlow,
   FlowNotReadyError,
   type AutomationFlow, type FlowProblem,
 } from '../../lib/api';
@@ -464,9 +464,4 @@ export function useFlowBuilder(flowId: string | null) {
     compose, undo, canUndo,
     activate, pause,
   };
-}
-
-/** Create a flow and hand back its id — the "New automation" entry point. */
-export async function startNewFlow(): Promise<AutomationFlow> {
-  return createFlow({ name: 'New automation', graph: emptyGraph() });
 }

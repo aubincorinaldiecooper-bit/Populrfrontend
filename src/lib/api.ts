@@ -22,7 +22,7 @@ export function isBackendConfigured(): boolean {
  * nowhere or silently charge through the wrong account.
  */
 export function getSubscriptionCheckoutUrl(): string | undefined {
-  const url = import.meta.env.VITE_SUBSCRIPTION_CHECKOUT_URL as string | undefined;
+  const url = import.meta.env.VITE_SUBSCRIPTION_CHECKOUT_URL;
   return url && url.trim() !== '' ? url.trim() : undefined;
 }
 
