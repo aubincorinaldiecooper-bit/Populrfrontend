@@ -1,3 +1,4 @@
+import ProfileImage from '../ProfileImage';
 import { platformMeta } from '../../lib/platformMeta';
 
 /**
@@ -46,22 +47,19 @@ export default function Avatar({
   // and a button may only contain phrasing content.
   return (
     <span className={`relative block shrink-0 ${s.box}`}>
-      {avatarUrl ? (
-        <img
-          src={avatarUrl}
-          alt=""
-          loading="lazy"
-          className={`${s.box} rounded-full object-cover bg-[#F0EDE8]`}
-        />
-      ) : (
-        <span
-          aria-hidden
-          className={`${s.box} ${s.text} rounded-full bg-[#F0EDE8] text-[#6B6B6B]
-            font-semibold flex items-center justify-center select-none`}
-        >
-          {initial(handle, name)}
-        </span>
-      )}
+      <ProfileImage
+        src={avatarUrl}
+        className={`${s.box} rounded-full object-cover bg-[#F0EDE8]`}
+        fallback={
+          <span
+            aria-hidden
+            className={`${s.box} ${s.text} rounded-full bg-[#F0EDE8] text-[#6B6B6B]
+              font-semibold flex items-center justify-center select-none`}
+          >
+            {initial(handle, name)}
+          </span>
+        }
+      />
       {showPlatform && PlatformIcon && (
         <span
           aria-hidden

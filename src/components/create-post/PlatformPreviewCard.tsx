@@ -1,4 +1,5 @@
 import { Heart, MessageCircle, Send, Bookmark, ThumbsUp, Repeat2, Share2 } from 'lucide-react';
+import ProfileImage from '../ProfileImage';
 import type { PostMediaItem, PostMediaType } from '../../lib/api';
 
 export interface PreviewIdentity {
@@ -17,15 +18,20 @@ interface Props {
 }
 
 function Avatar({ identity, size = 36 }: { identity: PreviewIdentity; size?: number }) {
-  return identity.avatarUrl ? (
-    <img src={identity.avatarUrl} alt="" className="rounded-full object-cover flex-shrink-0" style={{ width: size, height: size }} />
-  ) : (
-    <div
-      className="rounded-full bg-[#FAFAF8] border border-[#E8E4DF] flex items-center justify-center text-[11px] font-semibold text-[#6B6B6B] flex-shrink-0"
+  return (
+    <ProfileImage
+      src={identity.avatarUrl}
+      className="rounded-full object-cover flex-shrink-0"
       style={{ width: size, height: size }}
-    >
-      {identity.initials}
-    </div>
+      fallback={
+        <div
+          className="rounded-full bg-[#FAFAF8] border border-[#E8E4DF] flex items-center justify-center text-[11px] font-semibold text-[#6B6B6B] flex-shrink-0"
+          style={{ width: size, height: size }}
+        >
+          {identity.initials}
+        </div>
+      }
+    />
   );
 }
 
