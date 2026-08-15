@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import Sidebar from './Sidebar';
 import EditorRail from './EditorRail';
 import ErrorBoundary from './ErrorBoundary';
+import { useBuilderNav } from '../lib/navPreference';
 
 /**
  * One editor route, and it is the automation builder.
@@ -20,12 +21,26 @@ export default function Layout({ children }: { children?: ReactNode }) {
   const location = useLocation();
   const editor = isEditorRoute(location.pathname);
 
+  // The route proposes; the creator decides.
+  //
+  // Collapsing purely on the route made the navigation something the app did
+  // TO you: move between two screens and the furniture rearranges, with no way
+  // to say you would rather it didn't. The rail still earns its place — inside
+  // an automation the canvas is the product — so it stays the default here and
+  // nowhere else. What changed is that it is now a default rather than a rule,
+  // and the answer is remembered.
+  const { collapsed, setCollapsed } = useBuilderNav(editor);
+  const railed = editor && collapsed;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Editor mode swaps the navigation, not the app. Everywhere else keeps
           the full sidebar exactly as it was. */}
-      {editor ? <EditorRail /> : null}
-      <Sidebar railMode={editor} />
+      {railed ? <EditorRail onExpand={() => setCollapsed(false)} /> : null}
+      <Sidebar
+        railMode={railed}
+        onCollapse={editor ? () => setCollapsed(true) : undefined}
+      />
 
       {/* The offset follows the chrome. In the editor that is 60px instead of
           280px, and the 220px difference goes to the canvas — which is the
@@ -35,7 +50,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
           under the bar on notched devices. */}
       <main
         className={`min-h-screen pt-[calc(4rem+env(safe-area-inset-top))] md:pt-0
-          ${editor ? 'md:ml-[60px]' : 'md:ml-[280px]'}`}
+          ${railed ? 'md:ml-[60px]' : 'md:ml-[280px]'}`}
       >
         {/* Scoped to the content area and keyed on the route, so a crash on
             one page (e.g. a lazy chunk failing to load after a redeploy)

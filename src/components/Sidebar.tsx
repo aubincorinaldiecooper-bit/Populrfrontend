@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Menu, X, Plus } from 'lucide-react';
+import { Menu, X, Plus, PanelLeftClose } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
 
@@ -59,7 +59,16 @@ function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate: ()
  * `hidden md:flex`, so without them a phone in the builder would have no
  * navigation at all.
  */
-export default function Sidebar({ railMode = false }: { railMode?: boolean } = {}) {
+export default function Sidebar({
+  railMode = false,
+  /**
+   * Offered only inside the builder, where a narrower navigation buys the
+   * canvas something. Absent everywhere else — there is nothing to gain by
+   * collapsing the nav on Contacts, so the control would just be a lever that
+   * makes the app worse.
+   */
+  onCollapse,
+}: { railMode?: boolean; onCollapse?: () => void } = {}) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -155,6 +164,19 @@ export default function Sidebar({ railMode = false }: { railMode?: boolean } = {
         transition={{ duration: 0.4, ease: [0.24, 1, 0.4, 1] }}
         className="hidden md:flex fixed left-0 top-0 h-screen w-[280px] bg-transparent border-r border-surface-variant z-50 flex-col p-6 gap-7"
       >
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Collapse navigation"
+            title="Collapse navigation"
+            className="absolute right-3 top-6 rounded-lg p-1.5 text-on-surface-variant
+              transition-colors hover:bg-surface-container-high hover:text-on-surface
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
+          >
+            <PanelLeftClose size={17} strokeWidth={1.9} />
+          </button>
+        )}
         <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
       </motion.aside>
       )}
