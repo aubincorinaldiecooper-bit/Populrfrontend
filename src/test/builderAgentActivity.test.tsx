@@ -113,10 +113,22 @@ async function ask(user: ReturnType<typeof userEvent.setup>, prompt: string) {
   );
 }
 
+/**
+ * The builder reads the viewport width to decide whether the feed and a
+ * step's settings can be open at once. Stated here rather than inherited from
+ * jsdom's 1024 default, because that default is narrower than the threshold
+ * and a test that depends on it silently is a test that will confuse the next
+ * person to change the threshold.
+ */
+function setViewportWidth(px: number) {
+  Object.defineProperty(window, 'innerWidth', { value: px, configurable: true });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
   finishCompose = null;
+  setViewportWidth(1440);
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
 });
 
@@ -220,27 +232,117 @@ describe('one context at a time', () => {
     expect(screen.getByText('When')).toBeInTheDocument();
   });
 
-  it('but not on a phone, where there is no room to put them beside anything', async () => {
-    // "Beside" is a width claim. Below 640px the region is a single overlay,
-    // so keeping both would stack a 320px feed and a 320px inspector inside
-    // 360px — the exception's whole justification is that the creator can see
-    // the list AND the step, and here they could see neither.
-    const wide = window.innerWidth;
-    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+  // "Beside" is a width claim, and the panels are real columns now — they take
+  // the width from the canvas rather than floating over it. Two of them plus
+  // the rail is 700px of chrome, so below ~1180 the exception has to be off:
+  // keeping both would leave the creator seeing neither the list nor the step,
+  // which is the exact thing the exception exists to preserve.
+  it.each([
+    ['a phone', 390],
+    ['a small laptop, where two columns would leave 200px of canvas', 900],
+    ['one pixel below the threshold', 1179],
+  ])('but not on %s', async (_label, width) => {
+    setViewportWidth(width);
+    const user = userEvent.setup();
+    mountBuilder();
+    await screen.findByText('Preview');
+    selectNode('trigger');
+    await screen.findByText('When');
+
+    await user.click(screen.getByLabelText(/^Notifications,/));
+
+    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
+  });
+
+  it('and gives the width back when the window shrinks under them', async () => {
+    // The window is not only measured when someone clicks. Opening both at a
+    // comfortable width and then resizing — or splitting the screen, or
+    // rotating a tablet — used to keep two 320px columns on a viewport that
+    // cannot hold them, reaching the bad layout by the one route the
+    // threshold never watched.
+    const listeners: (() => void)[] = [];
+    const media = { matches: true };
+    const realMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true, configurable: true,
+      value: (query: string) => ({
+        get matches() { return media.matches; },
+        media: query,
+        addEventListener: (_e: string, fn: () => void) => { listeners.push(fn); },
+        removeEventListener: () => {},
+      }),
+    });
     try {
+      setViewportWidth(1440);
       const user = userEvent.setup();
       mountBuilder();
       await screen.findByText('Preview');
       selectNode('trigger');
       await screen.findByText('When');
-
       await user.click(screen.getByLabelText(/^Notifications,/));
-
       expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      expect(screen.getByText('When')).toBeInTheDocument();
+
+      // The viewport crosses below the threshold.
+      media.matches = false;
+      act(() => { listeners.forEach(fn => fn()); });
+
+      // The step yields; the panel the creator deliberately opened stays.
       await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
+      expect(screen.getByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
     } finally {
-      Object.defineProperty(window, 'innerWidth', { value: wide, configurable: true });
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true, configurable: true, value: realMatchMedia,
+      });
     }
+  });
+
+  it('but a lone inspector is left alone — one column always fits', async () => {
+    const listeners: (() => void)[] = [];
+    const media = { matches: true };
+    const realMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true, configurable: true,
+      value: (query: string) => ({
+        get matches() { return media.matches; },
+        media: query,
+        addEventListener: (_e: string, fn: () => void) => { listeners.push(fn); },
+        removeEventListener: () => {},
+      }),
+    });
+    try {
+      mountBuilder();
+      await screen.findByText('Preview');
+      selectNode('trigger');
+      await screen.findByText('When');
+
+      media.matches = false;
+      act(() => { listeners.forEach(fn => fn()); });
+
+      // Nothing to reconcile: the inspector alone is the ordinary narrow
+      // case, and closing a creator's open step on a resize would be the
+      // shell throwing away work they were in the middle of.
+      expect(screen.getByText('When')).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true, configurable: true, value: realMatchMedia,
+      });
+    }
+  });
+
+  it('and exactly at the threshold, both fit', async () => {
+    setViewportWidth(1180);
+    const user = userEvent.setup();
+    mountBuilder();
+    await screen.findByText('Preview');
+    selectNode('trigger');
+    await screen.findByText('When');
+
+    await user.click(screen.getByLabelText(/^Notifications,/));
+
+    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(screen.getByText('When')).toBeInTheDocument();
   });
 });
 

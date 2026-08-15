@@ -132,6 +132,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
   finishCompose = null;
+  // The builder reads the viewport width to decide whether the notifications
+  // feed and a step's settings fit side by side. Stated rather than inherited
+  // from jsdom's 1024 default, which is narrower than the threshold — these
+  // tests are about the feed→step flow, not about narrow layout.
+  Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
   serverGraph = graphFixture();
   serverProblems = [
     { nodeId: 'trigger', message: NEEDS_ACCOUNT },
