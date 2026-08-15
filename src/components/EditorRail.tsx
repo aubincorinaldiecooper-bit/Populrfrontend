@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router';
+import { PanelLeftOpen } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
 
@@ -19,7 +20,7 @@ import { navItems, isActivePath } from '../lib/nav';
  * so each carries a real accessible name and a tooltip on hover and focus.
  */
 
-export default function EditorRail() {
+export default function EditorRail({ onExpand }: { onExpand?: () => void }) {
   const { pathname } = useLocation();
 
   return (
@@ -67,7 +68,24 @@ export default function EditorRail() {
         );
       })}
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col items-center gap-1">
+        {/* The way back to the full navigation.
+            Without this the rail is a mode imposed by the route — you arrive
+            inside an automation and the navigation has shrunk, with nothing to
+            say you would rather it hadn't. One click, and it is remembered. */}
+        {onExpand && (
+          <button
+            type="button"
+            onClick={onExpand}
+            aria-label="Expand navigation"
+            className="group relative mb-1 flex h-10 w-10 items-center justify-center rounded-xl
+              text-on-surface-variant transition-colors hover:bg-[#EFEDE8] hover:text-on-surface
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
+          >
+            <PanelLeftOpen size={18} strokeWidth={1.9} />
+            <Tip>Expand navigation</Tip>
+          </button>
+        )}
         <AccountMenu compact />
       </div>
     </nav>
