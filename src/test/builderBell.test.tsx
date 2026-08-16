@@ -155,25 +155,16 @@ describe('the builder’s top bar', () => {
     expect(screen.getByLabelText(/^Notifications,/)).toBeInTheDocument();
   });
 
-  it('carries Inbox beside the bell, with its own count', async () => {
+  it('offers no second inbox surface — Inbox is the nav\'s job now', async () => {
+    // There used to be an Inbox button here that opened a drawer copy of the
+    // /inbox page over the canvas: two inboxes. The rail carries Inbox as a
+    // navigation destination (badge included); the top bar answers only
+    // questions about THIS automation.
     mountBuilder();
-    // Two different questions, two separate counts: Inbox is who is talking
-    // to you, the bell is what Populr needs from you. They never merge.
-    expect(await screen.findByLabelText('Inbox, 3 waiting')).toBeInTheDocument();
-    expect(await screen.findByLabelText('Notifications, 2 unread')).toBeInTheDocument();
-  });
+    await screen.findByText('Preview');
 
-  it('opens Inbox over the canvas without leaving the automation', async () => {
-    const user = userEvent.setup();
-    mountBuilder();
-
-    await user.click(await screen.findByLabelText('Inbox, 3 waiting'));
-
-    expect(await screen.findByRole('complementary', { name: 'Inbox' })).toBeInTheDocument();
-    // Still on the builder: the automation's own name and Activate are right
-    // where they were.
-    expect(screen.getByText('Activate')).toBeInTheDocument();
-    expect(screen.getByTestId('canvas')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Inbox/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Inbox' })).not.toBeInTheDocument();
   });
 
   it('counts what is unresolved on the bell', async () => {

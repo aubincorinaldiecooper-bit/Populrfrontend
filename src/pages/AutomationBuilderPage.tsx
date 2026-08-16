@@ -13,9 +13,6 @@ import AIComposer from '../components/automation-builder/AIComposer';
 import AgentActivity from '../components/automation-builder/AgentActivity';
 import PreviewPanel from '../components/automation-builder/PreviewPanel';
 import NotificationBell from '../components/automation-builder/NotificationBell';
-import { InboxButton } from '../components/inbox/InboxButton';
-import InboxDrawer from '../components/inbox/InboxDrawer';
-import { useInboxUnread } from '../components/inbox/useInboxQueue';
 import NotificationsPanel from '../components/automation-builder/NotificationsPanel';
 import HistoryDrawer from '../components/automation-builder/HistoryDrawer';
 import {
@@ -38,12 +35,14 @@ import LoadingState from '../components/LoadingState';
  * automation, not at the tool.
  *
  * The controls in the top right are four different questions, and they are
- * weighted to say so. Preview: how will this feel? Inbox: who is talking to
- * me? The bell: what does Populr need from me? Activate: put it live — the
- * only one wearing lime. Nothing else earns a place up there.
+ * weighted to say so. Preview: how will this feel? The bell: what does
+ * Populr need from me? Activate: put it live — the only one wearing lime.
+ * Nothing else earns a place up there. Inbox is a destination in the nav —
+ * the rail carries it, badge included — not a second surface layered over
+ * the canvas.
  */
 
-type SidePanel = 'preview' | 'notifications' | 'inbox' | 'history' | null;
+type SidePanel = 'preview' | 'notifications' | 'history' | null;
 
 /**
  * The width at which the notifications feed and a step's settings can be open
@@ -115,7 +114,6 @@ export default function AutomationBuilderPage() {
   const [bellAttention, setBellAttention] = useState(false);
 
   const notifications = useBuilderNotifications(problems, graph);
-  const inboxUnread = useInboxUnread();
 
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -214,7 +212,7 @@ export default function AutomationBuilderPage() {
   /**
    * Panels are contextual, and there is one context at a time.
    *
-   * Preview, Inbox and History are about the automation as a whole, so opening
+   * Preview and History are about the automation as a whole, so opening
    * one closes the step inspector rather than stacking two panels over the
    * canvas — on a laptop that leaves a strip of canvas between them, which is
    * the "forms with a canvas squeezed in the middle" this builder is not.
@@ -482,9 +480,9 @@ export default function AutomationBuilderPage() {
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
           {/* Three different jobs, three different weights. Preview is a
-              secondary action and looks like one; Inbox and the bell are
-              chrome that reports rather than acts, so they carry no border
-              at all; Activate is the only thing here wearing lime. */}
+              secondary action and looks like one; the bell is chrome that
+              reports rather than acts, so it carries no border at all;
+              Activate is the only thing here wearing lime. */}
           <button
             type="button"
             onClick={() => togglePanel('preview')}
@@ -500,11 +498,6 @@ export default function AutomationBuilderPage() {
           </button>
 
           <div className="flex items-center gap-0.5 pl-1">
-            <InboxButton
-              count={inboxUnread.count}
-              open={panel === 'inbox'}
-              onClick={() => togglePanel('inbox')}
-            />
             <NotificationBell
               count={notifications.unresolvedCount}
               open={panel === 'notifications'}
@@ -733,10 +726,6 @@ export default function AutomationBuilderPage() {
                   onReset={() => setTestResult(null)}
                   onClose={() => { setPanel(null); setTestResult(null); }}
                 />
-              )}
-
-              {panel === 'inbox' && (
-                <InboxDrawer onClose={() => setPanel(null)} onChanged={inboxUnread.refresh} />
               )}
 
               {panel === 'notifications' && (

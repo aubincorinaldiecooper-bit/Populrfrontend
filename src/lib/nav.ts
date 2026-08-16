@@ -1,4 +1,4 @@
-import { Home, Zap, Users, Waypoints, Settings } from 'lucide-react';
+import { Home, Zap, MessageCircle, Users, Waypoints, Settings } from 'lucide-react';
 
 /**
  * Populr's primary navigation, in one place because two shells render it —
@@ -11,14 +11,17 @@ import { Home, Zap, Users, Waypoints, Settings } from 'lucide-react';
  * (/connections redirects to it). Publishing surfaces (Create Post, Content,
  * etc.) stay reachable by URL but out of primary nav.
  *
- * Inbox is deliberately absent. It is not a place you go — it is something
- * that happens to you while you are building — so it lives with the top-right
- * controls and opens over whatever you are already doing. The /inbox route
- * still exists for a long triage session and for the links that point at it.
+ * Inbox is a destination like any other. It used to live as a drawer that
+ * opened over whatever you were doing, with the page kept alongside for long
+ * sessions — which meant the product had two inboxes, and the drawer was a
+ * paler copy of the page. One surface now: the /inbox page. The "someone is
+ * waiting" signal the drawer's launcher used to carry lives on this nav item
+ * as a badge instead.
  */
 export const navItems = [
   { path: '/', label: 'Home', icon: Home },
   { path: '/automations', label: 'Automations', icon: Zap },
+  { path: '/inbox', label: 'Inbox', icon: MessageCircle },
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/channels', label: 'Channels', icon: Waypoints },
   { path: '/settings', label: 'Settings', icon: Settings },

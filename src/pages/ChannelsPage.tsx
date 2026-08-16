@@ -6,7 +6,6 @@ import {
 import ProfileImage from '../components/ProfileImage';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
-import InboxLauncher from '../components/inbox/InboxButton';
 import ConnectAnotherModal from '../components/ConnectAnotherModal';
 import type { ConnectAnotherInitialMode } from '../components/ConnectAnotherModal';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
@@ -199,7 +198,6 @@ export default function ChannelsPage() {
       <PageHeader
         title="Channels"
         subtitle="Connect the accounts your automations run on. One is enough to get started."
-        action={<InboxLauncher />}
       />
 
       {!backendConfigured && (

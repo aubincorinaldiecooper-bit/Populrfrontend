@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { fetchContact, sendInboxReply, ApiError } from '../../lib/api';
+import { refreshInboxUnread } from './useInboxUnread';
 import type { ContactDetail } from '../../lib/api';
 
 /**
@@ -85,6 +86,8 @@ export function useContactConversation(contactId: string | null): ContactConvers
       const result = await sendInboxReply(target, { text });
       showToast(`Reply sent on ${result.channel === 'dm' ? 'DM' : 'the comment thread'}.`, 'success');
       if (sentFor && sentFor === contactId) load();
+      // This reply may have answered the thing the nav badge was counting.
+      refreshInboxUnread();
       return true;
     } catch (err) {
       const message = err instanceof ApiError && err.code === 'not_supported_on_platform'

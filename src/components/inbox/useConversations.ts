@@ -4,6 +4,7 @@ import {
   isBackendConfigured, fetchConversations, fetchContact, sendInboxReply, ApiError,
 } from '../../lib/api';
 import type { Conversation, ContactDetail } from '../../lib/api';
+import { reportWaitingConversations } from './useInboxUnread';
 
 /**
  * The conversations, and whichever one is open.
@@ -67,6 +68,14 @@ export function useConversations(search: string): ConversationsState {
       .then(res => {
         if (seq !== listSeq.current) return;
         setConversations(res.conversations);
+        // The nav badge counts the same thing this list does. The page just
+        // fetched the fresh answer, so hand it over rather than letting the
+        // badge poll its way to it a minute later — but only from the
+        // UNFILTERED list. A search that narrows to nobody is a filter, not
+        // news that nobody is waiting.
+        if (!search.trim()) {
+          reportWaitingConversations(res.conversations.filter(c => c.waiting > 0).length);
+        }
       })
       .catch(err => {
         if (seq !== listSeq.current) return;

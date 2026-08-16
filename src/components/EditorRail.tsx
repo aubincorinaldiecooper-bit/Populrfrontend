@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router';
 import { PanelLeftOpen } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
+import { useInboxUnread } from './inbox/useInboxUnread';
 
 /**
  * The application's navigation, compressed to the width of an icon.
@@ -22,6 +23,7 @@ import { navItems, isActivePath } from '../lib/nav';
 
 export default function EditorRail({ onExpand }: { onExpand?: () => void }) {
   const { pathname } = useLocation();
+  const { count: inboxCount } = useInboxUnread();
 
   return (
     <nav
@@ -46,11 +48,12 @@ export default function EditorRail({ onExpand }: { onExpand?: () => void }) {
       {navItems.map(item => {
         const active = isActivePath(pathname, item.path);
         const Icon = item.icon;
+        const waiting = item.path === '/inbox' ? inboxCount : 0;
         return (
           <Link
             key={item.path}
             to={item.path}
-            aria-label={item.label}
+            aria-label={waiting > 0 ? `${item.label}, ${waiting} waiting` : item.label}
             aria-current={active ? 'page' : undefined}
             className={`group relative flex h-10 w-10 items-center justify-center rounded-xl
               transition-colors focus-visible:outline-none focus-visible:ring-2
@@ -63,6 +66,17 @@ export default function EditorRail({ onExpand }: { onExpand?: () => void }) {
                 : 'text-on-surface-variant hover:bg-[#EFEDE8] hover:text-on-surface'}`}
           >
             <Icon size={18} strokeWidth={active ? 2.2 : 1.9} />
+            {waiting > 0 && (
+              // Someone is talking to you while you build — the one signal
+              // the retired in-builder inbox panel existed to carry.
+              <span
+                aria-hidden="true"
+                className="absolute right-1 top-1 h-[14px] min-w-[14px] rounded-full bg-[#111111]
+                  px-0.5 text-center text-[9px] font-semibold leading-[14px] text-white"
+              >
+                {waiting > 9 ? '9+' : waiting}
+              </span>
+            )}
             <Tip>{item.label}</Tip>
           </Link>
         );
