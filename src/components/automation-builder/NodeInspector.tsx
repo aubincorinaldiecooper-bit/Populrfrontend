@@ -639,9 +639,15 @@ function SendInspector({
   // public replies, a Message can only be a direct message — asking "send as"
   // would make the creator think about a channel they cannot change. The
   // field stays visible when the step is ALREADY set to something the
-  // platform refuses, so the warning under it has somewhere to live.
+  // platform refuses, so the warning under it has somewhere to live — and
+  // hiding requires DM to actually BE the one way: on a platform that can't
+  // send at all (publishing-only), the section stays so its warnings can say
+  // why this step won't work.
   const onlyOneWayToSend =
-    capabilities !== null && !capabilities.supportsCommentReplies && cfg.kind === 'dm';
+    capabilities !== null &&
+    capabilities.supportsDMs &&
+    !capabilities.supportsCommentReplies &&
+    cfg.kind === 'dm';
 
   return (
     <>
