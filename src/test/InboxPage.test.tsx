@@ -56,6 +56,9 @@ function conversation(over: Partial<Conversation> = {}): Conversation {
 function detail(over: Partial<ContactDetail> = {}): ContactDetail {
   return {
     contact: contactRecord(),
+    // The reply target rides on the detail itself now — one fetch answers
+    // who, what was said, and how to reply, whichever page is asking.
+    latestInboxItemId: 'i1',
     sourcePost: null, sourceAutomation: null, automations: [],
     messages: [message()], scoreEvents: [], clicks: [], events: [],
     ...over,
@@ -82,7 +85,8 @@ vi.mock('../lib/api', async () => {
   };
 });
 
-/** Render at a URL, with a Contacts route so "View full profile" can land. */
+/** Render at a URL. The /contacts route exists to catch any link that would
+ *  navigate away — the panel must never need one. */
 function renderInbox(url = '/inbox') {
   return render(
     <MemoryRouter initialEntries={[url]}>
@@ -165,6 +169,7 @@ describe('InboxPage — conversations, not a queue', () => {
     mockFetchConversations.mockResolvedValue({
       conversations: [conversation({ latestInboxItemId: null })],
     });
+    mockFetchContact.mockResolvedValue(detail({ latestInboxItemId: null }));
     renderInbox('/inbox?c=c1');
 
     await waitFor(() =>
@@ -188,7 +193,7 @@ describe('InboxPage — conversations, not a queue', () => {
     // the open thread.
     mockFetchContact.mockImplementation(async (id: string) =>
       id === 'c2'
-        ? detail({ contact: other, messages: [message({ id: 'm9', contact_id: 'c2', text: "other person's message" })] })
+        ? detail({ contact: other, latestInboxItemId: 'i2', messages: [message({ id: 'm9', contact_id: 'c2', text: "other person's message" })] })
         : detail({ messages: [message({ id: 'm8', text: "curious fan's message" })] }));
 
     let finishSend!: (v: { sentText: string; channel: string }) => void;
@@ -287,8 +292,21 @@ describe('InboxPage — the conversation is one click from the person', () => {
     expect(identity.tagName).toBe('BUTTON');
     await user.click(identity);
 
+    // Who they are opens IN PLACE, beside the conversation — no navigation.
     const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
-    expect(within(panel).getByText('View full profile')).toBeInTheDocument();
+    expect(within(panel).getByText('Notes')).toBeInTheDocument();
+    expect(screen.queryByText('Contacts page')).not.toBeInTheDocument();
+  });
+
+  it('the labelled Details control opens the same panel', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    await screen.findByRole('button', { name: /About Curious Fan/ });
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(await screen.findByRole('complementary', { name: /About Curious Fan/ }))
+      .toBeInTheDocument();
   });
 
   it('offers the external profile as a labelled second action', async () => {
@@ -303,15 +321,42 @@ describe('InboxPage — the conversation is one click from the person', () => {
     expect(external).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 
-  it('links the full profile to the existing Contacts route, not a second one', async () => {
+  it('the panel IS the profile — nothing links away to a second one', async () => {
+    // There used to be a standalone CRM-style contact page, and this panel
+    // linked to it. One person, one representation: the profile's useful
+    // pieces live here now, editable in place.
     const user = userEvent.setup();
     renderInbox('/inbox?c=c1');
 
     await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
     const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
 
-    expect(within(panel).getByRole('link', { name: 'View full profile' }))
-      .toHaveAttribute('href', '/contacts?contact=c1');
+    expect(within(panel).queryByRole('link', { name: /full profile/i })).not.toBeInTheDocument();
+
+    // Notes are the CRM page's most human survivor, editable right here.
+    await user.click(within(panel).getByRole('button', { name: /Add note/ }));
+    expect(within(panel).getByRole('textbox', { name: 'Note' })).toBeInTheDocument();
+    // Stage and tags survive too — real fields, still editable, just last.
+    expect(within(panel).getByRole('combobox', { name: 'Stage' })).toBeInTheDocument();
+    expect(within(panel).getByRole('textbox', { name: 'Add tag' })).toBeInTheDocument();
+  });
+
+  it('does not repeat what the open conversation already shows', async () => {
+    // The old panel counted messages ("Conversation — 3 messages") beside a
+    // conversation you could see, and listed the acquisition automation twice.
+    const user = userEvent.setup();
+    mockFetchContact.mockResolvedValue(detail({
+      automations: [{ id: 'f1', name: 'Guide automation', status: 'live', firstEnteredAt: '2026-08-01T10:00:00.000Z' }],
+    }));
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    expect(within(panel).queryByText('Conversation')).not.toBeInTheDocument();
+    // One automation = the acquisition. From says it; no second block repeats it.
+    expect(within(panel).getAllByText('Guide automation')).toHaveLength(1);
+    expect(within(panel).queryByText('Also in')).not.toBeInTheDocument();
   });
 
   it('the panel closes as easily as it opened — it is never permanent', async () => {
@@ -339,11 +384,40 @@ describe('InboxPage — the conversation is one click from the person', () => {
     await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
     const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
 
-    expect(within(panel).getByText('From')).toBeInTheDocument();
+    const from = within(panel).getByText('From');
+    expect(from).toBeInTheDocument();
     expect(within(panel).getAllByRole('link', { name: 'Guide automation' })[0])
       .toHaveAttribute('href', '/automations/f1');
     expect(within(panel).queryByText(/Lead score/i)).not.toBeInTheDocument();
-    expect(within(panel).queryByText(/Stage/i)).not.toBeInTheDocument();
+    // Stage exists — it is a real field — but it FOLLOWS the human context
+    // rather than leading it: the acquisition renders above the relationship
+    // controls in the panel's reading order.
+    const stage = within(panel).getByRole('combobox', { name: 'Stage' });
+    expect(from.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('tells the relationship\'s story, not the engine\'s diary', async () => {
+    const user = userEvent.setup();
+    mockFetchContact.mockResolvedValue(detail({
+      automations: [{ id: 'f1', name: 'Culture', status: 'live', firstEnteredAt: '2026-08-01T10:00:00.000Z' }],
+      messages: [message({ created_at: '2026-08-02T09:00:00.000Z' })],
+      events: [{
+        id: 'e1', automation_id: null, contact_id: 'c1', event_type: 'no_match',
+        status: 'ok', detail: 'No automation matched — queued for a personal reply.',
+        error: null, contact_handle: null, contact_name: null, automation_name: null,
+        created_at: '2026-08-02T09:00:00.000Z',
+      }],
+    }));
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    // Human activity, from data we hold…
+    expect(within(panel).getByText('Entered through Culture')).toBeInTheDocument();
+    expect(within(panel).getByText('Started a conversation')).toBeInTheDocument();
+    // …never the runtime's phrasing.
+    expect(within(panel).queryByText(/queued for a personal reply/i)).not.toBeInTheDocument();
   });
 });
 

@@ -1,17 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import ContactsPage from '../pages/ContactsPage';
 import type { ContactRecord } from '../lib/api';
 
-/* Regression coverage for the earlier PR review: fetchContacts was called
- * with a fixed limit:50 and no pagination, so any workspace with more than
- * 50 contacts permanently lost access to the rest even though `total` was
- * displayed. ContactsPage (the restored redesigned version, 856751c) uses a
- * Prev/Next pager with a smaller page size — a different UX from main's
- * Load-more, but the underlying invariant is the same: page 2 is actually
- * fetchable, and clicking through advances the offset. */
+/* Contacts is the directory; the person is the conversation.
+ *
+ * What these tests hold in place after the hierarchy simplification:
+ * clicking a contact opens the conversation with them IMMEDIATELY — there is
+ * no intermediate CRM profile screen, no Message button to find, and the
+ * context panel (the same one the Inbox opens) is one Details click away,
+ * closed by default. The directory itself stays a directory: who, how they
+ * arrived, whether they're waiting, when they were last around — with the
+ * stage/score columns gone from the surface while the fields live on in the
+ * API and the panel.
+ *
+ * Plus the original pagination regression: page 2 must actually be fetchable. */
 
 function makeContact(i: number): ContactRecord {
   return {
@@ -24,7 +29,6 @@ function makeContact(i: number): ContactRecord {
     avatar_url: null,
     lead_score: 0,
     stage: 'cold',
-    needs_reply: false,
     notes: null,
     custom_fields: {},
     source_platform: null,
@@ -39,6 +43,9 @@ function makeContact(i: number): ContactRecord {
     last_message_at: null,
     last_automation_at: null,
     tags: [],
+    // Row 0 arrived through an automation; row 1 is waiting on a reply.
+    from_automation: i === 0 ? 'Culture automation' : null,
+    needs_reply: i === 1,
   };
 }
 
@@ -65,14 +72,25 @@ const mockFetchContacts = vi.fn(
 
 const mockFetchContact = vi.fn(async (id: string) => ({
   contact: { ...makeContact(0), id },
+  latestInboxItemId: 'i_9',
   sourcePost: null,
   sourceAutomation: null,
-  automations: [],
-  messages: [],
+  automations: [
+    { id: 'f1', name: 'Culture automation', status: 'live' as const, firstEnteredAt: '2026-08-12T10:00:00.000Z' },
+  ],
+  messages: [{
+    id: 'm1', contact_id: id, account_id: 'acc_1', platform: 'instagram',
+    channel: 'dm', direction: 'inbound', text: 'Saturday works.',
+    media_url: null, external_id: null, status: 'received', in_reply_to: null,
+    source_post_id: null, source_automation_id: null,
+    created_at: '2026-08-14T10:00:00.000Z',
+  }],
   scoreEvents: [],
   clicks: [],
   events: [],
 }));
+
+const mockSendInboxReply = vi.fn(async (_id: string, _input: unknown) => ({ sentText: 'x', channel: 'dm' as const }));
 
 const mockUseApp = vi.fn();
 
@@ -88,6 +106,7 @@ vi.mock('../lib/api', async () => {
     fetchContacts: (filter: { limit?: number; offset?: number; flowId?: string }) =>
       mockFetchContacts(filter),
     fetchContact: (id: string) => mockFetchContact(id),
+    sendInboxReply: (id: string, input: unknown) => mockSendInboxReply(id, input),
   };
 });
 
@@ -153,19 +172,24 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
     ));
   });
 
-  it('the "Needs reply" tab filters by the needs_reply FLAG, not the stage column', async () => {
-    // A warm/hot contact flagged for reply keeps its stage, so a
-    // stage=needs_reply query would hide it. The tab must use the same flag
-    // the "Waiting on you" urgency chip uses.
+  it('the directory answers "who do I know?", not "what stage is the pipeline in?"', async () => {
+    // Stage and score are real fields with a real backend — the panel still
+    // edits them — but the directory no longer leads with them: no stage
+    // tabs, no Stage/Score columns. From and Last active take their place.
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
-    const user = userEvent.setup();
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Needs reply' }));
-    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ needsReply: true, stage: undefined, offset: 0 })
-    ));
+    expect(screen.getByRole('columnheader', { name: 'From' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Last active' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Stage' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Score' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Warm' })).not.toBeInTheDocument();
+
+    // How they arrived, when the record says; nothing invented when it doesn't.
+    expect(screen.getByText('Culture automation')).toBeInTheDocument();
+    // Waiting on you: the same lime mark the Inbox list uses.
+    expect(screen.getByRole('img', { name: 'Needs reply' })).toBeInTheDocument();
   });
 
   it('workspace tags render as chips; picking one filters, picking it again clears', async () => {
@@ -240,13 +264,14 @@ describe('ContactsPage — filtered to one automation', () => {
   });
 });
 
-/* A contact and a conversation are the same person, so each has to be one
- * move from the other. The Inbox's contact panel links to `/contacts?contact=
- * <id>` rather than a second profile route, which only works if a contact is
- * a URL — and the return path has to open the conversation, never send into
- * it. */
-describe('ContactsPage — a contact is a place, and a conversation is one move away', () => {
-  it('opens the person named in the URL, so a link to them works', async () => {
+/* Clicking a person opens the conversation with them. Immediately.
+ *
+ * Not a CRM profile with a Message button that leads somewhere else — the
+ * message history, the composer, and (one click away) the same context panel
+ * the Inbox shows for the same person. The old standalone contact profile is
+ * retired; these tests are the door it can't come back through. */
+describe('ContactsPage — a contact opens to their conversation', () => {
+  it('opens the person named in the URL straight into their conversation', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
 
     render(
@@ -256,10 +281,13 @@ describe('ContactsPage — a contact is a place, and a conversation is one move 
     );
 
     await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c_7'));
-    expect(await screen.findByRole('button', { name: /Back to contacts/ })).toBeInTheDocument();
+    // The conversation, not a profile: their words and a composer.
+    expect(await screen.findByText('Saturday works.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Message User 0/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Contacts/ })).toBeInTheDocument();
   });
 
-  it('clicking a row puts that person in the URL', async () => {
+  it('clicking a row opens the conversation — no Message button hop, nothing sent', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
     const user = userEvent.setup();
 
@@ -269,9 +297,12 @@ describe('ContactsPage — a contact is a place, and a conversation is one move 
     await user.click(screen.getByText('User 0'));
 
     await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c_0'));
+    expect(await screen.findByText('Saturday works.')).toBeInTheDocument();
+    // Opening someone must never send anything.
+    expect(mockSendInboxReply).not.toHaveBeenCalled();
   });
 
-  it('offers the conversation as a link, never as a send', async () => {
+  it('there is no intermediate CRM profile screen anymore', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
 
     render(
@@ -280,13 +311,17 @@ describe('ContactsPage — a contact is a place, and a conversation is one move 
       </MemoryRouter>,
     );
 
-    const message = await screen.findByRole('link', { name: 'Message' });
-    // A link that OPENS the thread. Opening someone must never send anything.
-    expect(message).toHaveAttribute('href', '/inbox?c=c_3');
+    await screen.findByText('Saturday works.');
+    expect(screen.queryByText(/Lead score/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Timeline')).not.toBeInTheDocument();
+    // And no Message link pointing at a second conversation surface — the
+    // conversation is already open.
+    expect(screen.queryByRole('link', { name: 'Message' })).not.toBeInTheDocument();
   });
 
-  it('keeps the external profile explicit, labelled and secondary', async () => {
+  it('context is collapsed by default and opens on Details', async () => {
     mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
 
     render(
       <MemoryRouter initialEntries={['/contacts?contact=c_4']}>
@@ -294,8 +329,59 @@ describe('ContactsPage — a contact is a place, and a conversation is one move 
       </MemoryRouter>,
     );
 
-    const external = await screen.findByRole('link', { name: /View on Instagram/ });
+    await screen.findByText('Saturday works.');
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+    const panel = await screen.findByRole('complementary', { name: /About User 0/ });
+
+    // The relationship, where it now lives: acquisition, notes, and the
+    // labelled external link — the retired profile's useful pieces.
+    expect(within(panel).getByText('From')).toBeInTheDocument();
+    expect(within(panel).getByText('Notes')).toBeInTheDocument();
+    const external = within(panel).getByRole('link', { name: /View on Instagram/ });
     expect(external).toHaveAttribute('href', 'https://instagram.com/user0');
     expect(external).toHaveAttribute('rel', expect.stringContaining('noopener'));
+
+    // Close it, and the conversation has the width again.
+    await user.click(within(panel).getByRole('button', { name: 'Close contact' }));
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument());
+  });
+
+  it('replies from here go through the same safe send path as the Inbox', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?contact=c_5']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+
+    const box = await screen.findByRole('textbox', { name: /Message User 0/ });
+    await user.type(box, 'See you Saturday!');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    // The detail's own inbox item — the exact target the Inbox would use.
+    await waitFor(() => expect(mockSendInboxReply).toHaveBeenCalledWith('i_9', { text: 'See you Saturday!' }));
+  });
+
+  it('going back lands on the directory, filters intact', async () => {
+    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/contacts?automation=f1&contact=c_1']}>
+        <ContactsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Saturday works.');
+    await user.click(screen.getByRole('button', { name: /Contacts/ }));
+
+    // Back to the audience view that opened them, not to an unfiltered list.
+    expect(await screen.findByText('Menu comments')).toBeInTheDocument();
+    await waitFor(() => expect(mockFetchContacts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ flowId: 'f1' })));
   });
 });

@@ -1,39 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import {
-  Search, ArrowLeft, AlertCircle, X, Plus, Reply, Clock, Tag, Zap,
-  MessageSquare, ArrowUpRight,
+  Search, ArrowLeft, AlertCircle, X, Reply, Clock, Tag, Zap,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
 import PlatformDot from '../components/PlatformDot';
 import ProfileImage from '../components/ProfileImage';
-import StatusPill from '../components/StatusPill';
 import PageHeader from '../components/PageHeader';
 import InboxLauncher from '../components/inbox/InboxButton';
+import ContactConversationView from '../components/inbox/ContactConversationView';
+import { useContactConversation } from '../components/inbox/useContactConversation';
 import EmptyState from '../components/EmptyState';
 import { TableSkeleton, Skeleton } from '../components/Skeleton';
-import {
-  isBackendConfigured, fetchContacts, fetchContact, updateContact, updateContactTag,
-} from '../lib/api';
-import { externalProfile } from '../lib/profileUrl';
-import type { Contact, ContactDetail, LeadStage } from '../lib/api';
+import { isBackendConfigured, fetchContacts } from '../lib/api';
+import type { Contact } from '../lib/api';
+
+/**
+ * Contacts is the directory: "who do I know?"
+ *
+ * That is its whole job. Clicking a person does not open a CRM profile with a
+ * Message button that leads somewhere else — it opens the conversation with
+ * them, immediately, because the conversation IS the primary representation
+ * of a contact everywhere in Populr. Who they are beyond the messages lives
+ * in the context panel, one Details click away, the same panel the Inbox
+ * opens for the same person.
+ *
+ * The directory row says what a directory should: who (face, name, handle,
+ * platform), how they arrived (From), whether they are waiting on you, and
+ * when they were last around. Stage and score are real fields with a real
+ * backend and they remain editable in the context panel — but a directory
+ * that leads with CRM columns reads as a pipeline, and these are people.
+ */
 
 const PAGE_SIZE = 20;
-
-const STAGE_TABS: { key: LeadStage | 'all'; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'cold', label: 'New' },
-  { key: 'interested', label: 'Engaged' },
-  { key: 'warm', label: 'Warm' },
-  { key: 'hot', label: 'Hot' },
-  { key: 'needs_reply', label: 'Needs reply' },
-  { key: 'converted', label: 'Converted' },
-];
-
-const STAGE_PILL: Record<string, string> = {
-  cold: 'new', interested: 'engaged', warm: 'warm fan', hot: 'strong offer intent',
-  needs_reply: 'human-review', converted: 'converted',
-};
 
 function timeAgo(iso: string | null): string {
   if (!iso) return '—';
@@ -63,21 +61,19 @@ export default function ContactsPage() {
   const [automation, setAutomation] = useState<{ id: string; name: string } | null>(null);
 
   /**
-   * The open contact, for the same reason the audience filter is in the URL:
-   * a person is a place. It survives a reload, it can be linked, and it is
-   * what the Inbox's contact panel opens when you ask for the full profile —
-   * so there is exactly one Contact route, not a second one built for Inbox.
+   * The open contact — a person is a place. It survives a reload, it can be
+   * linked, and it resolves to their CONVERSATION, the same canonical surface
+   * the Inbox opens. There is deliberately no other destination: the old
+   * CRM-first profile this route used to render is retired.
    */
-  const detailId = searchParams.get('contact');
+  const openId = searchParams.get('contact');
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
-  const [stageTab, setStageTab] = useState<LeadStage | 'all'>('all');
   // Behavior filters + tag filter: urgency (the needs_reply flag the queue
   // sets), recency (who was active last), and the creator's own labels.
-  // Tags are the substrate saved segments will be built on later.
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [sortRecent, setSortRecent] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -85,7 +81,7 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(backendConfigured);
   const [error, setError] = useState<string | null>(null);
 
-  const setDetailId = useCallback((id: string | null) => {
+  const setOpenId = useCallback((id: string | null) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (id) next.set('contact', id);
@@ -104,16 +100,9 @@ export default function ContactsPage() {
     const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
-    // The "Needs reply" tab is the needs_reply FLAG, not the stage column: a
-    // warm/hot contact flagged for a reply keeps its stage, so filtering by
-    // stage='needs_reply' hid exactly the contacts the tab is about (and
-    // disagreed with the "Waiting on you" urgency chip, which uses the flag).
-    const needsReply = urgentOnly || stageTab === 'needs_reply';
-    const stage = stageTab === 'all' || stageTab === 'needs_reply' ? undefined : stageTab;
     fetchContacts({
       search: search || undefined,
-      stage,
-      needsReply: needsReply ? true : undefined,
+      needsReply: urgentOnly ? true : undefined,
       sort: sortRecent ? 'recent' : undefined,
       tag: activeTag || undefined,
       flowId: automationId || undefined,
@@ -135,7 +124,7 @@ export default function ContactsPage() {
       .finally(() => {
         if (seq === loadSeq.current) setLoading(false);
       });
-  }, [backendConfigured, search, stageTab, urgentOnly, sortRecent, activeTag, automationId, page]);
+  }, [backendConfigured, search, urgentOnly, sortRecent, activeTag, automationId, page]);
 
   useEffect(() => {
     // Data fetch from the backend, not derived state.
@@ -147,7 +136,7 @@ export default function ContactsPage() {
     // Resetting pagination when search/filter (external inputs) change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(0);
-  }, [search, stageTab, urgentOnly, sortRecent, activeTag, automationId]);
+  }, [search, urgentOnly, sortRecent, activeTag, automationId]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -168,14 +157,11 @@ export default function ContactsPage() {
     );
   }
 
-  if (detailId) {
-    return (
-      <ContactDetailView
-        contactId={detailId}
-        onBack={() => { setDetailId(null); load(); }}
-        onChanged={c => setContacts(prev => prev.map(x => x.id === c.id ? c : x))}
-      />
-    );
+  if (openId) {
+    // Directory state (search, filters, page) lives on in this component
+    // while the conversation is open, so Back lands exactly where you left.
+    // load() on the way back because the panel can change what a row shows.
+    return <ContactConversationRoute contactId={openId} onBack={() => { setOpenId(null); load(); }} />;
   }
 
   return (
@@ -235,19 +221,11 @@ export default function ContactsPage() {
         </div>
       )}
 
-      <div className="flex gap-1 mb-2 overflow-x-auto pb-1">
-        {STAGE_TABS.map(t => (
-          <button key={t.key} onClick={() => setStageTab(t.key)}
-            className={`px-3 py-1.5 rounded-xl text-[12px] font-medium whitespace-nowrap transition-all ${stageTab === t.key ? 'bg-[#111111] text-white' : 'text-[#6B6B6B] hover:bg-white'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       {/* Behavior + tag chips: how fans act (waiting on you, active lately)
-          and how you've labeled them. These compose with the stage tabs and
-          search — and they're how contacts get classified until saved
-          segments exist to name these combinations. */}
+          and how you've labeled them. The stage tabs that used to sit above
+          these are deliberately gone — a row of pipeline buckets made the
+          directory read as a CRM, and the stages themselves remain editable
+          on each person's context panel. */}
       <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">
         <button
           onClick={() => setUrgentOnly(v => !v)}
@@ -284,7 +262,7 @@ export default function ContactsPage() {
         {loading ? (
           <TableSkeleton count={6} label="Loading contacts" />
         ) : !error && contacts.length === 0 ? (
-          search || stageTab !== 'all' || urgentOnly || activeTag || automationId ? (
+          search || urgentOnly || activeTag || automationId ? (
             <EmptyState
               icon="search"
               title="No contacts match your filters"
@@ -303,9 +281,8 @@ export default function ContactsPage() {
               <thead>
                 <tr className="border-b border-[#E8E4DF]">
                   <th className="px-4 py-3 text-left text-[11px] font-medium text-[#9B9B8F] tracking-wide">Contact</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-medium text-[#9B9B8F] tracking-wide">Stage</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-medium text-[#9B9B8F] tracking-wide">Score</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-medium text-[#9B9B8F] tracking-wide">Latest activity</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-medium text-[#9B9B8F] tracking-wide">From</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-medium text-[#9B9B8F] tracking-wide">Last active</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,10 +290,10 @@ export default function ContactsPage() {
                   <tr
                     key={contact.id}
                     tabIndex={0}
-                    aria-label={`Open ${contact.handle ? `@${contact.handle}` : contact.name || 'contact'}`}
-                    onClick={() => setDetailId(contact.id)}
+                    aria-label={`Open the conversation with ${contact.handle ? `@${contact.handle}` : contact.name || 'contact'}`}
+                    onClick={() => setOpenId(contact.id)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailId(contact.id); }
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenId(contact.id); }
                     }}
                     className="border-b border-[#F0EEEA] last:border-0 hover:bg-[#FAFAF8] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chartreuse">
                     <td className="px-4 py-3.5">
@@ -334,13 +311,30 @@ export default function ContactsPage() {
                           <div className="flex items-center gap-2">
                             <p className="text-[13px] font-semibold text-[#111111] truncate">{contact.handle ? `@${contact.handle}` : contact.name || 'Unknown'}</p>
                             <PlatformDot platform={contact.platform} size={6} />
+                            {contact.needs_reply && (
+                              // The same lime dot the Inbox list uses for
+                              // "waiting on you" — one meaning, one mark.
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-chartreuse ring-2 ring-chartreuse/25 flex-shrink-0"
+                                role="img"
+                                aria-label="Needs reply"
+                              />
+                            )}
                           </div>
                           {contact.name && <p className="text-[11px] text-[#9B9B8F] truncate">{contact.name}</p>}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5"><StatusPill status={STAGE_PILL[contact.stage] ?? contact.stage} /></td>
-                    <td className="px-4 py-3.5 text-[13px] font-geist-mono text-[#111111]">{contact.lead_score}</td>
+                    <td className="px-4 py-3.5 text-[12px] text-[#6B6B6B]">
+                      {contact.from_automation ? (
+                        <span className="inline-flex items-center gap-1.5 min-w-0">
+                          <Zap size={11} className="text-[#9B9B8F] flex-shrink-0" />
+                          <span className="truncate">{contact.from_automation}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[#C4BFB8]">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3.5 text-[12px] text-[#9B9B8F]">{timeAgo(contact.last_message_at ?? contact.last_seen)}</td>
                   </tr>
                 ))}
@@ -364,105 +358,44 @@ export default function ContactsPage() {
   );
 }
 
-function ContactDetailView({
-  contactId, onBack, onChanged,
-}: { contactId: string; onBack: () => void; onChanged: (c: Contact) => void }) {
-  const { showToast } = useApp();
-  const [detail, setDetail] = useState<ContactDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notes, setNotes] = useState('');
-  const [savingNotes, setSavingNotes] = useState(false);
-  const [tagDraft, setTagDraft] = useState('');
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    fetchContact(contactId)
-      .then(d => { setDetail(d); setNotes(d.contact.notes ?? ''); })
-      .catch(err => setError(err instanceof Error ? err.message : 'Could not load this contact.'))
-      .finally(() => setLoading(false));
-  }, [contactId]);
-
-  useEffect(() => {
-    // Data fetch from the backend, not derived state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
-
-  const handleStageChange = async (stage: LeadStage) => {
-    if (!detail) return;
-    try {
-      const updated = await updateContact(detail.contact.id, { stage });
-      setDetail(prev => prev ? { ...prev, contact: { ...prev.contact, stage: updated.stage } } : prev);
-      onChanged({ ...detail.contact, stage: updated.stage });
-      showToast('Stage updated', 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not update stage.', 'error');
-    }
-  };
-
-  const handleSaveNotes = async () => {
-    if (!detail) return;
-    setSavingNotes(true);
-    try {
-      const updated = await updateContact(detail.contact.id, { notes });
-      setDetail(prev => prev ? { ...prev, contact: { ...prev.contact, notes: updated.notes } } : prev);
-      showToast('Notes saved', 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not save notes.', 'error');
-    } finally {
-      setSavingNotes(false);
-    }
-  };
-
-  const handleAddTag = async () => {
-    const tag = tagDraft.trim();
-    if (!tag || !detail) return;
-    try {
-      const tags = await updateContactTag(detail.contact.id, tag, false);
-      setDetail(prev => prev ? { ...prev, contact: { ...prev.contact, tags } } : prev);
-      setTagDraft('');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not add tag.', 'error');
-    }
-  };
-
-  const handleRemoveTag = async (tag: string) => {
-    if (!detail) return;
-    try {
-      const tags = await updateContactTag(detail.contact.id, tag, true);
-      setDetail(prev => prev ? { ...prev, contact: { ...prev.contact, tags } } : prev);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not remove tag.', 'error');
-    }
-  };
-
-  const external = detail
-    ? externalProfile(detail.contact.platform, detail.contact.handle)
-    : null;
+/**
+ * A contact, opened: their conversation, full width, context one click away.
+ *
+ * The same canonical view the Inbox renders — not a Contacts-flavored copy of
+ * it — so the same person is the same experience from either door. The only
+ * thing this route adds is the way back to the directory.
+ */
+function ContactConversationRoute({
+  contactId, onBack,
+}: { contactId: string; onBack: () => void }) {
+  const { detail, loading, error, sending, send, updateDetail, reload } =
+    useContactConversation(contactId);
 
   return (
-    <div className="pop-page max-w-[800px]">
-      <button onClick={onBack} className="pop-btn-ghost mb-5">
-        <ArrowLeft size={16} />Back to contacts
+    <div className="p-4 lg:p-6 max-w-[1100px] mx-auto flex flex-col
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-screen">
+      <button
+        onClick={onBack}
+        className="pop-btn-ghost mb-4 self-start"
+      >
+        <ArrowLeft size={16} />Contacts
       </button>
 
-      {loading && (
-        <div role="status" aria-busy="true" aria-label="Loading contact">
-          <div className="flex items-center gap-4 mb-6">
-            <Skeleton className="w-16 h-16 rounded-full flex-shrink-0" />
+      {loading && !detail && (
+        <div className="pop-card flex-1 min-h-0 p-5" role="status" aria-busy="true" aria-label="Opening the conversation">
+          <div className="flex items-center gap-3 mb-6">
+            <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
             <div className="space-y-2">
-              <Skeleton className="h-4 rounded w-40" />
-              <Skeleton className="h-3 rounded w-24" />
+              <Skeleton className="h-3.5 rounded w-36" />
+              <Skeleton className="h-3 rounded w-20" />
             </div>
           </div>
-          <div className="pop-card p-5 space-y-3">
-            <Skeleton className="h-3 rounded w-[30%]" />
-            <Skeleton className="h-3 rounded w-[55%]" />
-            <Skeleton className="h-3 rounded w-[45%]" />
+          <div className="space-y-3">
+            <Skeleton className="h-9 rounded-2xl w-[55%]" />
+            <Skeleton className="h-9 rounded-2xl w-[40%] ml-auto" />
+            <Skeleton className="h-9 rounded-2xl w-[48%]" />
           </div>
-          <span className="sr-only">Loading contact</span>
+          <span className="sr-only">Opening the conversation</span>
         </div>
       )}
 
@@ -470,162 +403,26 @@ function ContactDetailView({
         <div className="pop-card p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load this contact</p>
+            <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t open this conversation</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
+            <button onClick={reload} className="pop-btn-tertiary text-[12px] py-1.5 px-3 mt-3">Try again</button>
           </div>
         </div>
       )}
 
-      {!loading && !error && detail && (
-        <>
-          <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
-            <div className="flex items-center gap-4">
-              <ProfileImage
-                src={detail.contact.avatar_url}
-                className="w-16 h-16 rounded-full object-cover"
-                fallback={
-                  <div className="w-16 h-16 rounded-full bg-[#FAFAF8] flex items-center justify-center text-[20px] font-semibold text-[#9B9B8F]">
-                    {(detail.contact.name || detail.contact.handle || '?').charAt(0).toUpperCase()}
-                  </div>
-                }
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="pop-section-heading">{detail.contact.name || detail.contact.handle || 'Unknown'}</h1>
-                  <PlatformDot platform={detail.contact.platform} size={8} />
-                </div>
-                {detail.contact.handle && <p className="pop-body">@{detail.contact.handle}</p>}
-
-                {/* The other half of the identity link. A contact and a
-                    conversation are the same person, so getting from one to
-                    the other should not mean going back to a list — but it
-                    OPENS the conversation, it doesn't send anything. */}
-                <div className="flex items-center gap-2 mt-2.5">
-                  <Link
-                    to={`/inbox?c=${detail.contact.id}`}
-                    className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#111111]
-                      rounded-lg border border-[#E8E4DF] px-2.5 py-1.5 hover:bg-[#FAF9F7]
-                      transition-colors focus-visible:outline-none focus-visible:ring-2
-                      focus-visible:ring-chartreuse"
-                  >
-                    <MessageSquare size={13} className="text-[#6B6B6B]" />
-                    Message
-                  </Link>
-                  {external && (
-                    // Explicit, labelled, and second — never the avatar's job.
-                    <a
-                      href={external.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#4A4A4A]
-                        rounded-lg px-2 py-1.5 hover:text-[#111111] hover:bg-[#FAF9F7]
-                        transition-colors focus-visible:outline-none focus-visible:ring-2
-                        focus-visible:ring-chartreuse"
-                    >
-                      {external.label}
-                      <ArrowUpRight size={13} className="text-[#8A857E]" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-[11px] text-[#9B9B8F]">Lead score</p>
-              <p className="font-geist-mono font-bold text-2xl text-[#111111]">{detail.contact.lead_score}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="sm:col-span-2 space-y-5">
-              <div className="pop-card p-5">
-                <h2 className="pop-card-title mb-3">Timeline</h2>
-                <ContactTimeline detail={detail} />
-              </div>
-
-              <div className="pop-card p-5">
-                <h2 className="pop-card-title mb-3">Notes</h2>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  placeholder="Add a note about this contact..."
-                  className="w-full h-24 border border-[#E8E4DF] rounded-xl p-3 text-[13px] placeholder:text-[#9B9B8F] resize-none focus:outline-none focus-visible:border-chartreuse focus-visible:ring-2 focus-visible:ring-chartreuse/20 transition-all" />
-                <button onClick={handleSaveNotes} disabled={savingNotes} className="pop-btn-tertiary text-[12px] py-1.5 px-3 mt-2 disabled:opacity-50">
-                  {savingNotes ? 'Saving...' : 'Save notes'}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="pop-card p-5">
-                <h2 className="pop-card-title mb-3">Stage</h2>
-                <select value={detail.contact.stage} onChange={e => handleStageChange(e.target.value as LeadStage)}
-                  className="w-full border border-[#E8E4DF] rounded-lg px-3 py-2 text-[12px] bg-white focus:outline-none focus-visible:border-chartreuse">
-                  {(['cold', 'interested', 'warm', 'hot', 'needs_reply', 'converted'] as LeadStage[]).map(s => (
-                    <option key={s} value={s}>{STAGE_TABS.find(t => t.key === s)?.label ?? s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pop-card p-5">
-                <h2 className="pop-card-title mb-3">Tags</h2>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {detail.contact.tags.length === 0 && <p className="text-[12px] text-[#9B9B8F]">No tags yet.</p>}
-                  {detail.contact.tags.map(tag => (
-                    <span key={tag} className="inline-flex items-center gap-1 bg-[#FAFAF8] text-[#111111] text-[11px] font-medium px-2 py-1 rounded-full">
-                      {tag}
-                      <button onClick={() => handleRemoveTag(tag)} aria-label={`Remove tag ${tag}`}><X size={11} /></button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-1.5">
-                  <input type="text" value={tagDraft} onChange={e => setTagDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
-                    placeholder="Add tag..."
-                    className="flex-1 min-w-0 border border-[#E8E4DF] rounded-lg px-2.5 py-1.5 text-[12px] placeholder:text-[#9B9B8F] focus:outline-none focus-visible:border-chartreuse" />
-                  <button onClick={handleAddTag} className="pop-btn-tertiary p-1.5"><Plus size={14} /></button>
-                </div>
-              </div>
-
-              {(detail.sourcePost || detail.sourceAutomation) && (
-                <div className="pop-card p-5">
-                  <h2 className="pop-card-title mb-3">First touch</h2>
-                  {detail.sourceAutomation && <p className="text-[12px] text-[#111111]">{detail.sourceAutomation.name}</p>}
-                  {detail.sourcePost && <p className="text-[12px] text-[#6B6B6B] mt-1 line-clamp-2">{detail.sourcePost.caption}</p>}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function ContactTimeline({ detail }: { detail: ContactDetail }) {
-  type TimelineEntry = { id: string; time: string; label: string };
-  const entries: TimelineEntry[] = [
-    ...detail.messages.map(m => ({
-      id: `m-${m.id}`, time: m.created_at,
-      label: `${m.direction === 'inbound' ? 'Received' : 'Sent'} ${m.channel}${m.text ? `: "${m.text.slice(0, 80)}"` : ''}`,
-    })),
-    ...detail.scoreEvents.map(s => ({
-      id: `s-${s.id}`, time: s.created_at,
-      label: `Score ${s.delta > 0 ? '+' : ''}${s.delta} — ${s.reason.replace(/_/g, ' ')}`,
-    })),
-    ...detail.events.map(e => ({ id: `e-${e.id}`, time: e.created_at, label: e.detail })),
-  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
-  if (entries.length === 0) return <p className="text-[13px] text-[#9B9B8F]">No activity yet.</p>;
-
-  return (
-    <div className="space-y-2 max-h-[360px] overflow-y-auto">
-      {entries.slice(0, 50).map(e => (
-        <div key={e.id} className="flex items-start gap-3 py-2 border-b border-[#F0EEEA] last:border-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#D4CFC8] mt-1.5 flex-shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[12px] text-[#111111]">{e.label}</p>
-            <p className="text-[10px] text-[#9B9B8F] mt-0.5">{new Date(e.time).toLocaleString()}</p>
-          </div>
+      {detail && (
+        <div className="pop-card flex-1 min-h-0 overflow-hidden flex">
+          <ContactConversationView
+            key={detail.contact.id}
+            detail={detail}
+            loading={loading}
+            sending={sending}
+            replyTarget={detail.latestInboxItemId}
+            onSend={send}
+            onDetailChanged={updateDetail}
+          />
         </div>
-      ))}
+      )}
     </div>
   );
 }

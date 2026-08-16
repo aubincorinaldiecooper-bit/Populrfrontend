@@ -148,10 +148,25 @@ export default function ConversationThread({
               {platformMeta(contact.platform).name}
             </span>
           </span>
+        </button>
+
+        {/* The same panel, by its name. The identity block above opens it too
+            — this is the labelled way in for anyone who wouldn't guess that. */}
+        <button
+          type="button"
+          onClick={onOpenContact}
+          aria-expanded={contactOpen}
+          className={`ml-auto shrink-0 flex items-center gap-1 rounded-lg px-2.5 py-1.5
+            text-[12px] font-medium transition-colors focus-visible:outline-none
+            focus-visible:ring-2 focus-visible:ring-chartreuse
+            ${contactOpen
+              ? 'bg-[#F4F1EC] text-[#111111]'
+              : 'text-[#6B6B6B] hover:bg-[#FAF9F7] hover:text-[#111111]'}`}
+        >
+          Details
           <ChevronRight
-            size={16}
-            className={`shrink-0 text-[#B0AAA2] transition-transform group-hover:text-[#6B6B6B]
-              ${contactOpen ? 'rotate-90' : ''}`}
+            size={14}
+            className={`transition-transform ${contactOpen ? 'rotate-90' : ''}`}
           />
         </button>
       </div>
