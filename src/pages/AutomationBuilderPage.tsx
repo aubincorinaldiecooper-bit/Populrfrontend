@@ -10,7 +10,6 @@ import { useBuilderNotifications } from '../components/automation-builder/useBui
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
 import NodeInspector, { type BuilderQuestion } from '../components/automation-builder/NodeInspector';
 import AIChatPanel from '../components/automation-builder/AIChatPanel';
-import AgentActivity from '../components/automation-builder/AgentActivity';
 import PairedRevolution from '../components/PairedRevolution';
 import PreviewPanel from '../components/automation-builder/PreviewPanel';
 import NotificationBell from '../components/automation-builder/NotificationBell';
@@ -82,7 +81,7 @@ export default function AutomationBuilderPage() {
   const {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning, composing, changeCard,
-    editsSinceCard, activity, clearActivity, highlighted, history,
+    editsSinceCard, activity, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -101,14 +100,6 @@ export default function AutomationBuilderPage() {
   const [activating, setActivating] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [addMenu, setAddMenu] = useState<{ nodeId: string; branch: 'next' | 'yes' | 'no' } | null>(null);
-  /**
-   * Whether the request that is out was asked of an empty canvas.
-   *
-   * Captured when it is sent, not read when it answers: by then the nodes it
-   * created exist, so "is the canvas empty" would say no and the finished
-   * message would call a first build "that change".
-   */
-  const [buildingFromEmpty, setBuildingFromEmpty] = useState(false);
 
   // Arriving at a step from a notification: which one to bring into view, and
   // what Populr is asking about it once we're there.
@@ -635,19 +626,6 @@ export default function AutomationBuilderPage() {
           focusSignal={focus.signal}
         />
 
-        {/* Building takes a few seconds of someone else's computer thinking,
-            and then it is worth saying what came back. Beside the canvas
-            rather than over it: dimming the automation to announce that the
-            automation is being worked on hides the one thing worth watching. */}
-        {(composing || activity.length > 0) && (
-          <AgentActivity
-            composing={composing}
-            building={buildingFromEmpty}
-            lines={activity}
-            onDone={clearActivity}
-          />
-        )}
-
         {isEmpty && !composing && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
             <button
@@ -802,6 +780,7 @@ export default function AutomationBuilderPage() {
                   history={history}
                   composing={composing}
                   changeCard={changeCard}
+                  activity={activity}
                   // The answer's Undo pops the shared stack, so it may only
                   // show while that answer is still the newest recorded write
                   // — one inspector edit later it would revert the wrong
@@ -810,7 +789,7 @@ export default function AutomationBuilderPage() {
                   aiConfigured={aiConfigured}
                   empty={isEmpty}
                   selectedNode={selectedNode}
-                  onSubmit={prompt => { setBuildingFromEmpty(isEmpty); void compose(prompt); }}
+                  onSubmit={prompt => void compose(prompt)}
                   onUndo={undo}
                   onOpenHistory={() => { setPanel('history'); setSelectedNodeId(null); }}
                   onCollapse={collapseAi}

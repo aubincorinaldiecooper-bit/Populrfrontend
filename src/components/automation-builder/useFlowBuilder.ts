@@ -83,7 +83,9 @@ export function useFlowBuilder(flowId: string | null) {
    *
    * Derived from the operations the server validated, applied and saved — not
    * from anything in flight — so the activity list can only ever describe
-   * changes that are already in the graph.
+   * changes that are already in the graph. Shown under the latest answer in
+   * the chat panel; cleared when the next request goes out, which is the only
+   * moment it stops describing the newest change.
    */
   const [activity, setActivity] = useState<string[]>([]);
   const [highlighted, setHighlighted] = useState<string[]>([]);
@@ -360,7 +362,6 @@ export function useFlowBuilder(flowId: string | null) {
     return () => clearTimeout(timer);
   }, []);
 
-  const clearActivity = useCallback(() => setActivity([]), []);
 
   const compose = useCallback(async (prompt: string) => {
     if (!flowId || composing) return;
@@ -487,7 +488,7 @@ export function useFlowBuilder(flowId: string | null) {
     selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning,
     composing, changeCard, setChangeCard, editsSinceCard,
-    activity, clearActivity, highlighted, history,
+    activity, highlighted, history,
     problems, refreshValidation,
     updateNodeConfig, moveNode, addNode, deleteNode, connectNodes, disconnect,
     rename, relayout, commitGraph,

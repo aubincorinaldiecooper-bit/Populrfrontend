@@ -38,6 +38,12 @@ export interface AIChatPanelProps {
   composing: boolean;
   /** The latest request's outcome — carries the Undo affordance. */
   changeCard: ChangeCard | null;
+  /**
+   * What the latest answer actually changed, step by step. Derived from the
+   * operations the server validated, applied and saved — never from anything
+   * in flight — so these lines can only describe changes already in the graph.
+   */
+  activity: string[];
   canUndo: boolean;
   aiConfigured: boolean;
   /** True when the canvas is empty — swaps in the first-run prompt. */
@@ -50,12 +56,28 @@ export interface AIChatPanelProps {
 }
 
 export default function AIChatPanel({
-  history, composing, changeCard, canUndo, aiConfigured, empty, selectedNode,
+  history, composing, changeCard, activity, canUndo, aiConfigured, empty, selectedNode,
   onSubmit, onUndo, onOpenHistory, onCollapse,
 }: AIChatPanelProps) {
   const [value, setValue] = useState('');
+  const [seconds, setSeconds] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Elapsed seconds while Populr works.
+   *
+   * There is no progress bar: the compose endpoint answers once, so a bar
+   * filling at a made-up rate would promise a duration nobody knows. Past a
+   * few seconds the count is the honest gauge — a slow build reads as slow
+   * rather than as broken.
+   */
+  useEffect(() => {
+    if (!composing) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [composing]);
 
   // Grow with the content instead of scrolling inside two lines.
   useEffect(() => {
@@ -77,6 +99,9 @@ export default function AIChatPanel({
     const prompt = value.trim();
     if (!prompt || composing) return;
     setValue('');
+    // Zeroed here rather than when composing ends: this is the moment a new
+    // wait begins, and it keeps the reset out of an effect.
+    setSeconds(0);
     onSubmit(prompt);
   };
 
@@ -162,6 +187,27 @@ export default function AIChatPanel({
                   <p className="text-[13px] leading-snug text-[#111111] whitespace-pre-wrap break-words">
                     {entry.summary}
                   </p>
+
+                  {/* What it actually changed, step by step — the detail
+                      under the sentence. This used to be a second card
+                      floating over the canvas, reporting the same event the
+                      summary reports, in a corner the composer was already
+                      using. One place says what happened, and it's the place
+                      the creator asked in. */}
+                  {latest && activity.length > 0 && (
+                    <ul className="mt-1.5 space-y-1">
+                      {activity.map((line, i) => (
+                        <li
+                          key={`${i}-${line}`}
+                          className="flex items-start gap-1.5 text-[11.5px] leading-snug text-[#6B6B6B]"
+                        >
+                          <span aria-hidden className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-[#C5FF3D]" />
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
                   {/* The latest answer carries its own controls, the way the
                       old change card did — Undo while it's fresh, and the full
                       record behind a deliberate click. */}
@@ -197,7 +243,12 @@ export default function AIChatPanel({
 
         {composing && (
           <div className="flex items-center gap-2 text-[11.5px] text-[#8A857E]" role="status">
-            <PairedRevolution size="sm" className="text-[#B0AAA2]" /> Populr is working on it…
+            <PairedRevolution size="sm" className="text-[#B0AAA2]" />
+            {seconds < 7
+              ? 'Populr is working on it…'
+              : seconds < 16
+                ? `Still going — ${seconds}s`
+                : `Nearly there — ${seconds}s. Automations with a few parts take longer.`}
           </div>
         )}
 
