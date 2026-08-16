@@ -34,14 +34,14 @@ export interface ChangeCard {
   /** The graph before the change, so Undo is a single assignment. */
   previousGraph: FlowGraph;
   previousName: string;
-  source: 'model' | 'fallback' | 'manual';
+  source: 'model' | 'fallback' | 'intent' | 'manual';
 }
 
 export interface HistoryEntry {
   prompt: string;
   summary: string;
   at: number;
-  source: 'model' | 'fallback' | 'manual';
+  source: 'model' | 'fallback' | 'intent' | 'manual';
 }
 
 const AUTOSAVE_DELAY_MS = 700;

@@ -1038,14 +1038,39 @@ export interface FlowSimulationResult {
   awaitingReply: boolean;
 }
 
+/**
+ * One real stage of a compose, as the backend actually ran it.
+ *
+ * The composer's orchestration emits these AT each stage — understanding the
+ * request, planning ("Planning 1 new Message step"), validating, applying
+ * ("Adding a Message step after the Wait step"), saving — with labels derived
+ * from the intent and the plan, never written by a model. The panel can render
+ * the sequence as truthful build progress instead of inventing "Thinking…".
+ */
+export interface ComposerProgressEvent {
+  id: string;
+  stage: 'understanding' | 'planning' | 'validating' | 'applying' | 'saving' | 'complete' | 'error';
+  label: string;
+  /** The step the stage is about, when there is one. */
+  nodeId?: string;
+  /** The intent kind driving it (add_node, edit_node, delete_node). */
+  operation?: string;
+}
+
 export interface FlowComposeResult {
   applied: boolean;
   summary: string;
-  source: 'model' | 'fallback';
+  /** 'intent': an explicit structural instruction, planned deterministically —
+   *  no model chose any operation. */
+  source: 'model' | 'fallback' | 'intent';
+  /** The summary is a question — nothing changed, one detail is needed. */
+  clarification?: boolean;
   operations: unknown[];
   touchedNodeIds?: string[];
   previousGraph?: FlowGraph;
   flow: AutomationFlow | null;
+  /** The build sequence that actually ran, in order. */
+  progress?: ComposerProgressEvent[];
 }
 
 export async function fetchFlows(): Promise<AutomationFlow[]> {
