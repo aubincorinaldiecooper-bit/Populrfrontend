@@ -107,6 +107,11 @@ function selectNode(id: string | null) {
 }
 
 async function ask(user: ReturnType<typeof userEvent.setup>, prompt: string) {
+  // The composer lives in the collapsible Ask Populr panel now; open it from
+  // the launcher when it isn't already on screen.
+  if (!screen.queryByLabelText('Ask Populr to build or change anything…')) {
+    await user.click(await screen.findByRole('button', { name: /^Ask Populr/ }));
+  }
   await user.type(
     await screen.findByLabelText('Ask Populr to build or change anything…'),
     `${prompt}{Enter}`,

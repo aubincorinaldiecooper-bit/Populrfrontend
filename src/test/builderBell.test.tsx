@@ -278,8 +278,9 @@ describe('while Populr is building the automation', () => {
     mountBuilder();
     await screen.findByText('Preview');
 
+    await user.click(await screen.findByRole('button', { name: /^Ask Populr/ }));
     await user.type(
-      screen.getByLabelText('Ask Populr to build or change anything…'),
+      await screen.findByLabelText('Ask Populr to build or change anything…'),
       'follow up if they don\'t reply{Enter}',
     );
 
