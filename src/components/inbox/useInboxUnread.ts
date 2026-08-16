@@ -1,53 +1,103 @@
-import { useCallback, useEffect, useState } from 'react';
-import { isBackendConfigured, fetchInbox } from '../../lib/api';
+import { useSyncExternalStore } from 'react';
+import { isBackendConfigured, fetchConversations } from '../../lib/api';
 
 /**
- * How many conversations are waiting on the creator — the badge on the
- * Inbox nav item, in the sidebar and the builder's rail alike.
+ * How many conversations are waiting on the creator — the badge on the Inbox
+ * nav item, in the sidebar and the builder's rail alike.
  *
- * This used to live beside a whole conversations queue that powered the
- * inbox DRAWER — a second inbox that opened over every page while /inbox
- * existed as the first. The drawer is retired; the one thing from that era
- * still worth polling for is this number, because someone messaging you
- * while you are mid-build deserves a signal even when the Inbox is a page
- * away rather than an overlay.
+ * ONE STORE, ONE POLL, ONE DEFINITION. Three ways this number can lie, each
+ * of which shaped this module:
+ *
+ * - Counting inbox ROWS overstates: one person with three flagged messages is
+ *   one conversation waiting, not three — and the Inbox page already counts
+ *   it that way. The badge asks the same endpoint the page asks
+ *   (fetchConversations) and counts conversations with something waiting, so
+ *   the pill in the nav and the "N waiting on you" subtitle can never
+ *   disagree about what waiting means.
+ *
+ * - Two components each running their own poll doubles every request: in the
+ *   builder the rail AND the (mobile-only, but still mounted) sidebar both
+ *   want the number. This is a module-level store with useSyncExternalStore
+ *   subscribers — however many badges render, there is one interval, started
+ *   by the first subscriber and stopped by the last.
+ *
+ * - A poll-only badge goes stale the moment the creator acts: reply to the
+ *   waiting person and the nav claims they are still waiting for up to a
+ *   minute. So the surfaces that CHANGE the answer push it here —
+ *   useConversations reports the fresh count it just fetched after every
+ *   list refresh (zero extra requests), and a reply sent from the Contacts
+ *   conversation asks for a re-count.
  */
 
-const UNREAD_PROBE = 10;
+let count = 0;
+const listeners = new Set<() => void>();
+
 const UNREAD_POLL_MS = 60_000;
+let timer: ReturnType<typeof setInterval> | null = null;
+/** Held so stop() removes the same handler start() added. */
+let visibilityTick: (() => void) | null = null;
+
+function emit(next: number) {
+  if (next === count) return;
+  count = next;
+  for (const l of listeners) l();
+}
+
+/** Ask the server again. Fire-and-forget; a badge is not worth a toast. */
+export function refreshInboxUnread(): void {
+  if (!isBackendConfigured()) return;
+  fetchConversations({})
+    .then(res => emit(res.conversations.filter(c => c.waiting > 0).length))
+    // Silence means "no number yet", which is exactly what an unreachable
+    // backend should show.
+    .catch(() => emit(0));
+}
+
+/**
+ * A surface that already holds the fresh answer hands it over — the Inbox
+ * page refetches its list after every send and resolve, and re-counting from
+ * here would be a second request for a number it is already displaying.
+ */
+export function reportWaitingConversations(waiting: number): void {
+  emit(waiting);
+}
+
+function start() {
+  refreshInboxUnread();
+  // Nothing runs against a hidden tab: a laptop left open overnight should
+  // cost nothing, and the visibility handler catches the creator up the
+  // moment they come back.
+  visibilityTick = () => {
+    if (document.visibilityState === 'visible') refreshInboxUnread();
+  };
+  timer = setInterval(visibilityTick, UNREAD_POLL_MS);
+  document.addEventListener('visibilitychange', visibilityTick);
+  window.addEventListener('focus', refreshInboxUnread);
+}
+
+function stop() {
+  if (timer) clearInterval(timer);
+  timer = null;
+  if (visibilityTick) document.removeEventListener('visibilitychange', visibilityTick);
+  visibilityTick = null;
+  window.removeEventListener('focus', refreshInboxUnread);
+}
+
+function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0) start();
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) stop();
+  };
+}
 
 export function useInboxUnread(): { count: number; refresh: () => void } {
-  const [count, setCount] = useState(0);
-  const backendConfigured = isBackendConfigured();
+  const current = useSyncExternalStore(subscribe, () => count);
+  return { count: current, refresh: refreshInboxUnread };
+}
 
-  const refresh = useCallback(() => {
-    if (!backendConfigured) return;
-    fetchInbox({ needsReply: true, limit: UNREAD_PROBE })
-      .then(res => setCount(res.items.length))
-      // A badge is not worth a toast. Silence here means "no number yet",
-      // which is exactly what an unreachable backend should show.
-      .catch(() => setCount(0));
-  }, [backendConfigured]);
-
-  useEffect(() => {
-    refresh();
-    if (!backendConfigured) return;
-
-    // Nothing runs against a hidden tab: a laptop left open on this screen
-    // overnight should cost nothing, and the visibility handler catches the
-    // creator up the moment they come back to it.
-    const tick = () => {
-      if (document.visibilityState === 'visible') refresh();
-    };
-    const timer = setInterval(tick, UNREAD_POLL_MS);
-    document.addEventListener('visibilitychange', tick);
-    window.addEventListener('focus', refresh);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', tick);
-      window.removeEventListener('focus', refresh);
-    };
-  }, [refresh, backendConfigured]);
-
-  return { count, refresh };
+/** Tests only: the store is module-level, so state outlives an unmount. */
+export function resetInboxUnreadForTests(): void {
+  count = 0;
 }

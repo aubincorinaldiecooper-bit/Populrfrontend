@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import Sidebar from '../components/Sidebar';
 import EditorRail from '../components/EditorRail';
-import type { InboxItem } from '../lib/api';
+import { resetInboxUnreadForTests } from '../components/inbox/useInboxUnread';
+import type { Conversation } from '../lib/api';
 
 /* One inbox.
  *
@@ -20,17 +21,16 @@ import type { InboxItem } from '../lib/api';
  * Nothing anywhere opens a second inbox surface over the page you are on.
  */
 
-const fetchInboxMock = vi.fn();
+const fetchConversationsMock = vi.fn();
 
-function item(id: string, handle: string, text: string): InboxItem {
+/** A grouped conversation, the same shape the Inbox page lists. */
+function conversation(contactId: string, name: string, waiting: number): Conversation {
   return {
-    id, contact_id: `c_${id}`, contact_handle: handle, contact_avatar_url: null,
-    contact_name: `${handle[0]!.toUpperCase()}${handle.slice(1)}`,
-    platform: 'instagram', channel: 'dm', message_text: text,
-    needs_reply: true, needs_reply_reason: 'no_rule_matched',
-    suggested_reply: null, post_caption: null,
-    created_at: new Date().toISOString(),
-  } as unknown as InboxItem;
+    contactId, handle: name.toLowerCase(), name, avatarUrl: null,
+    platform: 'instagram',
+    lastMessage: { text: 'hi', direction: 'inbound', channel: 'dm', at: new Date().toISOString() },
+    waiting, latestInboxItemId: waiting > 0 ? `i_${contactId}` : null,
+  };
 }
 
 vi.mock('../lib/api', async () => {
@@ -38,7 +38,7 @@ vi.mock('../lib/api', async () => {
   return {
     ...actual,
     isBackendConfigured: () => true,
-    fetchInbox: (...args: unknown[]) => fetchInboxMock(...args),
+    fetchConversations: (...args: unknown[]) => fetchConversationsMock(...args),
   };
 });
 
@@ -50,11 +50,14 @@ vi.mock('../context/AuthContext', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetInboxUnreadForTests();
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
-  fetchInboxMock.mockResolvedValue({
-    items: [
-      item('1', 'jordan', 'Can you send me the menu?'),
-      item('2', 'maya', 'Thanks!'),
+  fetchConversationsMock.mockResolvedValue({
+    conversations: [
+      conversation('c1', 'Jordan', 1),
+      conversation('c2', 'Maya', 1),
+      // Someone with nothing waiting is a conversation, not a count.
+      conversation('c3', 'Alex', 0),
     ],
   });
 });
@@ -85,21 +88,41 @@ describe('the left navigation', () => {
     expect(screen.queryByRole('complementary', { name: 'Inbox' })).not.toBeInTheDocument();
   });
 
-  it('says how many people are waiting', async () => {
+  it('counts people waiting, by the same rule the Inbox page counts them', async () => {
     renderShell(<Sidebar />);
 
-    // Two items waiting → a "2" pill on the nav item.
+    // Two conversations waiting (Alex is quiet) → a "2" pill. Same endpoint,
+    // same grouping as the page's "N waiting on you" — they cannot disagree.
     await waitFor(() => expect(screen.getAllByText('2').length).toBeGreaterThan(0));
-    expect(fetchInboxMock).toHaveBeenCalledWith(
-      expect.objectContaining({ needsReply: true }));
+  });
+
+  it('one person with many flagged messages is ONE conversation waiting', async () => {
+    // The grouped list already says so: one row, waiting: 3. A badge built on
+    // raw inbox rows would have said three people were waiting.
+    fetchConversationsMock.mockResolvedValue({
+      conversations: [conversation('c1', 'Jordan', 3)],
+    });
+    renderShell(<Sidebar />);
+
+    await waitFor(() => expect(screen.getAllByText('1').length).toBeGreaterThan(0));
+    expect(screen.queryByText('3')).not.toBeInTheDocument();
   });
 
   it('shows no badge when nobody is waiting', async () => {
-    fetchInboxMock.mockResolvedValue({ items: [] });
+    fetchConversationsMock.mockResolvedValue({ conversations: [] });
     renderShell(<Sidebar />);
 
-    await waitFor(() => expect(fetchInboxMock).toHaveBeenCalled());
+    await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalled());
     expect(screen.queryByText(/waiting/)).not.toBeInTheDocument();
+  });
+
+  it('however many badges render, there is one poll', async () => {
+    // The builder mounts the rail AND keeps the sidebar for mobile nav. Two
+    // components, one shared store — not one request each.
+    renderShell(<><Sidebar railMode /><EditorRail /></>);
+
+    await screen.findByRole('link', { name: 'Inbox, 2 waiting' });
+    expect(fetchConversationsMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -112,10 +135,10 @@ describe("the builder's rail", () => {
   });
 
   it('and stays quiet when nobody is', async () => {
-    fetchInboxMock.mockResolvedValue({ items: [] });
+    fetchConversationsMock.mockResolvedValue({ conversations: [] });
     renderShell(<EditorRail />);
 
-    await waitFor(() => expect(fetchInboxMock).toHaveBeenCalled());
+    await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalled());
     expect(screen.getByRole('link', { name: 'Inbox' })).toBeInTheDocument();
   });
 });
