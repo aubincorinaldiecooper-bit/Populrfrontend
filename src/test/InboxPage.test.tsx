@@ -68,6 +68,7 @@ function detail(over: Partial<ContactDetail> = {}): ContactDetail {
 const mockFetchConversations = vi.fn();
 const mockFetchContact = vi.fn();
 const mockSendInboxReply = vi.fn();
+const mockUpdateContact = vi.fn();
 const mockShowToast = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
@@ -82,6 +83,7 @@ vi.mock('../lib/api', async () => {
     fetchConversations: (f: unknown) => mockFetchConversations(f),
     fetchContact: (id: string) => mockFetchContact(id),
     sendInboxReply: (id: string, input: unknown) => mockSendInboxReply(id, input),
+    updateContact: (id: string, patch: unknown) => mockUpdateContact(id, patch),
   };
 });
 
@@ -394,6 +396,60 @@ describe('InboxPage — the conversation is one click from the person', () => {
     // controls in the panel's reading order.
     const stage = within(panel).getByRole('combobox', { name: 'Stage' });
     expect(from.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('overlapping panel edits each keep their own field', async () => {
+    // A slow note save and a quick stage change. Whichever response lands
+    // last must merge its ONE field into the current state — a full snapshot
+    // from before the other edit would quietly revert it in the UI even
+    // though both saves succeeded on the server.
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    let finishNoteSave!: (v: ContactRecord) => void;
+    mockUpdateContact.mockImplementation(async (_id: string, patch: { notes?: string; stage?: string }) => {
+      if (patch.notes !== undefined) {
+        return new Promise<ContactRecord>(r => { finishNoteSave = r; });
+      }
+      return contactRecord({ stage: patch.stage });
+    });
+
+    // Start the slow note save…
+    await user.click(within(panel).getByRole('button', { name: /Add note/ }));
+    await user.type(within(panel).getByRole('textbox', { name: 'Note' }), 'Prefers weekends');
+    await user.click(within(panel).getByRole('button', { name: 'Save note' }));
+
+    // …change the stage while it is still in flight…
+    await user.selectOptions(within(panel).getByRole('combobox', { name: 'Stage' }), 'warm');
+    await waitFor(() =>
+      expect(within(panel).getByRole('combobox', { name: 'Stage' })).toHaveValue('warm'));
+
+    // …then let the note save land. The stage must survive it.
+    finishNoteSave(contactRecord({ notes: 'Prefers weekends' }));
+    await waitFor(() => expect(within(panel).getByText('Prefers weekends')).toBeInTheDocument());
+    expect(within(panel).getByRole('combobox', { name: 'Stage' })).toHaveValue('warm');
+  });
+
+  it('a contact acquired by a post keeps that attribution', async () => {
+    // No automation on record, but the post that brought them in is known —
+    // the retired profile said so, and retiring it must not erase the only
+    // acquisition attribution these contacts have.
+    const user = userEvent.setup();
+    mockFetchContact.mockResolvedValue(detail({
+      automations: [],
+      sourceAutomation: null,
+      sourcePost: { id: 'p1', caption: 'Drop your favorite venue below', url: null, platform: 'instagram' },
+    }));
+    renderInbox('/inbox?c=c1');
+
+    await user.click(await screen.findByRole('button', { name: /About Curious Fan/ }));
+    const panel = await screen.findByRole('complementary', { name: /About Curious Fan/ });
+
+    expect(within(panel).getByText('From')).toBeInTheDocument();
+    expect(within(panel).getByText(/Drop your favorite venue below/)).toBeInTheDocument();
   });
 
   it('tells the relationship\'s story, not the engine\'s diary', async () => {

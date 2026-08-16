@@ -24,7 +24,8 @@ export interface ContactConversationState {
   error: string | null;
   sending: boolean;
   send: (text: string) => Promise<boolean>;
-  updateDetail: (next: ContactDetail) => void;
+  /** Merge a panel edit into the current detail (no-op once nothing is open). */
+  updateDetail: (update: (current: ContactDetail) => ContactDetail) => void;
   reload: () => void;
 }
 
@@ -96,5 +97,11 @@ export function useContactConversation(contactId: string | null): ContactConvers
     }
   }, [detail, contactId, load, showToast]);
 
-  return { detail, loading, error, sending, send, updateDetail: setDetail, reload: load };
+  const updateDetail = useCallback(
+    (update: (current: ContactDetail) => ContactDetail) =>
+      setDetail(prev => (prev ? update(prev) : prev)),
+    []
+  );
+
+  return { detail, loading, error, sending, send, updateDetail, reload: load };
 }

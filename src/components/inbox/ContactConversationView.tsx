@@ -35,8 +35,9 @@ export interface ContactConversationViewProps {
   /** The inbox item a reply goes through; null = nothing to reply to yet. */
   replyTarget: string | null;
   onSend: (text: string) => Promise<boolean>;
-  /** Panel edits (notes, stage, tags) flow back to whoever owns the detail. */
-  onDetailChanged?: (next: ContactDetail) => void;
+  /** Panel edits merge into the owner's current detail — an updater, never a
+   *  snapshot, so overlapping edits cannot revert each other. */
+  onDetailChanged?: (update: (current: ContactDetail) => ContactDetail) => void;
 }
 
 export default function ContactConversationView({

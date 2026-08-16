@@ -90,7 +90,8 @@ const mockFetchContact = vi.fn(async (id: string) => ({
   events: [],
 }));
 
-const mockSendInboxReply = vi.fn(async (_id: string, _input: unknown) => ({ sentText: 'x', channel: 'dm' as const }));
+const mockSendInboxReply = vi.fn<(id: string, input: unknown) => Promise<{ sentText: string; channel: 'dm' }>>(
+  async () => ({ sentText: 'x', channel: 'dm' }));
 
 const mockUseApp = vi.fn();
 

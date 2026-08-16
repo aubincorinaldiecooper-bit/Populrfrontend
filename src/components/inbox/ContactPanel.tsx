@@ -35,8 +35,15 @@ import type { ContactDetail, LeadStage } from '../../lib/api';
 export interface ContactPanelProps {
   detail: ContactDetail;
   onClose: () => void;
-  /** Panel edits (notes, stage, tags) flow back so the open detail stays true. */
-  onDetailChanged?: (next: ContactDetail) => void;
+  /**
+   * Panel edits (notes, stage, tags) flow back so the open detail stays true.
+   *
+   * An UPDATER over the owner's current state, not a snapshot. Two edits can
+   * overlap — a slow note save and a quick stage change — and whichever
+   * response lands last must merge its one field into whatever is current,
+   * not reinstate the whole contact as it looked before the other edit.
+   */
+  onDetailChanged?: (update: (current: ContactDetail) => ContactDetail) => void;
 }
 
 /** The stages the backend actually accepts, in pipeline order — the same six
@@ -76,14 +83,22 @@ export default function ContactPanel({ detail, onClose, onDetailChanged }: Conta
   const [tagDraft, setTagDraft] = useState('');
   const [addingTag, setAddingTag] = useState(false);
 
-  const apply = (next: ContactDetail) => onDetailChanged?.(next);
+  /**
+   * Merge ONE field into whatever the owner currently holds.
+   *
+   * The identity guard matters as much as the merge: these land after an
+   * await, and by then the open detail can belong to a different person. A
+   * slow save for one contact must never write into another's panel.
+   */
+  const apply = (merge: (current: ContactDetail) => ContactDetail) =>
+    onDetailChanged?.(current => (current.contact.id === contact.id ? merge(current) : current));
 
   const saveNotes = async () => {
     if (notesDraft === null) return;
     setSavingNotes(true);
     try {
       const updated = await updateContact(contact.id, { notes: notesDraft });
-      apply({ ...detail, contact: { ...contact, notes: updated.notes } });
+      apply(cur => ({ ...cur, contact: { ...cur.contact, notes: updated.notes } }));
       setNotesDraft(null);
       showToast('Note saved', 'success');
     } catch (err) {
@@ -96,7 +111,7 @@ export default function ContactPanel({ detail, onClose, onDetailChanged }: Conta
   const changeStage = async (stage: LeadStage) => {
     try {
       const updated = await updateContact(contact.id, { stage });
-      apply({ ...detail, contact: { ...contact, stage: updated.stage } });
+      apply(cur => ({ ...cur, contact: { ...cur.contact, stage: updated.stage } }));
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not update the stage.', 'error');
     }
@@ -108,7 +123,7 @@ export default function ContactPanel({ detail, onClose, onDetailChanged }: Conta
     setAddingTag(true);
     try {
       const tags = await updateContactTag(contact.id, tag, false);
-      apply({ ...detail, contact: { ...contact, tags } });
+      apply(cur => ({ ...cur, contact: { ...cur.contact, tags } }));
       setTagDraft('');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not add the tag.', 'error');
@@ -120,7 +135,7 @@ export default function ContactPanel({ detail, onClose, onDetailChanged }: Conta
   const removeTag = async (tag: string) => {
     try {
       const tags = await updateContactTag(contact.id, tag, true);
-      apply({ ...detail, contact: { ...contact, tags } });
+      apply(cur => ({ ...cur, contact: { ...cur.contact, tags } }));
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not remove the tag.', 'error');
     }
@@ -221,11 +236,21 @@ export default function ContactPanel({ detail, onClose, onDetailChanged }: Conta
             {from.name}
           </Link>
           <p className="mt-0.5 text-[11.5px] text-[#9B9B8F]">{shortDate(from.firstEnteredAt)}</p>
+          {detail.sourcePost?.caption && <SourcePostLine caption={detail.sourcePost.caption} />}
         </Section>
       ) : detail.sourceAutomation ? (
         // Captured before automations became flows. The name is still true.
         <Section label="From">
           <p className="text-[13px] font-medium text-[#111111]">{detail.sourceAutomation.name}</p>
+          {detail.sourcePost?.caption && <SourcePostLine caption={detail.sourcePost.caption} />}
+        </Section>
+      ) : detail.sourcePost?.caption ? (
+        // No automation on record, but we do know WHICH post brought them in.
+        // The retired profile said this; losing it here would erase the only
+        // acquisition attribution these contacts have.
+        <Section label="From">
+          <p className="text-[13px] text-[#111111]">A post</p>
+          <SourcePostLine caption={detail.sourcePost.caption} />
         </Section>
       ) : null}
 
@@ -389,5 +414,14 @@ export default function ContactPanel({ detail, onClose, onDetailChanged }: Conta
         </div>
       </Section>
     </aside>
+  );
+}
+
+/** The post that brought them in, quoted small under the From line. */
+function SourcePostLine({ caption }: { caption: string }) {
+  return (
+    <p className="mt-1 text-[11.5px] leading-snug text-[#6B6B6B] line-clamp-2">
+      “{caption}”
+    </p>
   );
 }

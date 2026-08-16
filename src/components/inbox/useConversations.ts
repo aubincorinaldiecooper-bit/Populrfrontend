@@ -35,8 +35,9 @@ export interface ConversationsState {
   select: (contactId: string | null) => void;
   refresh: () => void;
   send: (text: string) => Promise<boolean>;
-  /** Panel edits (notes, stage, tags) flow back into the open thread. */
-  updateThread: (next: ContactDetail) => void;
+  /** Panel edits (notes, stage, tags) merge into the open thread — an
+   *  updater, so overlapping edits each land their own field. */
+  updateThread: (update: (current: ContactDetail) => ContactDetail) => void;
 }
 
 export function useConversations(search: string): ConversationsState {
@@ -164,6 +165,8 @@ export function useConversations(search: string): ConversationsState {
 
   return {
     conversations, loading, error, thread, threadLoading, selectedId, sending,
-    replyTarget, select, refresh, send, updateThread: setThread,
+    replyTarget, select, refresh, send,
+    updateThread: (update: (current: ContactDetail) => ContactDetail) =>
+      setThread(prev => (prev ? update(prev) : prev)),
   };
 }
