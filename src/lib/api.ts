@@ -1022,6 +1022,12 @@ export interface FlowSimulationResult {
   matched: boolean;
   reason: string | null;
   steps: FlowSimulationStep[];
+  /**
+   * The walk parked on a "did they reply?" it has no answer for — the same
+   * suspension a live run makes. Preview shows the question and re-runs with
+   * the fan's answer appended to `replies`.
+   */
+  awaitingReply: boolean;
 }
 
 export interface FlowComposeResult {
@@ -1152,10 +1158,23 @@ export async function pauseFlow(
   return apiFetch(`/api/flows/${id}/pause`, { method: 'POST' });
 }
 
-/** POST /api/flows/:id/test — a dry run through the real executors. */
+/**
+ * POST /api/flows/:id/test — a dry run through the real executors.
+ *
+ * `replies` is the fan's side of the conversation after the trigger, in
+ * order, one entry per "did they reply?" the flow reaches: a string answers
+ * with that text, a null declines. The simulation parks at the first check
+ * with no entry (awaitingReply), so each question is asked before the next.
+ */
 export async function testFlow(
   id: string,
-  input: { channel: 'comment' | 'dm'; text: string; replied?: boolean; handle?: string; tags?: string[] },
+  input: {
+    channel: 'comment' | 'dm';
+    text: string;
+    replies?: (string | null)[];
+    handle?: string;
+    tags?: string[];
+  },
 ): Promise<FlowSimulationResult> {
   return apiFetch(`/api/flows/${id}/test`, { method: 'POST', body: input });
 }
