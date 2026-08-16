@@ -13,6 +13,12 @@ import type { FlowSimulationResult, FlowSimulationStep } from './api';
  * messages between a fan and the creator's account rather than as a list of
  * executed nodes.
  *
+ * The fan's replies live in the steps themselves: each answered "did they
+ * reply?" carries the text it consumed, and an unanswered one parks the walk
+ * (result.awaitingReply) exactly where a live run would suspend. So this
+ * transform never has to guess where a reply belongs or which question is
+ * open — the server's walk already says.
+ *
  * Waits are the reason this exists as a transform rather than a renderer over
  * steps. "Wait 2 days" is not an event in a conversation; it's the gap between
  * two messages, and drawing it as a line saying "2 days later" is both truer to
@@ -22,7 +28,7 @@ import type { FlowSimulationResult, FlowSimulationStep } from './api';
 export type PreviewItem =
   /** The fan's comment on a post — how a comment-triggered flow starts. */
   | { id: string; kind: 'comment'; text: string }
-  /** The fan's DM. Either the message that started it, or their reply. */
+  /** The fan's DM. Either the message that started it, or one of their replies. */
   | { id: string; kind: 'incoming'; text: string }
   | { id: string; kind: 'outgoing'; text: string; problem: string | null }
   /** A public reply carries its own failure: it is as refusable as a DM. */
@@ -39,14 +45,6 @@ export interface ConversationInput {
   channel: 'comment' | 'dm';
   /** What the creator typed to start it. */
   triggerText: string;
-  /** Their reply, once they've given one. */
-  replyText: string | null;
-  /**
-   * Stop at the first "did they reply?" and hand control back, so the creator
-   * can answer as the fan instead of being shown one outcome as if it were
-   * the only one.
-   */
-  pauseAtReplyCheck: boolean;
 }
 
 export interface Conversation {
@@ -84,7 +82,7 @@ function actionNote(node: FlowNode): string | null {
 }
 
 export function buildConversation(input: ConversationInput): Conversation {
-  const { graph, result, channel, triggerText, replyText, pauseAtReplyCheck } = input;
+  const { graph, result, channel, triggerText } = input;
   const items: PreviewItem[] = [];
 
   items.push(
@@ -102,12 +100,13 @@ export function buildConversation(input: ConversationInput): Conversation {
     return { items, awaitingReply: false };
   }
 
-  let replyShown = false;
-  const showReply = () => {
-    if (replyShown || !replyText) return;
-    replyShown = true;
-    items.push({ id: 'reply', kind: 'incoming', text: replyText });
-  };
+  /** The step the walk parked on, when it parked — the open question. It is
+   *  drawn as the reply box, not as a line of the transcript. */
+  const parkedIndex = result.awaitingReply === true ? result.steps.length - 1 : -1;
+
+  /** The reply an answered check consumed, straight from the executor. */
+  const replyOf = (step: FlowSimulationStep | undefined): string | null =>
+    step?.branch === 'yes' ? stringField(step.output, 'text') : null;
 
   for (let i = 0; i < result.steps.length; i++) {
     const step = result.steps[i];
@@ -137,27 +136,40 @@ export function buildConversation(input: ConversationInput): Conversation {
       const next = result.steps[i + 1];
       const nextIsReplyCheck = isReplyCheck(graph, next);
 
-      // Hold here rather than showing a wait the creator is about to decide
-      // the outcome of. Answering as the fan comes first; the line describing
-      // the gap can only be written once they have.
-      if (nextIsReplyCheck && pauseAtReplyCheck) return { items, awaitingReply: true };
+      // The question after this wait is the open one: hold before drawing the
+      // gap. Answering as the fan comes first; the line describing the wait
+      // can only be written once they have.
+      if (nextIsReplyCheck && i + 1 === parkedIndex) return { items, awaitingReply: true };
 
       if (nextIsReplyCheck && next?.branch === 'no') {
         items.push({ id, kind: 'separator', text: `No reply after ${describeDuration(minutes)}` });
         i++; // the check is told by the same line
         continue;
       }
-      // They replied during the wait, so their message belongs before it.
-      if (nextIsReplyCheck && next?.branch === 'yes') showReply();
+      // They replied during the wait, so their message belongs before the
+      // line describing it — and the check it answered is told by the bubble.
+      if (nextIsReplyCheck && next?.branch === 'yes') {
+        const reply = replyOf(next);
+        if (reply) items.push({ id: `reply-${next.nodeId}-${i + 1}`, kind: 'incoming', text: reply });
+        items.push({ id, kind: 'separator', text: `${describeDuration(minutes)} later` });
+        i++;
+        continue;
+      }
       items.push({ id, kind: 'separator', text: `${describeDuration(minutes)} later` });
       continue;
     }
 
     if (node.type === 'condition') {
       if (!isReplyCheck(graph, step)) continue;
-      if (pauseAtReplyCheck) return { items, awaitingReply: true };
-      if (step.branch === 'yes') showReply();
-      else items.push({ id, kind: 'separator', text: 'No reply' });
+      // The open question: everything up to here is the transcript, and the
+      // reply box is how it continues.
+      if (i === parkedIndex) return { items, awaitingReply: true };
+      if (step.branch === 'yes') {
+        const reply = replyOf(step);
+        if (reply) items.push({ id: `reply-${step.nodeId}-${i}`, kind: 'incoming', text: reply });
+      } else {
+        items.push({ id, kind: 'separator', text: 'No reply' });
+      }
       continue;
     }
 
@@ -168,5 +180,5 @@ export function buildConversation(input: ConversationInput): Conversation {
     }
   }
 
-  return { items, awaitingReply: false };
+  return { items, awaitingReply: result.awaitingReply === true };
 }

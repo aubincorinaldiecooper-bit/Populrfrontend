@@ -13,11 +13,16 @@ import type { FlowSimulationResult } from '../../lib/api';
  * four execute", it's "what is this like to receive", and the honest way to
  * answer that is to show the conversation.
  *
- * The creator plays the fan: what they type IS the trigger, and when the
- * automation asks "did they reply?" they answer it by replying, or by
- * declining to. Underneath it is the same simulation endpoint as before,
- * running the real executors with sending switched off — so what appears here
- * is produced by the code that will run live, and nothing leaves Populr.
+ * The creator plays the fan: what they type IS the trigger, and every time
+ * the automation asks "did they reply?" they answer it by replying, or by
+ * declining to — question by question, however many the flow asks. The
+ * transcript is replayed through the same simulation endpoint with the
+ * fan's answers so far (`replies`), and the server parks at the first
+ * unanswered question exactly where a live run would suspend. A reply typed
+ * mid-conversation is therefore always a reply — it is never re-tried
+ * against the trigger's keyword. Underneath it is the real executors with
+ * sending switched off, so what appears here is produced by the code that
+ * will run live, and nothing leaves Populr.
  */
 
 const FAN = '@yourfan';
@@ -28,7 +33,7 @@ export interface PreviewPanelProps {
   platformLabel: string | null;
   running: boolean;
   onRun: (input: {
-    channel: 'comment' | 'dm'; text: string; replied: boolean;
+    channel: 'comment' | 'dm'; text: string; replies: (string | null)[];
   }) => Promise<FlowSimulationResult | null>;
   onReset: () => void;
   onClose: () => void;
@@ -39,9 +44,10 @@ export default function PreviewPanel({
 }: PreviewPanelProps) {
   const [draft, setDraft] = useState('');
   const [sentText, setSentText] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState<string | null>(null);
-  /** They chose to let the reply window lapse rather than answer. */
-  const [declinedReply, setDeclinedReply] = useState(false);
+  /** The fan's answers so far, in order — null is a declined reply. */
+  const [replies, setReplies] = useState<(string | null)[]>([]);
+  /** A reply in flight, drawn immediately while the server replays. */
+  const [pendingReply, setPendingReply] = useState<string | null>(null);
   const [result, setResult] = useState<FlowSimulationResult | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -52,25 +58,21 @@ export default function PreviewPanel({
 
   const conversation = useMemo(() => {
     if (!result || sentText === null) return { items: [] as PreviewItem[], awaitingReply: false };
-    return buildConversation({
-      graph,
-      result,
-      channel,
-      triggerText: sentText,
-      replyText,
-      // Only hold the first time through. Once they've answered — either with
-      // a reply or by declining one — the rest plays out.
-      pauseAtReplyCheck: replyText === null && !declinedReply,
-    });
-  }, [graph, result, channel, sentText, replyText, declinedReply]);
+    return buildConversation({ graph, result, channel, triggerText: sentText });
+  }, [graph, result, channel, sentText]);
 
   // The fan's own message shows the moment it's sent; waiting for the round
   // trip to render what they just typed would feel like a broken chat.
-  const items: PreviewItem[] = result
-    ? conversation.items
-    : sentText !== null
-      ? [{ id: 'trigger', kind: channel === 'comment' ? 'comment' : 'incoming', text: sentText }]
-      : [];
+  const items: PreviewItem[] = [
+    ...(result
+      ? conversation.items
+      : sentText !== null
+        ? [{ id: 'trigger', kind: channel === 'comment' ? 'comment' : 'incoming', text: sentText } as PreviewItem]
+        : []),
+    ...(pendingReply !== null
+      ? [{ id: 'pending-reply', kind: 'incoming', text: pendingReply } as PreviewItem]
+      : []),
+  ];
 
   const awaitingReply = conversation.awaitingReply;
   const started = sentText !== null;
@@ -83,30 +85,42 @@ export default function PreviewPanel({
     if (!running) inputRef.current?.focus();
   }, [running]);
 
+  /** Answer the open question — with their words, or with silence (null). */
+  const answer = async (reply: string | null) => {
+    if (sentText === null) return;
+    const next = [...replies, reply];
+    setReplies(next);
+    if (reply !== null) setPendingReply(reply);
+    const res = await onRun({ channel, text: sentText, replies: next });
+    setPendingReply(null);
+    if (res) setResult(res);
+    // The round trip failed (onRun already said so): the answer didn't take,
+    // so put the question back rather than silently swallowing their reply.
+    else setReplies(replies);
+  };
+
   const send = async () => {
     const text = draft.trim();
     if (!text || running || !trigger) return;
     setDraft('');
 
     if (awaitingReply) {
-      setReplyText(text);
-      setResult(await onRun({ channel, text: sentText ?? '', replied: true }));
+      await answer(text);
       return;
     }
 
     // Anything typed after the automation has finished starts a fresh one —
     // the same way sending a new message to an account starts a new thread.
     setSentText(text);
-    setReplyText(null);
-    setDeclinedReply(false);
+    setReplies([]);
     setResult(null);
-    setResult(await onRun({ channel, text, replied: false }));
+    setResult(await onRun({ channel, text, replies: [] }));
   };
 
   const startOver = () => {
     setSentText(null);
-    setReplyText(null);
-    setDeclinedReply(false);
+    setReplies([]);
+    setPendingReply(null);
     setResult(null);
     setDraft('');
     onReset();
@@ -202,7 +216,7 @@ export default function PreviewPanel({
           <div className="pt-1">
             <button
               type="button"
-              onClick={() => setDeclinedReply(true)}
+              onClick={() => void answer(null)}
               className="text-[11.5px] text-[#8A857E] underline underline-offset-2 hover:text-[#111111]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D] rounded px-1"
             >

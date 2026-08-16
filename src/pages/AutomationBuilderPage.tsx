@@ -306,7 +306,7 @@ export default function AutomationBuilderPage() {
   }, [bellAttention]);
 
   const runPreview = useCallback(async (
-    input: { channel: 'comment' | 'dm'; text: string; replied: boolean },
+    input: { channel: 'comment' | 'dm'; text: string; replies: (string | null)[] },
   ): Promise<FlowSimulationResult | null> => {
     if (!flowId) return null;
     setTesting(true);
