@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Zap, GitBranch, Pause, Play, MoreHorizontal, Pencil, Copy, Trash2, Loader2,
+  Zap, GitBranch, Pause, Play, MoreHorizontal, Pencil, Copy, Trash2, Loader2, AlertTriangle,
 } from 'lucide-react';
 import StatusPill from '../StatusPill';
 import { platformMeta } from '../../lib/platformMeta';
@@ -170,6 +170,22 @@ export default function AutomationCard({
               )}
               {savingName && <Loader2 size={12} className="animate-spin text-[#9B9B8F]" />}
               <StatusPill status={statusLabel} className="text-[10px]" />
+              {/* A live automation the runtime would refuse to activate today
+                  — its account disconnected, or a rule it predates. "Active"
+                  alone would be the lie the creator discovers from a fan.
+                  The chip names the state; opening the card, the builder's
+                  bell explains and points at the step. */}
+              {live && flow.problems && flow.problems.length > 0 && (
+                <span
+                  title={flow.problems[0]}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#F0D9A8]
+                    bg-[#FEF7E6] px-2 py-0.5 text-[10px] font-medium text-[#7A5A12]"
+                >
+                  <AlertTriangle size={10} aria-hidden />
+                  Needs attention
+                  <span className="sr-only">: {flow.problems[0]}</span>
+                </span>
+              )}
             </div>
 
             {/* What it does, as two lines of English rather than a parts list. */}

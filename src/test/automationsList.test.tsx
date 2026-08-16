@@ -295,3 +295,27 @@ describe('describing a graph', () => {
     expect(describeFlow(graph([TRIGGER], [])).then).toBeNull();
   });
 });
+
+describe('a live automation that cannot fully run', () => {
+  const PROBLEM = 'That account needs reconnecting before this automation can run.';
+
+  it('wears a Needs-attention chip naming the problem', async () => {
+    // The backend sends `problems` on the list for live flows the activation
+    // checks would refuse today — a flow that went live before a rule
+    // existed, or whose account has since disconnected. "Active" alone would
+    // be a lie the creator discovers from a fan.
+    fetchFlowsMock.mockResolvedValue([flow({ problems: [PROBLEM] })]);
+    renderPage();
+
+    const chip = await screen.findByText('Needs attention');
+    expect(chip).toHaveAttribute('title', PROBLEM);
+  });
+
+  it('stays quiet when the backend reported nothing wrong', async () => {
+    fetchFlowsMock.mockResolvedValue([flow()]);
+    renderPage();
+
+    await screen.findByText('Menu comments');
+    expect(screen.queryByText('Needs attention')).not.toBeInTheDocument();
+  });
+});
