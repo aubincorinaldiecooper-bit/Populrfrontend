@@ -1001,6 +1001,14 @@ export interface AutomationFlow {
    * that mutations replace.
    */
   audienceCount?: number;
+  /**
+   * Why this LIVE automation can't fully run — the same messages activation
+   * would refuse it with today. Sent by the list route only, and only for
+   * live flows with something wrong (a flow that went live before a rule
+   * existed, or whose account has since disconnected). Absent means "nothing
+   * to report here", never "healthy and checked".
+   */
+  problems?: string[];
 }
 
 /** A blocking problem Review shows, tied to the step it belongs to. */
