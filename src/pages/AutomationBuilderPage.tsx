@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Eye, Loader2, Pause, PenLine, Sparkles, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
+import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
@@ -81,8 +81,8 @@ export default function AutomationBuilderPage() {
   const builder = useFlowBuilder(flowId);
   const {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
-    saveState, savedAt, delegationWarning, composing, changeCard, setChangeCard,
-    activity, clearActivity, highlighted, history,
+    saveState, savedAt, delegationWarning, composing, changeCard,
+    editsSinceCard, activity, clearActivity, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -282,6 +282,16 @@ export default function AutomationBuilderPage() {
   }, [refreshValidation, keepStepBesideFeed]);
 
   /**
+   * The last compose answer the creator has actually had on screen. The
+   * launcher's dot is the difference between this and the current one — a
+   * result that landed while the panel was collapsed is news; a result they
+   * were looking at when they collapsed is not. Tracked separately from the
+   * card itself, because the card also carries the answer's Undo, and
+   * collapsing a panel must never cost the creator their undo.
+   */
+  const [seenAiCard, setSeenAiCard] = useState<ChangeCard | null>(null);
+
+  /**
    * Open the conversation. Like the feed — and unlike Preview — the AI keeps
    * the selected step beside it when there's room, because the selection IS
    * its context: "make this warmer" lands on the step the creator is looking
@@ -291,17 +301,14 @@ export default function AutomationBuilderPage() {
   const openAi = useCallback(() => {
     setPanel('ai');
     keepStepBesideFeed();
-  }, [keepStepBesideFeed]);
+    setSeenAiCard(changeCard);
+  }, [keepStepBesideFeed, changeCard]);
 
-  /**
-   * Collapse the conversation. The latest result's affordances go with it:
-   * anything that lands AFTER this is news, and news is what the launcher's
-   * dot reports — a result the creator has already read is not.
-   */
+  /** Collapse the conversation; whatever is on screen right now is read. */
   const collapseAi = useCallback(() => {
     setPanel(null);
-    setChangeCard(null);
-  }, [setChangeCard]);
+    setSeenAiCard(changeCard);
+  }, [changeCard]);
 
   /**
    * The builder opens on the conversation when there is nothing else to open
@@ -699,7 +706,9 @@ export default function AutomationBuilderPage() {
             type="button"
             onClick={openAi}
             title="Ask Populr"
-            aria-label={changeCard && !composing ? 'Ask Populr — new result' : 'Ask Populr'}
+            aria-label={changeCard && changeCard !== seenAiCard && !composing
+              ? 'Ask Populr — new result'
+              : 'Ask Populr'}
             className="absolute bottom-5 right-5 z-30 flex h-11 w-11 items-center justify-center
               rounded-2xl border border-[#E8E4DF] bg-white text-[#111111]
               shadow-[0_4px_16px_rgba(17,17,17,0.10)] transition-all
@@ -707,7 +716,7 @@ export default function AutomationBuilderPage() {
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
           >
             {composing ? <PairedRevolution size="sm" /> : <Sparkles size={17} />}
-            {changeCard && !composing && (
+            {changeCard && changeCard !== seenAiCard && !composing && (
               <span
                 aria-hidden
                 className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#C5FF3D]
@@ -793,7 +802,11 @@ export default function AutomationBuilderPage() {
                   history={history}
                   composing={composing}
                   changeCard={changeCard}
-                  canUndo={canUndo}
+                  // The answer's Undo pops the shared stack, so it may only
+                  // show while that answer is still the newest recorded write
+                  // — one inspector edit later it would revert the wrong
+                  // thing. Undo stays reachable in View changes regardless.
+                  canUndo={canUndo && editsSinceCard === 0}
                   aiConfigured={aiConfigured}
                   empty={isEmpty}
                   selectedNode={selectedNode}

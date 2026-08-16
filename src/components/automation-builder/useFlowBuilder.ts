@@ -71,6 +71,14 @@ export function useFlowBuilder(flowId: string | null) {
   const [composing, setComposing] = useState(false);
   const [changeCard, setChangeCard] = useState<ChangeCard | null>(null);
   /**
+   * Recorded writes since the last compose answer. The chat panel's Undo
+   * button sits ON that answer, and the shared stack pops whatever is newest
+   * — so once the creator has made a later edit of their own, the button
+   * would revert the wrong thing and must go. Drags don't count: they're not
+   * recorded, not undoable, and not a reason to hide anything.
+   */
+  const [editsSinceCard, setEditsSinceCard] = useState(0);
+  /**
    * What the last composer answer actually did, in order.
    *
    * Derived from the operations the server validated, applied and saved — not
@@ -228,6 +236,7 @@ export function useFlowBuilder(flowId: string | null) {
     if (options.record !== false) pushUndo({ graph, name });
     dirty.current = true;
     setGraph(next);
+    setEditsSinceCard(n => n + 1);
     if (options.nextName !== undefined) setName(options.nextName);
   }, [graph, name, pushUndo]);
 
@@ -398,16 +407,23 @@ export function useFlowBuilder(flowId: string | null) {
         previousName: before.name,
         source: result.source,
       });
+      setEditsSinceCard(0);
       setActivity(activityLines(parseOperations(result.operations), result.flow.graph));
       highlight(result.touchedNodeIds ?? []);
     } catch (err) {
+      const summary = err instanceof Error ? err.message : 'That change could not be applied.';
+      // A failure is part of the conversation. The panel renders answers from
+      // the history, so a request that died on the network must land there
+      // too — a re-enabled input with no reply reads as being ignored.
+      setHistory(h => [...h, { prompt, summary, at: Date.now(), source: 'manual' }]);
       setChangeCard({
-        summary: err instanceof Error ? err.message : 'That change could not be applied.',
+        summary,
         touchedNodeIds: [],
         previousGraph: before.graph,
         previousName: before.name,
         source: 'manual',
       });
+      setEditsSinceCard(0);
     } finally {
       setComposing(false);
     }
@@ -470,7 +486,8 @@ export function useFlowBuilder(flowId: string | null) {
     flow, graph, name, loading, loadError,
     selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning,
-    composing, changeCard, setChangeCard, activity, clearActivity, highlighted, history,
+    composing, changeCard, setChangeCard, editsSinceCard,
+    activity, clearActivity, highlighted, history,
     problems, refreshValidation,
     updateNodeConfig, moveNode, addNode, deleteNode, connectNodes, disconnect,
     rename, relayout, commitGraph,

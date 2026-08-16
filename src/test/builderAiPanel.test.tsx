@@ -63,7 +63,9 @@ function flowFixture(): AutomationFlow {
 
 /** Held open so a test can look at the builder mid-compose. */
 let finishCompose: ((result: unknown) => void) | null = null;
-const composeFlowMock = vi.fn(async () => new Promise(resolve => { finishCompose = resolve; }));
+let rejectCompose: ((err: unknown) => void) | null = null;
+const composeFlowMock = vi.fn(async () =>
+  new Promise((resolve, reject) => { finishCompose = resolve; rejectCompose = reject; }));
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -125,6 +127,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
   finishCompose = null;
+  rejectCompose = null;
   fixtures.empty = false;
   setViewportWidth(1440);
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
@@ -223,6 +226,60 @@ describe('the conversation', () => {
 
     expect(screen.getByText('Undo')).toBeInTheDocument();
     expect(screen.getByText('View changes')).toBeInTheDocument();
+  });
+
+  it('keeps that Undo across a collapse — closing a panel must not cost an undo', async () => {
+    const user = userEvent.setup();
+    mountBuilder();
+    await screen.findByText('Preview');
+    await openPanel(user);
+    await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
+    answer({ summary: 'Added a follow-up.', touchedNodeIds: ['wait-1'] });
+    await screen.findByText('Undo');
+
+    await user.click(screen.getByRole('button', { name: 'Collapse AI' }));
+    await openPanel(user);
+
+    expect(await screen.findByText('Undo')).toBeInTheDocument();
+    expect(screen.getByText('View changes')).toBeInTheDocument();
+  });
+
+  it("withdraws the answer's Undo once a later edit would be the one undone", async () => {
+    // The button sits ON the AI's answer, but undo pops the shared stack —
+    // after the creator's own edit, clicking it would revert THAT. It goes;
+    // the full record stays behind View changes.
+    const user = userEvent.setup();
+    mountBuilder();
+    await screen.findByText('Preview');
+    await openPanel(user);
+    await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
+    answer({ summary: 'Added a follow-up.', touchedNodeIds: ['wait-1'] });
+    await screen.findByText('Undo');
+
+    // A recorded manual edit, the way the canvas makes one.
+    act(() => {
+      (canvas.props?.onConnect as (s: string, t: string, b: string) => void)('trigger', 'send', 'next');
+    });
+
+    await waitFor(() => expect(screen.queryByText('Undo')).not.toBeInTheDocument());
+    expect(screen.getByText('View changes')).toBeInTheDocument();
+  });
+
+  it('a request that dies on the network still gets an answer in the thread', async () => {
+    const user = userEvent.setup();
+    mountBuilder();
+    await screen.findByText('Preview');
+    await openPanel(user);
+
+    await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
+    act(() => { rejectCompose?.(new Error('The server is unreachable.')); });
+
+    // The failure is part of the conversation — a silently re-enabled input
+    // reads as being ignored.
+    expect(await screen.findByText('The server is unreachable.')).toBeInTheDocument();
+    expect(screen.getByText('Add a follow-up.')).toBeInTheDocument();
+    // Nothing changed, so nothing offers to be undone.
+    expect(screen.queryByText('Undo')).not.toBeInTheDocument();
   });
 
   it('says it is working, in the panel', async () => {
