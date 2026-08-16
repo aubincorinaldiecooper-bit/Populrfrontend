@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Eye, Loader2, Pause, PenLine, Zap,
+  AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Eye, Loader2, Pause, PenLine, Sparkles, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useFlowBuilder } from '../components/automation-builder/useFlowBuilder';
+import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
 import NodeInspector, { type BuilderQuestion } from '../components/automation-builder/NodeInspector';
-import AIComposer from '../components/automation-builder/AIComposer';
-import AgentActivity from '../components/automation-builder/AgentActivity';
+import AIChatPanel from '../components/automation-builder/AIChatPanel';
+import PairedRevolution from '../components/PairedRevolution';
 import PreviewPanel from '../components/automation-builder/PreviewPanel';
 import NotificationBell from '../components/automation-builder/NotificationBell';
 import NotificationsPanel from '../components/automation-builder/NotificationsPanel';
@@ -40,9 +40,15 @@ import LoadingState from '../components/LoadingState';
  * Nothing else earns a place up there. Inbox is a destination in the nav —
  * the rail carries it, badge included — not a second surface layered over
  * the canvas.
+ *
+ * The AI is a conversation the creator opens, not furniture. Collapsed, it
+ * is a small launcher in the canvas's bottom-right corner and the canvas has
+ * every pixel; opened, it is one more contextual side panel — same region,
+ * same reflow, same one-context-at-a-time rules as Preview and the bell's
+ * feed. Available always, in the way never.
  */
 
-type SidePanel = 'preview' | 'notifications' | 'history' | null;
+type SidePanel = 'preview' | 'notifications' | 'history' | 'ai' | null;
 
 /**
  * The width at which the notifications feed and a step's settings can be open
@@ -74,8 +80,8 @@ export default function AutomationBuilderPage() {
   const builder = useFlowBuilder(flowId);
   const {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
-    saveState, savedAt, delegationWarning, composing, changeCard, setChangeCard,
-    activity, clearActivity, highlighted, history,
+    saveState, savedAt, delegationWarning, composing, changeCard,
+    editsSinceCard, activity, highlighted, history,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -94,14 +100,6 @@ export default function AutomationBuilderPage() {
   const [activating, setActivating] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [addMenu, setAddMenu] = useState<{ nodeId: string; branch: 'next' | 'yes' | 'no' } | null>(null);
-  /**
-   * Whether the request that is out was asked of an empty canvas.
-   *
-   * Captured when it is sent, not read when it answers: by then the nodes it
-   * created exist, so "is the canvas empty" would say no and the finished
-   * message would call a first build "that change".
-   */
-  const [buildingFromEmpty, setBuildingFromEmpty] = useState(false);
 
   // Arriving at a step from a notification: which one to bring into view, and
   // what Populr is asking about it once we're there.
@@ -273,6 +271,50 @@ export default function AutomationBuilderPage() {
     await refreshValidation();
     setChecking(false);
   }, [refreshValidation, keepStepBesideFeed]);
+
+  /**
+   * The last compose answer the creator has actually had on screen. The
+   * launcher's dot is the difference between this and the current one — a
+   * result that landed while the panel was collapsed is news; a result they
+   * were looking at when they collapsed is not. Tracked separately from the
+   * card itself, because the card also carries the answer's Undo, and
+   * collapsing a panel must never cost the creator their undo.
+   */
+  const [seenAiCard, setSeenAiCard] = useState<ChangeCard | null>(null);
+
+  /**
+   * Open the conversation. Like the feed — and unlike Preview — the AI keeps
+   * the selected step beside it when there's room, because the selection IS
+   * its context: "make this warmer" lands on the step the creator is looking
+   * at, and closing that step to open the chat would throw away the very
+   * thing the next request is about.
+   */
+  const openAi = useCallback(() => {
+    setPanel('ai');
+    keepStepBesideFeed();
+    setSeenAiCard(changeCard);
+  }, [keepStepBesideFeed, changeCard]);
+
+  /** Collapse the conversation; whatever is on screen right now is read. */
+  const collapseAi = useCallback(() => {
+    setPanel(null);
+    setSeenAiCard(changeCard);
+  }, [changeCard]);
+
+  /**
+   * The builder opens on the conversation when there is nothing else to open
+   * on: an empty canvas has no step to select and nothing to preview, and
+   * "describe it in your own words" is the whole first-run experience. Once
+   * only, after load — a creator who then collapses it has answered the
+   * question of whether they want it open.
+   */
+  const openedForEmpty = useRef(false);
+  useEffect(() => {
+    if (loading || loadError || openedForEmpty.current) return;
+    openedForEmpty.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time post-load decision, same pattern as the loader
+    if (graph.nodes.length === 0) setPanel('ai');
+  }, [loading, loadError, graph.nodes.length]);
 
   /** Take the creator to the step a notification is about, and ask it there. */
   const openNotification = useCallback((notification: BuilderNotification) => {
@@ -566,8 +608,15 @@ export default function AutomationBuilderPage() {
             setSelectedNodeId(id);
             setAddMenu(null);
             // The mirror of togglePanel: picking a step is choosing the other
-            // context, so the whole-automation panel steps aside.
-            if (id && panel && panel !== 'notifications') setPanel(null);
+            // context, so the whole-automation panel steps aside. The feed and
+            // the AI are the exceptions — the feed is an index into the
+            // canvas, and the selection is the AI's context — but only where
+            // both columns actually fit; narrower than that, the step the
+            // creator just clicked wins the one slot.
+            if (id && panel && panel !== 'notifications' && panel !== 'ai') setPanel(null);
+            if (id && (panel === 'notifications' || panel === 'ai') && !roomForBothColumns()) {
+              setPanel(null);
+            }
           }}
           onMove={moveNode}
           onConnect={connectNodes}
@@ -576,19 +625,6 @@ export default function AutomationBuilderPage() {
           focusNodeId={focus.nodeId || null}
           focusSignal={focus.signal}
         />
-
-        {/* Building takes a few seconds of someone else's computer thinking,
-            and then it is worth saying what came back. Beside the canvas
-            rather than over it: dimming the automation to announce that the
-            automation is being worked on hides the one thing worth watching. */}
-        {(composing || activity.length > 0) && (
-          <AgentActivity
-            composing={composing}
-            building={buildingFromEmpty}
-            lines={activity}
-            onDone={clearActivity}
-          />
-        )}
 
         {isEmpty && !composing && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
@@ -638,19 +674,35 @@ export default function AutomationBuilderPage() {
 
 
 
-        <AIComposer
-          selectedNode={selectedNode}
-          composing={composing}
-          changeCard={changeCard}
-          canUndo={canUndo}
-          aiConfigured={aiConfigured}
-          empty={isEmpty}
-          historyCount={history.length}
-          onSubmit={prompt => { setBuildingFromEmpty(isEmpty); void compose(prompt); }}
-          onUndo={undo}
-          onDismissCard={() => setChangeCard(null)}
-          onOpenHistory={() => { setPanel('history'); setSelectedNodeId(null); }}
-        />
+        {/* The AI's front door when the conversation is closed: a small
+            launcher in the corner the canvas doesn't use. Working state and
+            unseen results surface HERE, because here is all the AI shows of
+            itself while collapsed — a quiet spin while it builds, a lime dot
+            when something landed after the panel was closed. */}
+        {panel !== 'ai' && (
+          <button
+            type="button"
+            onClick={openAi}
+            title="Ask Populr"
+            aria-label={changeCard && changeCard !== seenAiCard && !composing
+              ? 'Ask Populr — new result'
+              : 'Ask Populr'}
+            className="absolute bottom-5 right-5 z-30 flex h-11 w-11 items-center justify-center
+              rounded-2xl border border-[#E8E4DF] bg-white text-[#111111]
+              shadow-[0_4px_16px_rgba(17,17,17,0.10)] transition-all
+              hover:border-[#C5FF3D] hover:shadow-[0_6px_20px_rgba(17,17,17,0.14)]
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
+          >
+            {composing ? <PairedRevolution size="sm" /> : <Sparkles size={17} />}
+            {changeCard && changeCard !== seenAiCard && !composing && (
+              <span
+                aria-hidden
+                className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#C5FF3D]
+                  ring-2 ring-white"
+              />
+            )}
+          </button>
+        )}
       </div>
 
       {/* ----------------------------------------- the contextual side region
@@ -716,7 +768,34 @@ export default function AutomationBuilderPage() {
           )}
 
           {panel && (
-            <div className="w-full border-l border-[#E8E4DF] md:w-[320px] md:shrink-0">
+            <div
+              // The conversation gets a little more width than the other
+              // panels — chat bubbles wrap badly at 320 — at the cost of a
+              // slightly narrower canvas in the rare AI-beside-step case.
+              className={`w-full border-l border-[#E8E4DF] md:shrink-0
+                ${panel === 'ai' ? 'md:w-[340px]' : 'md:w-[320px]'}`}
+            >
+              {panel === 'ai' && (
+                <AIChatPanel
+                  history={history}
+                  composing={composing}
+                  changeCard={changeCard}
+                  activity={activity}
+                  // The answer's Undo pops the shared stack, so it may only
+                  // show while that answer is still the newest recorded write
+                  // — one inspector edit later it would revert the wrong
+                  // thing. Undo stays reachable in View changes regardless.
+                  canUndo={canUndo && editsSinceCard === 0}
+                  aiConfigured={aiConfigured}
+                  empty={isEmpty}
+                  selectedNode={selectedNode}
+                  onSubmit={prompt => void compose(prompt)}
+                  onUndo={undo}
+                  onOpenHistory={() => { setPanel('history'); setSelectedNodeId(null); }}
+                  onCollapse={collapseAi}
+                />
+              )}
+
               {panel === 'preview' && (
                 <PreviewPanel
                   graph={graph}

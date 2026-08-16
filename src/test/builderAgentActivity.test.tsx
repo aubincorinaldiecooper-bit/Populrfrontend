@@ -107,6 +107,11 @@ function selectNode(id: string | null) {
 }
 
 async function ask(user: ReturnType<typeof userEvent.setup>, prompt: string) {
+  // The composer lives in the collapsible Ask Populr panel now; open it from
+  // the launcher when it isn't already on screen.
+  if (!screen.queryByLabelText('Ask Populr to build or change anything…')) {
+    await user.click(await screen.findByRole('button', { name: /^Ask Populr/ }));
+  }
   await user.type(
     await screen.findByLabelText('Ask Populr to build or change anything…'),
     `${prompt}{Enter}`,
@@ -133,19 +138,20 @@ beforeEach(() => {
 });
 
 describe('what Populr says it is doing', () => {
-  it('says it is working, in the field the creator is looking at', async () => {
+  it('says it is working, where the creator asked', async () => {
     const user = userEvent.setup();
     mountBuilder();
     await screen.findByText('Preview');
 
     await ask(user, 'follow up if they don’t reply');
 
-    expect(await screen.findByText('Populr is making that change')).toBeInTheDocument();
-    // A disabled box and a spinning button read as a stall; the field says it.
+    // One place reports, and it is the conversation. A disabled box and a
+    // spinning button read as a stall, so the field says it too.
+    expect(await screen.findByText('Populr is working on it…')).toBeInTheDocument();
     expect(screen.getByLabelText('Populr is building…')).toBeInTheDocument();
   });
 
-  it('lists what it actually changed, and finishes', async () => {
+  it('lists what it actually changed, under the sentence that summarises it', async () => {
     const user = userEvent.setup();
     mountBuilder();
     await screen.findByText('Preview');
@@ -163,11 +169,11 @@ describe('what Populr says it is doing', () => {
       });
     });
 
+    expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
     expect(await screen.findByText('Added a wait of 2 days')).toBeInTheDocument();
     expect(await screen.findByText('Added a DM')).toBeInTheDocument();
-    expect(await screen.findByText('Done')).toBeInTheDocument();
-    // The in-progress line is gone: it is a report of something finished.
-    expect(screen.queryByText('Populr is making that change')).not.toBeInTheDocument();
+    // The working line is gone: this is a report of something finished.
+    expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument();
   });
 
   it('claims nothing when nothing was applied', async () => {
@@ -183,9 +189,34 @@ describe('what Populr says it is doing', () => {
       });
     });
 
+    expect(await screen.findByText("Populr couldn't work out what to change.")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByText('Populr is making that change')).not.toBeInTheDocument());
+      expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument());
+    expect(screen.queryByText('Undo')).not.toBeInTheDocument();
+  });
+
+  it('reports from one place only — nothing floats over the canvas', async () => {
+    // Three surfaces used to narrate one event into the same corner: the
+    // floating composer, the change card, and an activity card beside it.
+    // With a conversation, that is the conversation's job.
+    const user = userEvent.setup();
+    mountBuilder();
+    await screen.findByText('Preview');
+    await ask(user, 'wait two days then follow up');
+    act(() => {
+      finishCompose?.({
+        applied: true, summary: 'Added a follow-up.', source: 'model',
+        operations: [{ op: 'create_node', id: 'wait-1', type: 'wait', config: { kind: 'duration', minutes: 2880 } }],
+        touchedNodeIds: ['wait-1'], flow: flowFixture(),
+      });
+    });
+    await screen.findByText('Added a follow-up.');
+
+    expect(screen.queryByText('Populr made that change')).not.toBeInTheDocument();
+    expect(screen.queryByText('Populr built your automation')).not.toBeInTheDocument();
     expect(screen.queryByText('Done')).not.toBeInTheDocument();
+    // Exactly one place says what happened.
+    expect(screen.getAllByText('Added a follow-up.')).toHaveLength(1);
   });
 });
 

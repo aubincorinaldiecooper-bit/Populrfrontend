@@ -273,18 +273,19 @@ describe('Activate', () => {
 });
 
 describe('while Populr is building the automation', () => {
-  it('says so on the canvas, and stops saying it when the change lands', async () => {
+  it('says so in the conversation, and stops saying it when the change lands', async () => {
     const user = userEvent.setup();
     mountBuilder();
     await screen.findByText('Preview');
 
+    await user.click(await screen.findByRole('button', { name: /^Ask Populr/ }));
     await user.type(
-      screen.getByLabelText('Ask Populr to build or change anything…'),
+      await screen.findByLabelText('Ask Populr to build or change anything…'),
       'follow up if they don\'t reply{Enter}',
     );
 
     // A still canvas and a spinner inside a button read as nothing happening.
-    expect(await screen.findByText('Populr is making that change')).toBeInTheDocument();
+    expect(await screen.findByText('Populr is working on it…')).toBeInTheDocument();
 
     finishCompose?.({
       applied: true, summary: 'Added a follow-up.', source: 'model', operations: [],
@@ -292,7 +293,8 @@ describe('while Populr is building the automation', () => {
     });
 
     await waitFor(() =>
-      expect(screen.queryByText('Populr is making that change')).not.toBeInTheDocument());
+      expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument());
+    expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
   });
 });
 
