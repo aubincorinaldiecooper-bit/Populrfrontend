@@ -147,7 +147,7 @@ describe('what Populr says it is doing', () => {
 
     // One place reports, and it is the conversation. A disabled box and a
     // spinning button read as a stall, so the field says it too.
-    expect(await screen.findByText('Populr is working on it…')).toBeInTheDocument();
+    expect(await screen.findByText('Updating automation…')).toBeInTheDocument();
     expect(screen.getByLabelText('Populr is building…')).toBeInTheDocument();
   });
 
@@ -170,10 +170,11 @@ describe('what Populr says it is doing', () => {
     });
 
     expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
+    await user.click(screen.getByText('View changes'));
     expect(await screen.findByText('Added a wait of 2 days')).toBeInTheDocument();
     expect(await screen.findByText('Added a message')).toBeInTheDocument();
     // The working line is gone: this is a report of something finished.
-    expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument();
+    expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument();
   });
 
   it('claims nothing when nothing was applied', async () => {
@@ -191,7 +192,7 @@ describe('what Populr says it is doing', () => {
 
     expect(await screen.findByText("Populr couldn't work out what to change.")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument());
+      expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument());
     expect(screen.queryByText('Undo')).not.toBeInTheDocument();
   });
 
