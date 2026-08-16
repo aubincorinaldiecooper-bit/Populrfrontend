@@ -3,8 +3,7 @@ import { useSearchParams } from 'react-router';
 import { AlertCircle, ArrowLeft, MessagesSquare } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import ConversationList from '../components/inbox/ConversationList';
-import ConversationThread from '../components/inbox/ConversationThread';
-import ContactPanel from '../components/inbox/ContactPanel';
+import ContactConversationView from '../components/inbox/ContactConversationView';
 import { useConversations } from '../components/inbox/useConversations';
 import { isBackendConfigured } from '../lib/api';
 
@@ -30,12 +29,11 @@ export default function InboxPage() {
   const backendConfigured = isBackendConfigured();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [contactOpen, setContactOpen] = useState(false);
 
   const selected = searchParams.get('c');
   const {
     conversations, loading, error, thread, threadLoading, selectedId, sending,
-    replyTarget, select, refresh, send,
+    replyTarget, select, refresh, send, updateThread,
   } = useConversations(search);
 
   // The URL is the source of truth for which conversation is open, so a
@@ -49,8 +47,6 @@ export default function InboxPage() {
     if (contactId) next.set('c', contactId);
     else next.delete('c');
     setSearchParams(next, { replace: true });
-    // Opening a different person closes the panel about the last one.
-    setContactOpen(false);
   }, [searchParams, setSearchParams]);
 
   if (!backendConfigured) {
@@ -131,14 +127,17 @@ export default function InboxPage() {
             )}
 
             {thread ? (
-              <ConversationThread
+              // Keyed by person: opening someone else resets the view to its
+              // default — conversation first, context closed — the same way
+              // everywhere.
+              <ContactConversationView
+                key={thread.contact.id}
                 detail={thread}
                 loading={threadLoading}
                 sending={sending}
-                contactOpen={contactOpen}
-                onOpenContact={() => setContactOpen(v => !v)}
-                onSend={send}
                 replyTarget={replyTarget}
+                onSend={send}
+                onDetailChanged={updateThread}
               />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
@@ -150,27 +149,6 @@ export default function InboxPage() {
             )}
           </div>
 
-          {/* --------------------------------------------------------- contact */}
-          {thread && contactOpen && (
-            <>
-              {/* Wide: a third pane. Narrow: an overlay, because a 280px column
-                  beside a conversation is neither. One panel either way — two
-                  copies would put the same person in the accessibility tree
-                  twice, with two of every control inside. */}
-              <div
-                aria-hidden="true"
-                onClick={() => setContactOpen(false)}
-                className="lg:hidden fixed inset-0 z-[60] bg-[#111111]/10"
-              />
-              <div className="fixed inset-y-0 right-0 z-[70] w-full max-w-[340px] bg-white
-                shadow-[0_0_40px_rgba(17,17,17,0.12)]
-                motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200
-                lg:static lg:z-auto lg:w-[280px] lg:max-w-none lg:shrink-0 lg:min-h-0
-                lg:border-l lg:border-[#EFECE6] lg:shadow-none lg:animate-none">
-                <ContactPanel detail={thread} onClose={() => setContactOpen(false)} />
-              </div>
-            </>
-          )}
         </div>
       )}
     </div>

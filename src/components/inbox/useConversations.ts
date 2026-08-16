@@ -28,15 +28,16 @@ export interface ConversationsState {
   threadLoading: boolean;
   selectedId: string | null;
   sending: boolean;
-  /**
-   * The inbox item the open thread replies through, remembered independently
-   * of the visible list. Searching filters the list; it does not make the
-   * conversation you already have open unanswerable.
-   */
+  /** The inbox item the open thread replies through — from the thread's own
+   *  detail, so an open conversation is answerable no matter how it was
+   *  reached or what the list is currently filtered to. */
   replyTarget: string | null;
   select: (contactId: string | null) => void;
   refresh: () => void;
   send: (text: string) => Promise<boolean>;
+  /** Panel edits (notes, stage, tags) merge into the open thread — an
+   *  updater, so overlapping edits each land their own field. */
+  updateThread: (update: (current: ContactDetail) => ContactDetail) => void;
 }
 
 export function useConversations(search: string): ConversationsState {
@@ -50,17 +51,6 @@ export function useConversations(search: string): ConversationsState {
   const [thread, setThread] = useState<ContactDetail | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [sending, setSending] = useState(false);
-
-  /**
-   * contactId → the inbox item to reply through, accumulated across loads.
-   *
-   * The list is filtered by search; the open conversation is not. Reading the
-   * reply target out of the visible list meant searching for something that
-   * excluded the person you were talking to told you there was nothing to
-   * reply to — and made send fail silently, because it looked them up the
-   * same way. This remembers, so an open thread stays answerable.
-   */
-  const [replyTargets, setReplyTargets] = useState<Map<string, string | null>>(new Map());
 
   // Monotonic request ids. Search is un-debounced and threads are opened by
   // clicking down a list, so without these an older response can land last and
@@ -77,11 +67,6 @@ export function useConversations(search: string): ConversationsState {
       .then(res => {
         if (seq !== listSeq.current) return;
         setConversations(res.conversations);
-        setReplyTargets(prev => {
-          const next = new Map(prev);
-          for (const c of res.conversations) next.set(c.contactId, c.latestInboxItemId);
-          return next;
-        });
       })
       .catch(err => {
         if (seq !== listSeq.current) return;
@@ -135,10 +120,14 @@ export function useConversations(search: string): ConversationsState {
     loadThread(contactId);
   }, [loadThread]);
 
-  const replyTarget = selectedId ? replyTargets.get(selectedId) ?? null : null;
+  // The thread's own record of how a reply goes out. The list used to be the
+  // only carrier of this, which meant a search that filtered the open person
+  // out silently made their conversation unanswerable — the detail carrying
+  // its own target removed that whole class of problem.
+  const replyTarget = thread?.latestInboxItemId ?? null;
 
   const send = useCallback(async (text: string): Promise<boolean> => {
-    const target = selectedId ? replyTargets.get(selectedId) ?? null : null;
+    const target = thread?.latestInboxItemId ?? null;
     if (!target) {
       // Replies go out through an inbox item — it carries the channel and the
       // message being answered. Saying so is better than a send that fails,
@@ -172,10 +161,12 @@ export function useConversations(search: string): ConversationsState {
     } finally {
       setSending(false);
     }
-  }, [replyTargets, selectedId, showToast, refresh, loadThread]);
+  }, [thread, selectedId, showToast, refresh, loadThread]);
 
   return {
     conversations, loading, error, thread, threadLoading, selectedId, sending,
     replyTarget, select, refresh, send,
+    updateThread: (update: (current: ContactDetail) => ContactDetail) =>
+      setThread(prev => (prev ? update(prev) : prev)),
   };
 }

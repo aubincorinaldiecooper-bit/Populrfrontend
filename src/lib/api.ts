@@ -622,6 +622,14 @@ export interface ContactRecord {
   last_message_at: string | null;
   last_automation_at: string | null;
   tags: string[];
+  /**
+   * How this person arrived, for the directory's From column: the first flow
+   * they entered, or the pre-flows source automation's name. Null when
+   * neither is on record — the column shows nothing rather than a guess.
+   * List responses only; the detail answers the same question through
+   * `automations` / `sourceAutomation`.
+   */
+  from_automation?: string | null;
 }
 
 export interface ContactMessage {
@@ -700,6 +708,14 @@ export interface ContactAutomation {
 
 export interface ContactDetail {
   contact: ContactRecord;
+  /**
+   * The inbox item a reply to this person goes out through, or null when the
+   * thread has nothing to reply to yet. On the detail rather than only on the
+   * conversations list so the conversation view is self-sufficient: one fetch
+   * answers who they are, what was said, and how to reply — whichever page is
+   * asking.
+   */
+  latestInboxItemId: string | null;
   sourcePost: { id: string; caption: string | null; url: string | null; platform: string } | null;
   sourceAutomation: { id: string; name: string } | null;
   /** Automations entered, oldest first. Empty for a contact no automation reached. */
