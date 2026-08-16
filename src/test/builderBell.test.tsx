@@ -285,7 +285,7 @@ describe('while Populr is building the automation', () => {
     );
 
     // A still canvas and a spinner inside a button read as nothing happening.
-    expect(await screen.findByText('Populr is working on it…')).toBeInTheDocument();
+    expect(await screen.findByText('Updating automation…')).toBeInTheDocument();
 
     finishCompose?.({
       applied: true, summary: 'Added a follow-up.', source: 'model', operations: [],
@@ -293,7 +293,7 @@ describe('while Populr is building the automation', () => {
     });
 
     await waitFor(() =>
-      expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument());
+      expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument());
     expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
   });
 });
