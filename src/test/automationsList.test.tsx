@@ -126,7 +126,7 @@ describe('what a card says about an automation', () => {
 
     expect(await screen.findByText('Menu comments')).toBeInTheDocument();
     expect(screen.getByText('Someone comments “menu”')).toBeInTheDocument();
-    expect(screen.getByText('→ Sends a DM, waits 2 days, then tags them warm_lead')).toBeInTheDocument();
+    expect(screen.getByText('→ Messages them, waits 2 days, then tags them warm_lead')).toBeInTheDocument();
     // The old wording named node types and counted them.
     expect(screen.queryByText(/1 Send/)).not.toBeInTheDocument();
   });
@@ -279,7 +279,7 @@ describe('describing a graph', () => {
       { id: 'e5', source: 's2', target: 'a2', branch: 'next' },
     ];
     expect(describeFlow(graph(nodes, edges)).then)
-      .toBe('Sends a DM, waits 2 days, then tags them warm_lead, and 2 more steps');
+      .toBe('Messages them, waits 2 days, then tags them warm_lead, and 2 more steps');
   });
 
   it('says so when an automation has no trigger yet', () => {

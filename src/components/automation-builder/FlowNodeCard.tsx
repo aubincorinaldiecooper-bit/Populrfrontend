@@ -77,7 +77,7 @@ function summarize(node: FlowNode): string {
       const text = cfg.text.trim();
       if (text) return text.length > 64 ? `${text.slice(0, 64)}…` : text;
       if (cfg.mediaUrl) return 'An attachment';
-      return cfg.kind === 'dm' ? 'Write the DM' : 'Write the reply';
+      return 'Write the message';
     }
     case 'wait':
       return describeDuration(readWait(node).minutes);
@@ -91,10 +91,23 @@ function summarize(node: FlowNode): string {
   }
 }
 
-/** The word in the node header — the type, refined by its kind where useful. */
+/**
+ * The word in the node header. Always the step's plain name — a Message is a
+ * MESSAGE whether it goes out privately or publicly. The conversation is
+ * already happening in DMs, so "Send DM" explained a mechanic nobody asked
+ * about; where a message goes is configuration, and the one case worth
+ * flagging on the canvas (a public reply) gets a small secondary label
+ * instead of a different name.
+ */
 function heading(node: FlowNode): string {
-  if (node.type === 'send') return readSend(node).kind === 'dm' ? 'Send DM' : 'Reply';
   return NODE_LABEL[node.type];
+}
+
+/** A quiet qualifier under the header, only when the step departs from the
+ *  default a creator would assume. */
+function subheading(node: FlowNode): string | null {
+  if (node.type === 'send' && readSend(node).kind === 'comment_reply') return 'Public reply';
+  return null;
 }
 
 function NodeIcon({ node }: { node: FlowNode }) {
@@ -237,6 +250,10 @@ function FlowNodeCardInner({ data }: NodeProps) {
             <PlatformIcon size={12} className="ml-auto text-[#8A857E]" />
           )}
         </div>
+
+        {subheading(node) && (
+          <p className="mt-0.5 text-[10.5px] text-[#8A857E]">{subheading(node)}</p>
+        )}
 
         <p className="mt-1 text-[13px] leading-snug text-[#111111] line-clamp-3">
           {summarize(node)}

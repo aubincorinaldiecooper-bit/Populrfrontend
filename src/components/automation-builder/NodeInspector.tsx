@@ -635,25 +635,35 @@ function SendInspector({
   const cfg = readSend(node);
   const name = capabilities ? platformMeta(capabilities.platform).name : 'This platform';
 
+  // A choice is only worth showing when there is one. On a platform with no
+  // public replies, a Message can only be a direct message — asking "send as"
+  // would make the creator think about a channel they cannot change. The
+  // field stays visible when the step is ALREADY set to something the
+  // platform refuses, so the warning under it has somewhere to live.
+  const onlyOneWayToSend =
+    capabilities !== null && !capabilities.supportsCommentReplies && cfg.kind === 'dm';
+
   return (
     <>
-      <Section>
-        <Label>Send as</Label>
-        <Select
-          value={cfg.kind}
-          ariaLabel="Send as"
-          options={SEND_OPTIONS.map(o => ({ value: o.value, label: o.label, description: o.description }))}
-          onChange={kind => onChange({ kind })}
-        />
-        {cfg.kind === 'dm' && capabilities && !capabilities.supportsCommentToDM && (
-          <p className="mt-1.5 text-[11px] text-[#B45309]">
-            {name} won't let an automation DM someone because they commented.
-          </p>
-        )}
-        {cfg.kind === 'comment_reply' && capabilities && !capabilities.supportsCommentReplies && (
-          <p className="mt-1.5 text-[11px] text-[#B45309]">{name} doesn't support public replies.</p>
-        )}
-      </Section>
+      {!onlyOneWayToSend && (
+        <Section>
+          <Label>Send as</Label>
+          <Select
+            value={cfg.kind}
+            ariaLabel="Send as"
+            options={SEND_OPTIONS.map(o => ({ value: o.value, label: o.label, description: o.description }))}
+            onChange={kind => onChange({ kind })}
+          />
+          {cfg.kind === 'dm' && capabilities && !capabilities.supportsCommentToDM && (
+            <p className="mt-1.5 text-[11px] text-[#B45309]">
+              {name} won't let an automation DM someone because they commented.
+            </p>
+          )}
+          {cfg.kind === 'comment_reply' && capabilities && !capabilities.supportsCommentReplies && (
+            <p className="mt-1.5 text-[11px] text-[#B45309]">{name} doesn't support public replies.</p>
+          )}
+        </Section>
+      )}
 
       <Section field="text">
         <Label hint="Use {first_name} to greet them by name.">Message</Label>
@@ -706,7 +716,7 @@ function ActionInspector({
   return (
     <>
       <Section>
-        <Label hint="This happens in Populr — nothing is sent to them.">Then do</Label>
+        <Label hint="This happens in Populr — nothing is sent to them.">Do something</Label>
         <Select
           value={cfg.kind}
           ariaLabel="What to do"
