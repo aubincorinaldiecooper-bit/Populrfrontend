@@ -43,16 +43,22 @@ export function emptyGraph(): FlowGraph {
 }
 
 /** The creator-facing word for each step type. Used everywhere: node headers,
- *  the add-step menu, Review's prose, the composer's context chip. */
+ *  the add-step menu, Review's prose, the composer's context chip.
+ *
+ *  The test for every word here: would a ten-year-old know what happens when
+ *  they click it? The canvas should read like a sentence — WHEN someone
+ *  comments "menu", MESSAGE here's tonight's menu, WAIT 2 days, IF they
+ *  replied… "Message" describes what the creator wants; where it goes (DM or
+ *  public) is configuration inside the step, not its name. These are labels
+ *  only — the stored node types underneath never change. */
 export const NODE_LABEL: Record<FlowNodeType, string> = {
   trigger: 'When',
   condition: 'If',
-  send: 'Send',
+  send: 'Message',
   wait: 'Wait',
-  // "Action" named the category, not the thing — it told a creator nothing
-  // about what the step would do. "Then do" reads as the start of a sentence
-  // its own settings finish: Then do → add a tag.
-  action: 'Then do',
+  // "Action" named the category and "Then do" sounded like the flow engine
+  // talking. "Do something" is what it is.
+  action: 'Do something',
 };
 
 export const NODE_KINDS = {
@@ -228,10 +234,10 @@ export function newNodeId(type: FlowNodeType, graph: FlowGraph): string {
  *  Lives here rather than beside the canvas component so a component file
  *  exports only components (fast refresh). */
 export const STEP_OPTIONS: { type: FlowNodeType; label: string; hint: string }[] = [
-  { type: 'send', label: 'Send', hint: 'Message them — a DM or a public reply' },
-  { type: 'wait', label: 'Wait', hint: 'Pause before the next step runs' },
-  { type: 'condition', label: 'If', hint: 'Ask a question and split the path' },
-  { type: 'action', label: 'Then do', hint: 'Tag them, move their stage, or tell you' },
+  { type: 'send', label: 'Message', hint: 'Reply to them' },
+  { type: 'wait', label: 'Wait', hint: 'Pause before the next step' },
+  { type: 'condition', label: 'If', hint: 'Choose what happens based on their reply' },
+  { type: 'action', label: 'Do something', hint: 'Tag them, update them, or notify you' },
 ];
 
 /**
@@ -301,12 +307,12 @@ export const CONDITION_OPTIONS: { value: string; label: string; description: str
 export const SEND_OPTIONS: { value: string; label: string; description: string }[] = [
   {
     value: 'dm',
-    label: 'A direct message',
+    label: 'Direct message',
     description: 'Private. Can carry a tracked link only they see.',
   },
   {
     value: 'comment_reply',
-    label: 'A public reply',
+    label: 'Public reply',
     description: 'Visible under the post. Never carries a tracked link.',
   },
 ];

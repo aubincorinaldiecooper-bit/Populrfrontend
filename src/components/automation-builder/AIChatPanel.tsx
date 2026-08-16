@@ -27,7 +27,7 @@ import type { ChangeCard, HistoryEntry } from './useFlowBuilder';
  */
 
 const SUGGESTIONS = [
-  'DM someone when they comment a keyword',
+  'Message someone when they comment a keyword',
   'Reply when someone responds to my story',
   'Follow up if someone doesn\'t respond',
   'Capture an email before sending a link',

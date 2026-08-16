@@ -171,7 +171,7 @@ describe('what Populr says it is doing', () => {
 
     expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
     expect(await screen.findByText('Added a wait of 2 days')).toBeInTheDocument();
-    expect(await screen.findByText('Added a DM')).toBeInTheDocument();
+    expect(await screen.findByText('Added a message')).toBeInTheDocument();
     // The working line is gone: this is a report of something finished.
     expect(screen.queryByText('Populr is working on it…')).not.toBeInTheDocument();
   });
@@ -398,7 +398,7 @@ describe('turning operations into what happened', () => {
       { op: 'create_node', id: 't', type: 'trigger', config: { kind: 'comment' } },
       { op: 'connect', source: 't', target: 's', branch: 'next' },
       { op: 'move_node', id: 't', position: { x: 0, y: 0 } },
-    ])).toEqual(['Added the comment trigger']);
+    ])).toEqual(['Added the When step — someone comments']);
   });
 
   it('mentions rewiring only when it is the whole change', () => {
@@ -408,7 +408,7 @@ describe('turning operations into what happened', () => {
 
   it('names the step an update touched', () => {
     expect(lines([{ op: 'update_node', id: 'send', config: { text: 'hi' } }]))
-      .toEqual(['Updated the Send step']);
+      .toEqual(['Updated the Message step']);
   });
 
   it('falls back rather than guessing at a step it cannot find', () => {

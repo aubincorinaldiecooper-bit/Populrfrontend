@@ -307,7 +307,7 @@ describe('selection context', () => {
     // The panel stays open — the selection is its context, not a competitor —
     // and says which step the next request lands on.
     expect(screen.getByRole('complementary', { name: 'Ask Populr' })).toBeInTheDocument();
-    expect(await screen.findByText('Editing: Send')).toBeInTheDocument();
+    expect(await screen.findByText('Editing: Message')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Ask Populr to change this step…'), 'Make this less formal.{Enter}');
 
@@ -322,11 +322,11 @@ describe('selection context', () => {
     await screen.findByText('Preview');
     await openPanel(user);
     selectNode('send');
-    await screen.findByText('Editing: Send');
+    await screen.findByText('Editing: Message');
 
     selectNode(null);
 
-    await waitFor(() => expect(screen.queryByText('Editing: Send')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Editing: Message')).not.toBeInTheDocument());
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Rename it.{Enter}');
     expect(composeFlowMock).toHaveBeenCalledWith('flow_1', {
       prompt: 'Rename it.', selectedNodeId: null,
@@ -382,8 +382,8 @@ describe('the first run', () => {
     expect(screen.getByText('What should happen?')).toBeInTheDocument();
 
     // A suggestion is a starting point, not a command: it fills the input.
-    await user.click(screen.getByText('DM someone when they comment a keyword'));
-    expect(screen.getByLabelText(COMPOSER_LABEL)).toHaveValue('DM someone when they comment a keyword');
+    await user.click(screen.getByText('Message someone when they comment a keyword'));
+    expect(screen.getByLabelText(COMPOSER_LABEL)).toHaveValue('Message someone when they comment a keyword');
     expect(composeFlowMock).not.toHaveBeenCalled();
   });
 

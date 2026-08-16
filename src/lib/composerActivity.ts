@@ -47,9 +47,10 @@ function describeCreate(op: Extract<FlowOperation, { op: 'create_node' }>): stri
   const kind = str(cfg.kind);
   switch (op.type) {
     case 'trigger':
-      return kind === 'dm' ? 'Added the DM trigger' : 'Added the comment trigger';
+      // "When" is the step's name; "trigger" is the engine's word for it.
+      return kind === 'dm' ? 'Added the When step — someone DMs you' : 'Added the When step — someone comments';
     case 'send':
-      return kind === 'comment_reply' ? 'Added a public reply' : 'Added a DM';
+      return kind === 'comment_reply' ? 'Added a public reply' : 'Added a message';
     case 'wait': {
       const minutes = typeof cfg.minutes === 'number' ? cfg.minutes : null;
       // "a wait of 2 days" rather than "a 2 days wait": describeDuration

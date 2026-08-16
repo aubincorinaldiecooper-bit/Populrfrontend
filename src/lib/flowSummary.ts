@@ -13,7 +13,7 @@ import {
  * the person on the other end experiences. Two short lines instead —
  *
  *   Someone comments “menu”
- *   → Sends a DM, waits 2 days, then sends a DM
+ *   → Messages them, waits 2 days, then messages them
  *
  * — because the card's job is to let someone recognise an automation without
  * opening it.
@@ -40,7 +40,11 @@ function describeStep(node: FlowNode): string | null {
   switch (node.type) {
     case 'send': {
       const cfg = readSend(node);
-      return cfg.kind === 'comment_reply' ? 'replies to their comment' : 'sends a DM';
+      // "Messages them", not "sends a DM": the card describes a conversation,
+      // and the channel is the step's configuration, not its story. A public
+      // reply is the one variant worth naming, because it is visible to
+      // everyone rather than just to them.
+      return cfg.kind === 'comment_reply' ? 'replies to their comment' : 'messages them';
     }
     case 'wait': {
       return `waits ${describeDuration(readWait(node).minutes)}`;
