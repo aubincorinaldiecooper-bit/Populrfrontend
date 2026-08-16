@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { Search, Plus, AlertCircle, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
-import InboxLauncher from '../components/inbox/InboxButton';
 import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
 import AutomationCard from '../components/automations/AutomationCard';
@@ -466,7 +465,6 @@ export default function AutomationsPage() {
         subtitle={loading ? 'Loading...' : `${live.length} live · ${flows.length} total`}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-            <InboxLauncher />
             <div className="relative w-full sm:w-auto">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
               <input

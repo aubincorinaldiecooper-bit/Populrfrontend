@@ -5,7 +5,6 @@ import {
   Pause, TrendingUp, RefreshCw, MousePointerClick, MessageCircleReply, Eye,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
-import InboxLauncher from '../components/inbox/InboxButton';
 import PlatformDot from '../components/PlatformDot';
 import { StatGridSkeleton, ListSkeleton } from '../components/Skeleton';
 import { isBackendConfigured, fetchDashboard } from '../lib/api';
@@ -130,7 +129,6 @@ export default function HomePage() {
         subtitle="Your automations, working while you don't."
         action={
           <>
-          <InboxLauncher />
           <Link to="/automations/new" className="pop-btn-primary">
             <Plus size={15} />Create an automation
           </Link>

@@ -4,9 +4,12 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Menu, X, Plus, PanelLeftClose } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
+import { useInboxUnread } from './inbox/useInboxUnread';
 
 
-function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+function NavContent({ pathname, onNavigate, inboxCount }: {
+  pathname: string; onNavigate: () => void; inboxCount: number;
+}) {
   return (
     <>
       {/* Brand */}
@@ -43,6 +46,15 @@ function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate: ()
             >
               <Icon size={20} strokeWidth={active ? 2.4 : 2} className="transition-transform group-hover:scale-110" />
               <span className="text-[15px]">{item.label}</span>
+              {item.path === '/inbox' && inboxCount > 0 && (
+                // The waiting count the retired drawer-launcher used to
+                // carry. The number is in the pill; the words are for ears.
+                <span className="ml-auto rounded-full bg-[#111111] px-1.5 text-[10.5px] font-semibold
+                  leading-[17px] text-white">
+                  {inboxCount > 9 ? '9+' : inboxCount}
+                  <span className="sr-only"> conversations waiting</span>
+                </span>
+              )}
             </Link>
           );
         })}
@@ -71,6 +83,9 @@ export default function Sidebar({
 }: { railMode?: boolean; onCollapse?: () => void } = {}) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Hoisted so the desktop column and the mobile drawer share one poll
+  // instead of running one each.
+  const { count: inboxCount } = useInboxUnread();
   const reduceMotion = useReducedMotion();
   const drawerRef = useRef<HTMLElement | null>(null);
   const toggleRef = useRef<HTMLButtonElement | null>(null);
@@ -177,7 +192,7 @@ export default function Sidebar({
             <PanelLeftClose size={17} strokeWidth={1.9} />
           </button>
         )}
-        <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
+        <NavContent pathname={location.pathname} onNavigate={closeMobileNav} inboxCount={inboxCount} />
       </motion.aside>
       )}
 
@@ -207,7 +222,7 @@ export default function Sidebar({
               // notch without this.
               className="md:hidden fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-surface-variant z-[50] flex flex-col p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] gap-7 overflow-y-auto"
             >
-              <NavContent pathname={location.pathname} onNavigate={closeMobileNav} />
+              <NavContent pathname={location.pathname} onNavigate={closeMobileNav} inboxCount={inboxCount} />
             </motion.aside>
           </>
         )}
