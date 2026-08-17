@@ -18,6 +18,7 @@ import CampaignsPage from './pages/CampaignsPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import InboxPage from './pages/InboxPage';
 import SettingsPage from './pages/SettingsPage';
+import InviteAcceptPage from './pages/InviteAcceptPage';
 
 // Hidden pages (contextual, not in main nav)
 
@@ -132,6 +133,13 @@ function AppContent() {
         <Route path="/content/:postId" element={<Suspense fallback={<LoadingState />}><PostDetailPage /></Suspense>} />
         <Route path="/analytics" element={<Suspense fallback={<LoadingState />}><AnalyticsPage /></Suspense>} />
       </Route>
+      {/* A team invite link. Auth-protected like everything below the gate —
+          which is precisely what carries the invitation through sign-in: the
+          gate remembers /invite/<token> before bouncing to /login, and
+          /auth/complete returns here once the recipient has an account. It
+          sits outside Layout on purpose: someone arriving on their first-ever
+          Populr link should see the invitation, not a workspace shell. */}
+      <Route path="/invite/:token" element={<InviteAcceptPage />} />
       <Route path="/dashboard" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

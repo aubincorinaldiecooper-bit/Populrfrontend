@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
 import { LogOut, Waypoints, ArrowRight, AlertCircle, Loader2, Pause, Play } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import TeamSection from '../components/settings/TeamSection';
 import {
   isBackendConfigured, fetchWorkspaceSettings, setWorkspacePause,
 } from '../lib/api';
@@ -197,6 +198,11 @@ export default function SettingsPage() {
             )}
           </section>
         )}
+
+        {/* Collaborators. Gated on the backend being configured for the same
+            reason as the pause switch: without it there is nothing to load
+            and nothing an invite could be sent through. */}
+        {backendConfigured && <TeamSection />}
 
         {/* Connected social accounts are managed on Channels — pointing there
             keeps one home for that rather than a second, drifting copy of the
