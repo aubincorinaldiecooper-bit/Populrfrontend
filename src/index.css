@@ -423,6 +423,21 @@
   transition: none;
 }
 
+/* ─── Toasts vs the mobile top bar ───
+ * Sonner switches to its `mobileOffset` at its own fixed 600px breakpoint,
+ * but Populr's mobile top bar (Sidebar.tsx) stays until Tailwind's md at
+ * 768px. Between the two, Sonner is back on the 16px desktop offset while
+ * the bar is still on screen, and a top-positioned toast slides underneath
+ * it. Bridge the seam by holding the toaster's top offset below the bar —
+ * the same 4rem + safe-area expression the bar itself is sized with.
+ * `!important` because Sonner writes --offset-top as an inline style on
+ * the toaster element; nothing weaker can outrank that. */
+@media (min-width: 601px) and (max-width: 767px) {
+  [data-sonner-toaster][data-y-position='top'] {
+    --offset-top: calc(4rem + env(safe-area-inset-top) + 0.75rem) !important;
+  }
+}
+
 /* ─── Reduced motion ───
  * Populr animates in several independent systems — Tailwind utilities,
  * tailwindcss-animate, Framer Motion, and the shimmer above — so honoring
