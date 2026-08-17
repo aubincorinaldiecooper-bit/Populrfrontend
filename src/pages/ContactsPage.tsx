@@ -371,7 +371,7 @@ function ContactConversationRoute({
 
   return (
     <div className="p-4 lg:p-6 max-w-[1100px] mx-auto flex flex-col
-      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-screen">
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-[calc(100vh-3.5rem)]">
       <button
         onClick={onBack}
         className="pop-btn-ghost mb-4 self-start"

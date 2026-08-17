@@ -93,14 +93,25 @@
     --success-soft: 145 52% 92%;            /* #E0F5E9 */
     --warning: 32 95% 44%;                  /* #D97706 */
     --warning-soft: 34 100% 94%;            /* #FFF3E0 */
+    /* The sidebar's own palette. The template shipped these dormant, and
+     * they turn out to be exact HSL conversions of the Material-3 literals
+     * the sidebar has rendered all along (#faf9f6 / #1a1c1a / #d3ef6c /
+     * #e3e2e0) — so the shell reads its colors from here now, same pixels.
+     * Two values are corrected to what actually ships: accent-foreground is
+     * the olive the active pill's text has always been (#596c00, not
+     * black), and primary is the badge charcoal (#111111, not pure black).
+     * muted/muted-foreground are Populr extensions: the hover fill
+     * (#e9e8e5) and the resting item text (#4c4546). */
     --sidebar-background: 45 29% 97%;
     --sidebar-foreground: 120 4% 11%;
-    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary: 0 0% 7%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 73 80% 68%;
-    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-accent-foreground: 71 100% 21%;
     --sidebar-border: 40 5% 88%;
-    --sidebar-ring: 0 0% 0%;
+    --sidebar-ring: 78 100% 62%;
+    --sidebar-muted: 45 8% 91%;
+    --sidebar-muted-foreground: 351 5% 28%;
   }
 
   * {
