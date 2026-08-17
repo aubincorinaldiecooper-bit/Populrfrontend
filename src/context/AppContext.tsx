@@ -477,6 +477,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authedUserId) return;
+    // Data fetch from the backend on sign-in, not derived state — the same
+    // pattern (and the same lint carve-out) as the accounts refresh above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshWorkspaceAccess();
   }, [authedUserId, refreshWorkspaceAccess]);
 
