@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
+import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
 import { Search, Plus, AlertCircle, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
@@ -322,7 +323,7 @@ export default function AutomationsPage() {
         // still be DMing commenters, and saying "Automation paused" over the
         // top of that would be the reassuring version of a lie.
         if (result.warning) {
-          showToast(result.warning, 'error', { durationMs: 10000 });
+          showToast(isCreatorSafe(result.warning) ? result.warning : GENERIC_ERROR, 'error', { durationMs: 10000 });
         } else {
           showToast(
             result.cancelledRuns > 0
@@ -334,7 +335,7 @@ export default function AutomationsPage() {
       } else {
         const result = await activateFlow(flow.id);
         setFlows(prev => prev.map(f => (f.id === flow.id ? result.flow : f)));
-        showToast('Automation activated', 'success');
+        showToast('Automation is live', 'success');
       }
     } catch (err) {
       if (err instanceof FlowNotReadyError) {
@@ -448,7 +449,7 @@ export default function AutomationsPage() {
         <div className="pop-card p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
               Populr can&apos;t reach its server, so your automations can&apos;t be loaded right now.
             </p>
@@ -462,7 +463,7 @@ export default function AutomationsPage() {
     <div className="pop-page">
       <PageHeader
         title="Automations"
-        subtitle={loading ? 'Loading...' : `${live.length} live · ${flows.length} total`}
+        subtitle={loading ? 'Loading…' : `${live.length} live · ${flows.length} total`}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
             <div className="relative w-full sm:w-auto">
@@ -523,7 +524,7 @@ export default function AutomationsPage() {
       ) : !error && filtered.length === 0 ? (
         <EmptyState
           icon="automations"
-          title={search || statusTab !== 'all' ? 'No automations found' : 'No automations yet'}
+          title={search || statusTab !== 'all' ? 'No automations match that search' : 'No automations yet'}
           description="Describe what should happen and Populr builds the steps for you."
           action={
             <button onClick={startNew} className="pop-btn-primary" disabled={creating}>

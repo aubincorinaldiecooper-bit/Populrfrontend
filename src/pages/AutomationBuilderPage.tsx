@@ -21,6 +21,7 @@ import {
   type ConnectedAccount, type FlowSimulationResult, type PlatformCapabilities,
 } from '../lib/api';
 import { platformMeta } from '../lib/platformMeta';
+import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
 import { derivedNotifications, type BuilderNotification } from '../lib/builderNotifications';
 import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
@@ -371,7 +372,7 @@ export default function AutomationBuilderPage() {
       // the bell only ever shows what activation itself would refuse over.
       const result = await activate();
       if (result.ok) {
-        showToast('Automation activated', 'success');
+        showToast('Automation is live', 'success');
         setPanel(null);
         return;
       }
@@ -384,7 +385,7 @@ export default function AutomationBuilderPage() {
       setHighlightId(first?.id ?? null);
       showToast('Populr needs a couple of things first', 'error');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not activate.', 'error');
+      showToast(err instanceof Error ? err.message : "Couldn't take this live.", 'error');
     } finally {
       setActivating(false);
     }
@@ -398,7 +399,7 @@ export default function AutomationBuilderPage() {
       // contradict it in the same breath, and the reassuring message is the
       // one people believe.
       if (result?.warning) {
-        showToast(result.warning, 'error', { durationMs: 10000 });
+        showToast(isCreatorSafe(result.warning) ? result.warning : GENERIC_ERROR, 'error', { durationMs: 10000 });
       } else {
         showToast(
           result && result.cancelledRuns > 0
@@ -590,7 +591,7 @@ export default function AutomationBuilderPage() {
             px-4 md:px-6 py-2.5 text-[13px] text-[#7A5A12]"
         >
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-[#B8860B]" />
-          <p className="flex-1">{delegationWarning}</p>
+          <p className="flex-1">{isCreatorSafe(delegationWarning) ? delegationWarning : GENERIC_ERROR}</p>
         </div>
       )}
 

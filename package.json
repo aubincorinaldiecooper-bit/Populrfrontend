@@ -19,8 +19,6 @@
     "@astryxdesign/cli": "^0.2.0",
     "@astryxdesign/core": "^0.2.0",
     "@astryxdesign/theme-neutral": "^0.2.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@fontsource-variable/roboto-flex": "^5.3.0",
     "@xyflow/react": "^12.11.2",
     "better-auth": "^1.6.25",
     "embla-carousel-react": "^8.6.0",

@@ -13,6 +13,7 @@ import { Banner } from '@astryxdesign/core/Banner';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { useApp } from '../context/AppContext';
+import { isCreatorSafe } from '../lib/voice';
 import PageHeader from '../components/PageHeader';
 import PlatformPreviewCard from '../components/create-post/PlatformPreviewCard';
 import {
@@ -318,7 +319,7 @@ export default function CreatePostPage() {
         <PageHeader title="Create Post" />
         <Banner
           status="warning"
-          title="Populr isn't connected to a backend yet"
+          title="Populr isn't connected to its server yet"
           description="Populr can't reach its server, so posts can't be created right now."
         />
       </div>
@@ -383,7 +384,7 @@ export default function CreatePostPage() {
               })()}
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-[#111111]">{platformLabel(t.platform)}</p>
-                {t.status === 'failed' && t.error && <p className="text-[11px] text-[#DC2626] mt-0.5">{t.error}</p>}
+                {t.status === 'failed' && t.error && <p className="text-[11px] text-[#DC2626] mt-0.5">{isCreatorSafe(t.error) ? t.error : "Couldn't publish to this account."}</p>}
               </div>
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium ${destinationColor(t.status)}`}>
                 {(t.status === 'publishing' || t.status === 'pending' || t.status === 'uploading') && <Loader2 size={11} className="animate-spin" />}

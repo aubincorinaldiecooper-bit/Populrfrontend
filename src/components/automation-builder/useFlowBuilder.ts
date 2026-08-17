@@ -5,6 +5,7 @@ import {
   type AutomationFlow, type FlowAiMessage, type FlowProblem,
 } from '../../lib/api';
 import { NODE_LABEL, emptyGraph, newNodeId, type FlowGraph, type FlowNode, type FlowNodeType } from '../../lib/flowSchema';
+import { isCreatorSafe } from '../../lib/voice';
 import { layoutGraph, needsLayout } from '../../lib/flowLayout';
 import { activityLines, parseOperations } from '../../lib/composerActivity';
 
@@ -127,7 +128,14 @@ export function useFlowBuilder(flowId: string | null) {
    *  loaded. The oldest loaded message id is the cursor for walking back. */
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const historyCursor = useRef<string | null>(null);
-  const [problems, setProblems] = useState<FlowProblem[]>([]);
+  const [problems, setProblemsRaw] = useState<FlowProblem[]>([]);
+  // Problem sentences come from the server. They're written for the creator
+  // there too, but this is the last line before a canvas warning chip — a
+  // problem that reads like software (an old server, a provider echo) shows
+  // as a calm generic ask instead. Same rule as lib/voice everywhere else.
+  const setProblems = useCallback((next: FlowProblem[]) => {
+    setProblemsRaw(next.map(p => (isCreatorSafe(p.message) ? p : { ...p, message: 'This step needs attention before the automation can run.' })));
+  }, []);
 
   // Undo stack of snapshots. Bounded — a builder session shouldn't grow
   // without limit, and nobody undoes twenty steps in a node editor.
@@ -170,7 +178,7 @@ export function useFlowBuilder(flowId: string | null) {
     } catch {
       return [];
     }
-  }, [flowId]);
+  }, [flowId, setProblems]);
 
   // ---------------------------------------------------------------- load
   useEffect(() => {
@@ -535,7 +543,7 @@ export function useFlowBuilder(flowId: string | null) {
       }
       throw err;
     }
-  }, [flowId, graph, name, persist]);
+  }, [flowId, graph, name, persist, setProblems]);
 
   const pause = useCallback(async () => {
     if (!flowId) return;

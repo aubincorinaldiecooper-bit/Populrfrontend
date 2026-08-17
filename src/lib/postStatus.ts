@@ -1,5 +1,5 @@
 export const STATUS_LABEL: Record<string, string> = {
-  draft: 'Draft', validating: 'Validating', ready: 'Ready', scheduled: 'Scheduled',
+  draft: 'Draft', validating: 'Checking', ready: 'Ready', scheduled: 'Scheduled',
   publishing: 'Publishing', partially_published: 'Partially published', published: 'Published',
   failed: 'Failed', cancelled: 'Cancelled',
   pending: 'Preparing', uploading: 'Uploading',

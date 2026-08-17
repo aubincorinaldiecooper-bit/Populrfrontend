@@ -62,7 +62,7 @@ describe('HomePage — purpose-driven dashboard', () => {
   it('always offers the one CTA: create an automation', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard());
     renderHome();
-    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
     const cta = screen.getAllByRole('link', { name: /Create an automation/ });
     expect(cta.length).toBeGreaterThan(0);
     expect(cta[0]).toHaveAttribute('href', '/automations/new');
@@ -83,7 +83,7 @@ describe('HomePage — purpose-driven dashboard', () => {
   it('no waiting conversations: no strip, numbers stand on their own', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard());
     renderHome();
-    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
     expect(screen.queryByText(/waiting on you/)).not.toBeInTheDocument();
   });
 
@@ -97,7 +97,7 @@ describe('HomePage — purpose-driven dashboard', () => {
   it('running workspace shows no paused banner', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard());
     renderHome();
-    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
     expect(screen.queryByText(/automations are paused/)).not.toBeInTheDocument();
   });
 
@@ -109,7 +109,7 @@ describe('HomePage — purpose-driven dashboard', () => {
     renderHome();
     await waitFor(() => expect(screen.getByText('Set up your first automation')).toBeInTheDocument());
     // The stat grid and its zeros stay out of the way on first run.
-    expect(screen.queryByText('Active automations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Live automations')).not.toBeInTheDocument();
     // No account connected yet: the hero mentions the channels path too.
     expect(screen.getByRole('link', { name: /do it now/ })).toHaveAttribute('href', '/channels');
   });
@@ -178,7 +178,7 @@ describe('HomePage — purpose-driven dashboard', () => {
   it('nothing sent yet: the engagement section stays hidden, not a wall of 0%', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard());
     renderHome();
-    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
     expect(screen.queryByText('How fans respond')).not.toBeInTheDocument();
   });
 
@@ -205,7 +205,7 @@ describe('HomePage — purpose-driven dashboard', () => {
     mockFetchDashboard.mockResolvedValue(legacy);
     renderHome();
 
-    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
     expect(screen.queryByText('How fans respond')).not.toBeInTheDocument();
   });
 
@@ -219,7 +219,7 @@ describe('HomePage — purpose-driven dashboard', () => {
     await waitFor(() => expect(screen.getByText(/Couldn't load your dashboard/)).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Retry/ }));
 
-    await waitFor(() => expect(screen.getByText('Active automations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
     expect(mockFetchDashboard).toHaveBeenCalledTimes(2);
   });
 });

@@ -66,7 +66,7 @@ export default function AccountMenu({
       setOpen(false);
       navigate('/login', { replace: true });
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Sign out failed.', 'error');
+      showToast(err instanceof Error ? err.message : "Couldn't sign out. Try again.", 'error');
       setSigningOut(false);
     }
   };

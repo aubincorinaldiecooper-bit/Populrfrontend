@@ -472,7 +472,7 @@ function TriggerInspector({
               </p>
             ) : posts.length === 0 ? (
               <p className="text-[11.5px] text-[#8A857E]">
-                No synced posts for @{account?.username ?? 'this account'} yet — try Refresh.
+                No posts for @{account?.username ?? 'this account'} yet — try Refresh.
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto -mx-1 px-1">

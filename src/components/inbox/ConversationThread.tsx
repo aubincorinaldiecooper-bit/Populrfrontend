@@ -176,7 +176,7 @@ export default function ConversationThread({
         {loading ? (
           <p className="text-[12.5px] text-[#8A857E]">Loading the conversation…</p>
         ) : turns.length === 0 ? (
-          <p className="text-[12.5px] text-[#8A857E]">No messages on this conversation yet.</p>
+          <p className="text-[12.5px] text-[#8A857E]">No messages here yet.</p>
         ) : (
           <ul className="flex flex-col gap-3.5">
             {turns.map(turn => (

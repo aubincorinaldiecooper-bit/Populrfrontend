@@ -231,7 +231,7 @@ describe('InboxPage — conversations, not a queue', () => {
     // already talking to is still there, and still replyable.
     mockFetchConversations.mockResolvedValue({ conversations: [] });
     await user.type(screen.getByRole('searchbox', { name: /Search conversations/ }), 'zzz');
-    await waitFor(() => expect(screen.getByText('No conversations found')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('No conversations match that search')).toBeInTheDocument());
 
     const box = screen.getByRole('textbox', { name: /Message Curious Fan/ });
     await user.type(box, 'still here');

@@ -74,7 +74,7 @@ const AppContext = createContext<AppContextType | null>(null);
 
 /** Shown when the app can't reach its backend. Deliberately names no env var
  *  — build configuration isn't something a creator can act on. */
-const NOT_CONFIGURED_MESSAGE = "Populr can't reach its server right now. Please try again shortly.";
+const NOT_CONFIGURED_MESSAGE = "Populr can't reach its server right now. Try again in a moment.";
 
 // Verifying a return from Zernio's hosted OAuth (see completeOAuthReturn
 // below) is async and keyed by platform id, not by component instance — a

@@ -60,7 +60,7 @@ export default function ConversationList({
         <div className="p-4">
           <EmptyState
             icon="inbox"
-            title={search ? 'No conversations found' : 'No conversations yet'}
+            title={search ? 'No conversations match that search' : 'No conversations yet'}
             description={search
               ? 'Try a different name or handle.'
               : 'When someone comments on or messages your connected accounts, their conversation appears here.'}
