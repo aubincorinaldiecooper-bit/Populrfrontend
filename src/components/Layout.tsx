@@ -62,7 +62,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
           {children ?? <Outlet />}
         </ErrorBoundary>
       </main>
-      {/* ToastContainer is rendered once, unconditionally, in App.tsx — it
+      {/* The toast Toaster is rendered once, unconditionally, in App.tsx — it
           needs to be visible before onboarding completes (Layout isn't
           mounted yet), not just after. */}
     </div>

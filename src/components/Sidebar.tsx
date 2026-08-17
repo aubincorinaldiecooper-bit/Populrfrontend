@@ -42,7 +42,7 @@ function NavContent({ pathname, onNavigate, inboxCount }: {
       {offerCreate && <button
         type="button"
         onClick={() => { onNavigate?.(); beginCreateAutomation(); }}
-        className="mx-1 flex items-center justify-center gap-2 bg-secondary-fixed text-primary font-semibold py-3.5 px-6 rounded-full hover:bg-secondary-fixed-dim transition-colors"
+        className="mx-1 flex items-center justify-center gap-2 bg-secondary-fixed text-foreground font-semibold py-3.5 px-6 rounded-full hover:bg-secondary-fixed-dim transition-colors"
       >
         <Plus size={18} strokeWidth={2.5} />
         Create

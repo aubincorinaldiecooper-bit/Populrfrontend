@@ -20,7 +20,7 @@ import App from './App.tsx'
 //
 // ErrorBoundary sits at the absolute top of the tree — above every
 // provider — so a failure inside Theme, LayerProvider, BrowserRouter,
-// AuthProvider, AppProvider, App, or App's own siblings (ToastContainer,
+// AuthProvider, AppProvider, App, or App's own siblings (Toaster,
 // SubscriptionModalHost) still surfaces a real message instead of a
 // blank root. It deliberately consumes nothing from those providers (no
 // theme tokens, no router hooks) so it stays renderable even when one

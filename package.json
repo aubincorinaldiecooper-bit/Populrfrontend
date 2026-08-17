@@ -19,15 +19,20 @@
     "@astryxdesign/cli": "^0.2.0",
     "@astryxdesign/core": "^0.2.0",
     "@astryxdesign/theme-neutral": "^0.2.0",
+    "@base-ui-components/react": "1.0.0-rc.0",
     "@xyflow/react": "^12.11.2",
     "better-auth": "^1.6.25",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.42.2",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router": "^7.6.1",
-    "serve": "^14.2.6"
+    "serve": "^14.2.6",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
