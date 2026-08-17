@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import InboxMenu from './InboxMenu';
 import NotificationMenu from './NotificationMenu';
+import { useApp } from '../../context/AppContext';
 
 /**
  * The one header. Two renderings of the same geography:
@@ -30,6 +31,12 @@ export default function AppHeader({
   local?: ReactNode;
   mobileOnly?: boolean;
 }) {
+  const { workspaceAccess } = useApp();
+  // The same rule the sidebar's nav applies: a canvas invitee's workspace
+  // Inbox answers 403, so the glance would be a door that opens onto a
+  // forbidden request and rows that bounce back to the canvas. No dead
+  // controls — the bell stays (it calls nothing and says so honestly).
+  const offerInbox = workspaceAccess?.role !== 'canvas';
   return (
     <>
       {/* Mobile top bar. The safe-area inset is added to the bar's HEIGHT,
@@ -44,7 +51,7 @@ export default function AppHeader({
         <SidebarTrigger />
         <span className="font-display text-[22px] font-bold text-sidebar-foreground">Populr</span>
         <div className="ml-auto flex items-center gap-1">
-          <InboxMenu />
+          {offerInbox && <InboxMenu />}
           <NotificationMenu />
         </div>
       </div>
@@ -53,7 +60,7 @@ export default function AppHeader({
         <header className="hidden md:flex h-14 items-center justify-between gap-4 px-8">
           <div className="min-w-0 flex-1">{local}</div>
           <div className="flex items-center gap-1">
-            <InboxMenu />
+            {offerInbox && <InboxMenu />}
             <NotificationMenu />
           </div>
         </header>

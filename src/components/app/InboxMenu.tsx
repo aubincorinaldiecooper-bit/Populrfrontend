@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { MessageCircle } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -28,15 +28,27 @@ export default function InboxMenu() {
   const [open, setOpen] = useState(false);
   const [waiting, setWaiting] = useState<Conversation[] | null>(null);
   const [failed, setFailed] = useState(false);
+  // Close-and-reopen before a fetch settles leaves two requests in flight,
+  // and whichever lands LAST would write the menu — a late failure from the
+  // first could overwrite the second's fresh rows. Each opening takes a
+  // generation; only the newest may write.
+  const generation = useRef(0);
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) return;
+    const mine = ++generation.current;
     setFailed(false);
     setWaiting(null);
     fetchConversations({})
-      .then(res => setWaiting(res.conversations.filter(c => c.waiting > 0).slice(0, 5)))
-      .catch(() => setFailed(true));
+      .then(res => {
+        if (generation.current !== mine) return;
+        setWaiting(res.conversations.filter(c => c.waiting > 0).slice(0, 5));
+      })
+      .catch(() => {
+        if (generation.current !== mine) return;
+        setFailed(true);
+      });
   };
 
   return (

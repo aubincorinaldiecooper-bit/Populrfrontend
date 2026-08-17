@@ -171,6 +171,58 @@ describe("the header's Inbox glance", () => {
   });
 });
 
+describe("the header respects who is signed in", () => {
+  it('offers no Inbox control to a canvas invitee — their workspace Inbox answers 403', () => {
+    mockUseApp.mockReturnValue({
+      showToast: vi.fn(),
+      accounts: [],
+      workspaceAccess: {
+        id: 'w1', name: 'Summer Drop', role: 'canvas',
+        permissions: { editAutomations: true, contactOutreach: false },
+        canvasAutomation: { id: 'flow_7', name: 'Culture comments' },
+      },
+    });
+    renderShell(<AppHeader />);
+
+    expect(screen.queryByRole('button', { name: /^Inbox/ })).not.toBeInTheDocument();
+    // The bell stays: it calls nothing and says so honestly.
+    expect(screen.getAllByRole('button', { name: 'Notifications' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the header's Inbox glance — reopening while a fetch is in flight", () => {
+  it('lets only the latest opening write the menu', async () => {
+    // First opening's request is held; second opening's resolves with rows.
+    // When the FIRST request then fails, the fresh rows must survive — a
+    // stale failure may not overwrite a newer success.
+    let rejectFirst!: (e: Error) => void;
+    const first = new Promise((_res, rej) => { rejectFirst = rej; });
+    const second = Promise.resolve({ conversations: [conversation('c9', 'Noah', 1)] });
+
+    const user = userEvent.setup();
+    renderShell(<AppHeader />);
+    // The badge's shared store makes its own initial fetch on mount; let it
+    // consume the default mock before queuing the two menu-open responses.
+    await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalled());
+    fetchConversationsMock
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+
+    const trigger = screen.getAllByRole('button', { name: /^Inbox/ })[0];
+    await user.click(trigger); // opening #1 — request parked
+    await user.keyboard('{Escape}');
+    await user.click(trigger); // opening #2 — resolves with Noah
+
+    await screen.findByRole('link', { name: /Noah/ });
+    rejectFirst(new Error('network down'));
+    // Give the stale rejection a beat to (wrongly) apply if it could.
+    await new Promise(r => setTimeout(r, 20));
+
+    expect(screen.getByRole('link', { name: /Noah/ })).toBeInTheDocument();
+    expect(screen.queryByText(/can.t reach its server/)).not.toBeInTheDocument();
+  });
+});
+
 describe("the header's bell", () => {
   it('opens and tells the truth it has: nothing is feeding it yet', async () => {
     const user = userEvent.setup();
