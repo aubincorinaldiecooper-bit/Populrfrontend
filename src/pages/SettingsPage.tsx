@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { useApp } from '../context/AppContext';
+import { isOwnerView } from '../lib/access';
 import { useAuth } from '../context/AuthContext';
 import { resolveIdentity } from '../lib/identity';
 import { LogOut, Waypoints, ArrowRight, AlertCircle, Loader2, Pause, Play } from 'lucide-react';
@@ -33,7 +34,8 @@ import {
  * populated one the product can't honor.
  */
 export default function SettingsPage() {
-  const { showToast } = useApp();
+  const { showToast, workspaceAccess } = useApp();
+  const ownerView = isOwnerView(workspaceAccess);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const backendConfigured = isBackendConfigured();
@@ -138,7 +140,7 @@ export default function SettingsPage() {
             emergency stop, but that is operator-only for incident response —
             it is never reported here, because it isn't the creator's to see
             or act on. */}
-        {backendConfigured && (
+        {backendConfigured && ownerView && (
           <section className="pop-card p-6">
             <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Automations</h2>
             <p className="text-[12px] text-[#6B6B6B] mb-4">

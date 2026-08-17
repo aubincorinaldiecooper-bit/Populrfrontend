@@ -1394,6 +1394,13 @@ export interface TeamPermissions {
   contactOutreach: boolean;
 }
 
+/** An invite's scope: null = the whole workspace; set = one automation
+ *  canvas, which is then the invitee's entire surface. */
+export interface AutomationScope {
+  id: string;
+  name: string;
+}
+
 export interface TeamInvitation {
   id: string;
   email: string;
@@ -1404,6 +1411,7 @@ export interface TeamInvitation {
   emailDelivery: 'sent' | 'failed';
   createdAt: string;
   expiresAt: string;
+  automation: AutomationScope | null;
 }
 
 export interface TeamMember {
@@ -1413,6 +1421,7 @@ export interface TeamMember {
   email: string | null;
   permissions: TeamPermissions;
   joinedAt: string;
+  automation: AutomationScope | null;
 }
 
 /** GET /api/team — this workspace's collaborators and its invitations. */
@@ -1420,14 +1429,18 @@ export async function fetchTeam(): Promise<{ invitations: TeamInvitation[]; memb
   return apiFetch('/api/team');
 }
 
-/** POST /api/team/invites — create and email an invitation. */
+/** POST /api/team/invites — create and email an invitation. Pass
+ *  `automationId` to scope it to one canvas: the invitee can then open and
+ *  edit that automation and nothing else (the permission flags don't apply
+ *  to canvas invites — the canvas IS the grant). */
 export async function inviteTeammate(
   email: string,
   permissions: TeamPermissions,
+  automationId?: string,
 ): Promise<TeamInvitation> {
   const data = await apiFetch<{ invitation: TeamInvitation }>('/api/team/invites', {
     method: 'POST',
-    body: { email, permissions },
+    body: { email, permissions, ...(automationId ? { automationId } : {}) },
   });
   return data.invitation;
 }
@@ -1440,10 +1453,36 @@ export async function revokeInvitation(id: string): Promise<void> {
 export type InviteAcceptStatus = 'accepted' | 'already_member' | 'owner';
 
 /** POST /api/team/invites/accept — redeem the token from an invite link.
- *  Rejects with an ApiError whose `code` says why (invite_expired,
- *  invite_revoked, invite_used, invite_not_found). */
+ *  `automation` is set when the invite was scoped to one canvas — the
+ *  acceptance page names it and links straight there. Rejects with an
+ *  ApiError whose `code` says why (invite_expired, invite_revoked,
+ *  invite_used, invite_not_found). */
 export async function acceptInvitation(
   token: string,
-): Promise<{ status: InviteAcceptStatus; workspaceId: string }> {
+): Promise<{ status: InviteAcceptStatus; workspaceId: string; automation?: AutomationScope | null }> {
   return apiFetch('/api/team/invites/accept', { method: 'POST', body: { token } });
+}
+
+// ---------------------------------------------------------------------------
+// Workspace access — which workspace this account's requests act in, and
+// what it may do there. Servers resolve this per request; the frontend reads
+// it once to shape what it offers: a control the API would refuse isn't
+// rendered as if it would work.
+// ---------------------------------------------------------------------------
+
+export type WorkspaceRole = 'owner' | 'member' | 'canvas';
+
+export interface WorkspaceAccess {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+  permissions: TeamPermissions;
+  /** Set only for role 'canvas': the one automation their invite opens. */
+  canvasAutomation: AutomationScope | null;
+}
+
+/** GET /api/me — the workspace half of the payload. */
+export async function fetchWorkspaceAccess(): Promise<WorkspaceAccess> {
+  const me = await apiFetch<{ workspace: WorkspaceAccess }>('/api/me');
+  return me.workspace;
 }

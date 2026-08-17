@@ -6,6 +6,7 @@ import {
 import ProfileImage from '../components/ProfileImage';
 import { useApp } from '../context/AppContext';
 import { isCreatorSafe } from '../lib/voice';
+import { isOwnerView } from '../lib/access';
 import PageHeader from '../components/PageHeader';
 import ConnectAnotherModal from '../components/ConnectAnotherModal';
 import type { ConnectAnotherInitialMode } from '../components/ConnectAnotherModal';
@@ -27,7 +28,9 @@ export default function ChannelsPage() {
     connectedPlatforms, accounts, beginPlatformConnect, refreshConnectedAccounts,
     completeOAuthReturn, failOAuthReturn,
     disconnectAccount, showToast, openSubscriptionModal,
+    workspaceAccess,
   } = useApp();
+  const ownerView = isOwnerView(workspaceAccess);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const backendConfigured = isBackendConfigured();
@@ -276,7 +279,7 @@ export default function ChannelsPage() {
                   )}
                 </div>
                 <div className="flex-shrink-0">
-                  {accts.length === 0 && platformStatus === 'idle' && offered && (
+                  {accts.length === 0 && platformStatus === 'idle' && offered && ownerView && (
                     <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-primary text-[12px] py-2 px-3">
                       Connect
                     </button>
@@ -292,7 +295,7 @@ export default function ChannelsPage() {
                       <RefreshCw size={13} /> Try again
                     </button>
                   )}
-                  {accts.length > 0 && !connectBusy && platformStatus !== 'error' && offered && (
+                  {accts.length > 0 && !connectBusy && platformStatus !== 'error' && offered && ownerView && (
                     // Not a straight redirect: providers reuse the login the
                     // browser already holds, so the modal explains that and
                     // offers the private-window link before anything happens.
@@ -380,7 +383,7 @@ export default function ChannelsPage() {
                               Disconnect — "Reconnect" on a working account
                               reads as though something were broken and pushes
                               the user through a pointless OAuth round-trip. */}
-                          {needsReauth ? (
+                          {!ownerView ? null : needsReauth ? (
                             <button onClick={() => handleReconnect(a)} className="pop-btn-secondary text-[12px] py-1.5 px-3">
                               <RefreshCw size={13} /> Reconnect
                             </button>

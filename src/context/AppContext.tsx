@@ -5,8 +5,9 @@ import { connectFailure } from '../lib/connectErrors';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
+  fetchWorkspaceAccess,
 } from '../lib/api';
-import type { ConnectedAccount } from '../lib/api';
+import type { ConnectedAccount, WorkspaceAccess } from '../lib/api';
 import { useAuth } from './AuthContext';
 
 export interface Toast {
@@ -46,6 +47,12 @@ interface AppState {
   // null = closed. `platform` is remembered so it can be retried once the
   // user returns from checkout.
   subscriptionModal: { platform: string | null } | null;
+  // Which workspace this account acts in and what it may do there, served by
+  // GET /api/me — the same resolution the API enforces. null while unknown
+  // (loading, backend unreachable): consumers treat null as "hide nothing",
+  // because the majority case is an owner and the API refuses anything a
+  // member truly can't do. The chrome catches up when this resolves.
+  workspaceAccess: WorkspaceAccess | null;
 }
 
 interface AppContextType extends AppState {
@@ -105,6 +112,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toasts: [],
     isLoading: false,
     subscriptionModal: null,
+    workspaceAccess: null,
   });
 
   const { user } = useAuth();
@@ -448,6 +456,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshAccounts();
   }, [authedUserId, refreshAccounts]);
+
+  // The signed-in account's workspace access (owner / member / canvas),
+  // loaded once per session. A failure leaves it null — the UI then hides
+  // nothing and lets the API be the judge, which is the safe direction.
+  useEffect(() => {
+    if (!authedUserId || !isBackendConfigured()) return;
+    let cancelled = false;
+    fetchWorkspaceAccess()
+      .then(access => {
+        if (!cancelled) setState(prev => ({ ...prev, workspaceAccess: access }));
+      })
+      .catch(err => console.warn('[access] could not resolve workspace access:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [authedUserId]);
 
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));

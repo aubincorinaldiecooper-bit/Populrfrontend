@@ -4,6 +4,8 @@ import {
   AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Eye, Loader2, Pause, PenLine, Sparkles, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { isOwnerView } from '../lib/access';
+import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
@@ -76,7 +78,8 @@ function roomForBothColumns(): boolean {
 export default function AutomationBuilderPage() {
   const { flowId = null } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
-  const { showToast } = useApp();
+  const { showToast, workspaceAccess } = useApp();
+  const ownerView = isOwnerView(workspaceAccess);
 
   const builder = useFlowBuilder(flowId);
   const {
@@ -579,6 +582,10 @@ export default function AutomationBuilderPage() {
         <div className="ml-auto flex items-center gap-2">
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
+          {/* Canvas-scoped invites: owner-only, like every other way of
+              granting access. flowId is null only before the flow exists. */}
+          {flowId && <InviteToAutomationButton flowId={flowId} flowName={name} />}
+
           {/* Three different jobs, three different weights. Preview is a
               secondary action and looks like one; the bell is chrome that
               reports rather than acts, so it carries no border at all;
@@ -606,7 +613,7 @@ export default function AutomationBuilderPage() {
             />
           </div>
 
-          {live ? (
+          {live && ownerView ? (
             <button
               type="button"
               onClick={onPause}
@@ -616,6 +623,12 @@ export default function AutomationBuilderPage() {
             >
               <Pause size={14} /> Pause
             </button>
+          ) : !ownerView ? (
+            // Members and canvas collaborators build; switching on stays with
+            // the owner. Absence would read as a bug — say it instead.
+            <span className="hidden md:inline text-[11.5px] text-[#9B9B8F]">
+              {live ? 'Live — the owner runs it' : 'The owner turns it on'}
+            </span>
           ) : (
             <button
               type="button"

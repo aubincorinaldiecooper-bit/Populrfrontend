@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Check, Loader2, Mail, RefreshCw, UserPlus, X } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import { useApp } from '../context/AppContext';
+import { isOwnerView } from '../lib/access';
 import {
   isBackendConfigured, fetchTeam, inviteTeammate, revokeInvitation,
   type TeamInvitation, type TeamMember, type TeamPermissions,
@@ -64,6 +66,10 @@ function PermissionToggle({ label, hint, checked, onChange, disabled }: {
 
 export default function TeamPage() {
   const backendConfigured = isBackendConfigured();
+  const { workspaceAccess } = useApp();
+  // Members may look at the roster; inviting and withdrawing stay with the
+  // owner, so for a member the controls simply aren't offered.
+  const ownerView = isOwnerView(workspaceAccess);
 
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -165,7 +171,7 @@ export default function TeamPage() {
       <PageHeader
         title="Team"
         subtitle="Invite someone to help run this workspace. Everyone you invite can view it — you choose what else they can do."
-        action={!inviting && !loading && !loadError ? (
+        action={ownerView && !inviting && !loading && !loadError ? (
           <button
             type="button"
             onClick={() => { setInviting(true); setSent(null); }}
@@ -302,7 +308,11 @@ export default function TeamPage() {
                     <div key={member.email ?? `member-${i}`} className="flex items-center gap-3 py-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="text-[13px] text-[#111111] truncate">{member.email ?? 'A teammate'}</p>
-                        <p className="text-[11.5px] text-[#6B6B6B]">{permissionSummary(member.permissions)}</p>
+                        <p className="text-[11.5px] text-[#6B6B6B]">
+                          {member.automation
+                            ? <>Works on <span className="font-medium text-[#111111]">&ldquo;{member.automation.name}&rdquo;</span> only</>
+                            : permissionSummary(member.permissions)}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -321,13 +331,15 @@ export default function TeamPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-[13px] text-[#111111] truncate">{invitation.email}</p>
                         <p className="text-[11.5px] text-[#6B6B6B]">
-                          {permissionSummary(invitation.permissions)}
+                          {invitation.automation
+                            ? <>Works on <span className="font-medium text-[#111111]">&ldquo;{invitation.automation.name}&rdquo;</span> only</>
+                            : permissionSummary(invitation.permissions)}
                           {invitation.emailDelivery === 'failed' && (
                             <span className="text-[#B45309]"> · Couldn&apos;t be emailed — try inviting again</span>
                           )}
                         </p>
                       </div>
-                      <button
+                      {ownerView && <button
                         type="button"
                         onClick={() => withdraw(invitation)}
                         disabled={revoking === invitation.id}
@@ -337,7 +349,7 @@ export default function TeamPage() {
                         {revoking === invitation.id
                           ? <Loader2 size={12} className="animate-spin" />
                           : <><X size={12} />Withdraw</>}
-                      </button>
+                      </button>}
                     </div>
                   ))}
                 </div>
@@ -353,7 +365,9 @@ export default function TeamPage() {
 
             {members.length === 0 && pending.length === 0 && !inviting && (
               <p className="text-[12px] text-[#6B6B6B]">
-                You&apos;re the only one here. Invite someone when you want help running this workspace.
+                {ownerView
+                  ? <>You&apos;re the only one here. Invite someone when you want help running this workspace.</>
+                  : <>Nobody else has joined this workspace yet.</>}
               </p>
             )}
           </>
