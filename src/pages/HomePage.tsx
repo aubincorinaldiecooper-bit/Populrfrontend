@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Link, useNavigate } from 'react-router';
 import {
   Zap, ArrowRight, AlertCircle, Inbox as InboxIcon, Plus, Pause,
@@ -179,9 +181,9 @@ export default function HomePage() {
         title="Home"
         subtitle="Your automations are working while you're not."
         action={
-          <button type="button" onClick={beginCreateAutomation} className="pop-btn-primary">
+          <Button onClick={beginCreateAutomation}>
             <Plus size={15} />Create an automation
-          </button>
+          </Button>
         }
       />
 
@@ -199,9 +201,9 @@ export default function HomePage() {
             <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load your dashboard</p>
             <p className="text-[12px] text-[#6B6B6B] mt-0.5">{error}</p>
           </div>
-          <button onClick={load} className="pop-btn-tertiary text-[12px] py-1.5 px-3 flex-shrink-0">
+          <Button variant="outline" onClick={load} className="text-[12px] py-1.5 px-3 flex-shrink-0">
             <RefreshCw size={13} />Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -220,7 +222,10 @@ export default function HomePage() {
                   : 'Your automations are paused — nothing is being sent automatically.'}
               </p>
               {data.pauseScope !== 'platform' && (
-                <Link to="/settings" className="pop-btn-tertiary text-[12px] py-1.5 px-3 flex-shrink-0">
+                <Link
+                  to="/settings"
+                  className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1.5 px-3 flex-shrink-0')}
+                >
                   Go to Settings
                 </Link>
               )}
@@ -260,9 +265,9 @@ export default function HomePage() {
                 Describe it in your own words — Populr answers comments and DMs for you,
                 sends your links, and turns engagement into an audience.
               </p>
-              <button type="button" onClick={beginCreateAutomation} className="pop-btn-primary mt-5 inline-flex">
+              <Button onClick={beginCreateAutomation} className="mt-5">
                 <Plus size={15} />Create an automation
-              </button>
+              </Button>
               {data.connectedAccounts.length === 0 && (
                 <p className="text-[12px] text-[#9B9B8F] mt-4">
                   You&apos;ll connect an account along the way, or{' '}

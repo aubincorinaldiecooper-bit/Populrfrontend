@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
 import AutomationCard from '../components/automations/AutomationCard';
 import ConfirmDialog from '../components/app/ConfirmDialog';
+import { Button } from '@/components/ui/button';
 import {
   isBackendConfigured, fetchFlows, createFlow, updateFlow, deleteFlow, restoreFlow,
   pauseFlow, activateFlow,
@@ -480,14 +481,14 @@ export default function AutomationsPage() {
                 placeholder="Search automations..." className="pop-search w-full sm:w-56"
               />
             </div>
-            {mayCreate && <button
+            {mayCreate && <Button
               onClick={startNew}
               disabled={creatingAutomation}
-              className="pop-btn-primary w-full sm:w-auto justify-center disabled:opacity-60"
+              className="w-full sm:w-auto"
             >
               {creatingAutomation ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={2.5} />}
               New automation
-            </button>}
+            </Button>}
           </div>
         }
       />
@@ -496,7 +497,7 @@ export default function AutomationsPage() {
         <div className="pop-card p-4 mb-5 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
-          <button onClick={load} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Retry</button>
+          <Button variant="outline" onClick={load} className="text-[12px] py-1.5 px-3">Retry</Button>
         </div>
       )}
 
@@ -534,9 +535,9 @@ export default function AutomationsPage() {
           title={search || statusTab !== 'all' ? 'No automations match that search' : 'No automations yet'}
           description="Describe what should happen and Populr builds the steps for you."
           action={mayCreate ? (
-            <button onClick={startNew} className="pop-btn-primary" disabled={creatingAutomation}>
+            <Button onClick={startNew} disabled={creatingAutomation}>
               New automation
-            </button>
+            </Button>
           ) : undefined}
         />
       ) : !error && (

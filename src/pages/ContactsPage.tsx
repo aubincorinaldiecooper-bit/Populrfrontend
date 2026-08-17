@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { useSearchParams } from 'react-router';
 import {
   Search, ArrowLeft, AlertCircle, X, Reply, Clock, Tag, Zap,
@@ -252,7 +253,7 @@ export default function ContactsPage() {
         <div className="pop-card p-4 mb-5 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
-          <button onClick={load} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Retry</button>
+          <Button variant="outline" onClick={load} className="text-[12px] py-1.5 px-3">Retry</Button>
         </div>
       )}
 
