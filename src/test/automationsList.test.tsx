@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import AutomationsPage from '../pages/AutomationsPage';
+import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import { describeFlow } from '../lib/flowSummary';
 import type { AutomationFlow } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
@@ -99,17 +100,19 @@ function Probe() {
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/automations']}>
-      <Routes>
-        <Route path="/automations" element={<AutomationsPage />} />
-        <Route path="/contacts" element={<Probe />} />
-      </Routes>
+      <CreateAutomationProvider>
+        <Routes>
+          <Route path="/automations" element={<AutomationsPage />} />
+          <Route path="/contacts" element={<Probe />} />
+        </Routes>
+      </CreateAutomationProvider>
     </MemoryRouter>,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
   fetchFlowsMock.mockResolvedValue([flow()]);
   updateFlowMock.mockImplementation(async (id: string, patch: { name?: string }) =>
     ({ flow: flow({ id, ...patch }) }));
@@ -217,7 +220,7 @@ describe('the actions on a card', () => {
 
   it('puts the old name back when the rename fails', async () => {
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     updateFlowMock.mockRejectedValue(new Error('Could not rename this automation.'));
     const user = userEvent.setup();
     renderPage();

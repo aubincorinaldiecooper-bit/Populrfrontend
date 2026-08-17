@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import Sidebar from '../components/Sidebar';
+import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import EditorRail from '../components/EditorRail';
 import { resetInboxUnreadForTests } from '../components/inbox/useInboxUnread';
 import type { Conversation } from '../lib/api';
@@ -51,7 +52,7 @@ vi.mock('../context/AuthContext', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   resetInboxUnreadForTests();
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
   fetchConversationsMock.mockResolvedValue({
     conversations: [
       conversation('c1', 'Jordan', 1),
@@ -65,11 +66,13 @@ beforeEach(() => {
 function renderShell(ui: React.ReactNode, url = '/') {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      {ui}
-      <Routes>
-        <Route path="/" element={<div>home stub</div>} />
-        <Route path="/inbox" element={<div>inbox page stub</div>} />
-      </Routes>
+      <CreateAutomationProvider>
+        {ui}
+        <Routes>
+          <Route path="/" element={<div>home stub</div>} />
+          <Route path="/inbox" element={<div>inbox page stub</div>} />
+        </Routes>
+      </CreateAutomationProvider>
     </MemoryRouter>,
   );
 }

@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import AutomationsPage from '../pages/AutomationsPage';
+import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { AutomationFlow } from '../lib/api';
 
 /* Deleting an automation, then navigating away and coming back.
@@ -136,10 +137,10 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
     await deleteFirst(user);
@@ -155,10 +156,10 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
 
     await deleteFirst(user);
@@ -166,7 +167,7 @@ describe('deleting an automation, then coming back to the page', () => {
     // "sent" is not "answered", and a list fetched in between is stale.
     view.unmount();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await act(async () => { await Promise.resolve(); });
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
 
@@ -186,10 +187,10 @@ describe('deleting an automation, then coming back to the page', () => {
       serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
       reset();
       const showToast = vi.fn();
-      mockUseApp.mockReturnValue({ showToast });
+      mockUseApp.mockReturnValue({ showToast, accounts: [] });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-      const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+      const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
       await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
 
       await deleteFirst(user);
@@ -210,7 +211,7 @@ describe('deleting an automation, then coming back to the page', () => {
       expect(mockDeleteFlow).toHaveBeenCalledTimes(2);
 
       // And they are gone from the server, so the next load agrees.
-      render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+      render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
       await waitFor(() => expect(screen.getByText('No automations yet')).toBeInTheDocument());
     } finally {
       vi.useRealTimers();
@@ -222,15 +223,15 @@ describe('deleting an automation, then coming back to the page', () => {
     reset();
     mockDeleteFlow.mockImplementationOnce(async () => { throw new Error('Network unreachable'); });
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
     await deleteFirst(user);
     view.unmount();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     // It comes back because it was never deleted — and the creator is told,
     // instead of being left to infer it from the row's reappearance.
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
@@ -246,19 +247,19 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    const first = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    const first = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
     await deleteFirst(user);
     first.unmount();
 
-    const second = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    const second = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await act(async () => { await Promise.resolve(); });
     second.unmount();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await act(async () => { await Promise.resolve(); });
     expect(screen.queryByText('Half-built draft')).not.toBeInTheDocument();
 
@@ -278,15 +279,15 @@ describe('deleting an automation, then coming back to the page', () => {
       serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
       reset();
       const showToast = vi.fn();
-      mockUseApp.mockReturnValue({ showToast });
+      mockUseApp.mockReturnValue({ showToast, accounts: [] });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-      const view = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+      const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
       await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
       await deleteFirst(user);
       view.unmount();
 
-      render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+      render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
       // The DELETE is never released. Past the bounded wait, the page must
       // show the rest of the list rather than a skeleton.
       await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
@@ -313,11 +314,11 @@ describe('Undo', () => {
     serverFlows = [flow('f1', 'Guide DM', 'live')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
     await deleteFirst(user);
     expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
@@ -346,10 +347,10 @@ describe('Undo', () => {
     serverFlows = [flow('f1', 'Guide DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
     await deleteFirst(user);
 
@@ -375,10 +376,10 @@ describe('Undo', () => {
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    const first = render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    const first = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
     await deleteFirst(user);
     landPendingDelete();
@@ -389,7 +390,7 @@ describe('Undo', () => {
 
     // Away and back while the restore is still open.
     first.unmount();
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await act(async () => { await Promise.resolve(); });
 
     landPendingRestore();
@@ -404,10 +405,10 @@ describe('Undo', () => {
     reset();
     mockDeleteFlow.mockImplementationOnce(async () => { throw new Error('Network unreachable'); });
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
     const user = userEvent.setup();
 
-    render(<MemoryRouter><AutomationsPage /></MemoryRouter>);
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
     await deleteFirst(user);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());

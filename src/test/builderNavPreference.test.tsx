@@ -19,7 +19,7 @@ import Layout from '../components/Layout';
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { name: 'Creator', email: 'c@example.com' }, signOut: vi.fn() }),
 }));
-vi.mock('../context/AppContext', () => ({ useApp: () => ({ showToast: vi.fn() }) }));
+vi.mock('../context/AppContext', () => ({ useApp: () => ({ showToast: vi.fn(), accounts: [] }) }));
 
 function mountAt(path: string) {
   return render(

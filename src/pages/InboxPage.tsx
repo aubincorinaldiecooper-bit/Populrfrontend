@@ -70,6 +70,18 @@ export default function InboxPage() {
 
   const waiting = conversations.reduce((n, c) => n + (c.waiting > 0 ? 1 : 0), 0);
 
+  // Home's attention banner lands here with ?f=needs-you: only the
+  // conversations actually waiting on a human. The chip clears it.
+  const needsYouOnly = searchParams.get('f') === 'needs-you';
+  const visibleConversations = needsYouOnly
+    ? conversations.filter(c => c.waiting > 0)
+    : conversations;
+  const clearFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('f');
+    setSearchParams(next, { replace: true });
+  };
+
   return (
     // Below md the layout already pushes content past a fixed 4rem header, so
     // a full-viewport child hangs that far below the fold — composer included.
@@ -84,6 +96,20 @@ export default function InboxPage() {
             ? `${waiting} waiting on you · ${conversations.length} conversation${conversations.length === 1 ? '' : 's'}`
             : `${conversations.length} conversation${conversations.length === 1 ? '' : 's'}`}
       />
+
+      {needsYouOnly && (
+        <div className="mb-3 -mt-2">
+          <button
+            type="button"
+            onClick={clearFilter}
+            className="inline-flex items-center gap-1.5 rounded-full bg-chartreuse/25 px-3 py-1.5 text-[12px] font-medium text-[#3F5212] hover:bg-chartreuse/40 transition-colors"
+          >
+            Needs you only
+            <span aria-hidden="true">✕</span>
+            <span className="sr-only">Show all conversations</span>
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="pop-card p-4 mb-4 flex items-center gap-3">
@@ -101,7 +127,7 @@ export default function InboxPage() {
               ${selected ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
           >
             <ConversationList
-              conversations={conversations}
+              conversations={visibleConversations}
               selectedId={selected}
               search={search}
               loading={loading}

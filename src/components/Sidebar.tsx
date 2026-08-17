@@ -5,11 +5,13 @@ import { Menu, X, Plus, PanelLeftClose } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
 import { useInboxUnread } from './inbox/useInboxUnread';
+import { useCreateAutomation } from '../context/CreateAutomationContext';
 
 
 function NavContent({ pathname, onNavigate, inboxCount }: {
   pathname: string; onNavigate: () => void; inboxCount: number;
 }) {
+  const { beginCreateAutomation } = useCreateAutomation();
   return (
     <>
       {/* Brand */}
@@ -18,15 +20,16 @@ function NavContent({ pathname, onNavigate, inboxCount }: {
         <p className="font-label text-[11px] text-on-surface-variant uppercase tracking-widest mt-1.5">Creator Suite</p>
       </div>
 
-      {/* Create CTA */}
-      <Link
-        to="/automations/new"
-        onClick={onNavigate}
+      {/* Create CTA — the same action as Home's "Create an automation":
+          one creation experience, two entry points. */}
+      <button
+        type="button"
+        onClick={() => { onNavigate?.(); beginCreateAutomation(); }}
         className="mx-1 flex items-center justify-center gap-2 bg-secondary-fixed text-primary font-semibold py-3.5 px-6 rounded-full hover:bg-secondary-fixed-dim transition-colors"
       >
         <Plus size={18} strokeWidth={2.5} />
         Create
-      </Link>
+      </button>
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-1.5 mt-2">

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Zap, Users, ArrowRight, AlertCircle, Inbox as InboxIcon, Flame, Plus,
-  Pause, TrendingUp, RefreshCw, MousePointerClick, MessageCircleReply, Eye,
+  Zap, ArrowRight, AlertCircle, Inbox as InboxIcon, Plus, Pause,
+  TrendingUp, RefreshCw, MessageCircleReply, Eye,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import PlatformDot from '../components/PlatformDot';
@@ -10,20 +10,22 @@ import { StatGridSkeleton, ListSkeleton } from '../components/Skeleton';
 import { isBackendConfigured, fetchDashboard } from '../lib/api';
 import type { DashboardData } from '../lib/api';
 import { platformMeta } from '../lib/platformMeta';
+import { useCreateAutomation } from '../context/CreateAutomationContext';
 
 /**
- * Home answers two questions in one glance, in this order:
+ * Home answers three questions, fast, in this order:
  *
- *   1. "What needs me right now?"  — the needs-reply strip, straight into
- *      Inbox, because conversations waiting on the creator are the most
- *      time-sensitive thing the product produces.
- *   2. "Is my system working?"     — numbers the automations generate
- *      (leads, contacts) and WHICH posts are producing warm leads, the
- *      question the dashboard service was built to answer.
+ *   1. WHAT SHOULD I DO?      — one attention banner, straight into the
+ *      Inbox conversations that actually need a human.
+ *   2. IS POPULR WORKING?     — four marketer tiles (live automations,
+ *      reply rate, audience growth, read rate) and per-automation
+ *      performance, each row wearing the account it actually runs on.
+ *   3. WHAT NEXT?             — Create an automation, the page's one
+ *      primary action, opening the creation experience directly.
  *
- * Creating an automation is the page's one call to action — everything
- * else on screen is evidence of what automations do, so the CTA never has
- * to shout. All data arrives in a single workspace-scoped call.
+ * Honesty rules baked in: a metric a channel can't measure is OMITTED for
+ * that row — never rendered as 0%. Nothing here re-states the same number
+ * under two names, and nothing leads with lead-scoring vocabulary.
  */
 
 function timeAgo(iso: string): string {
@@ -37,48 +39,97 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-/** Rounded percentage, or an em dash when nothing has been sent yet —
- *  0-of-0 is "no data", never "0%". */
-function rate(numerator: number, denominator: number): string {
-  if (denominator === 0) return '—';
+/** Rounded percentage — callers only invoke this when the denominator is
+ *  real, so "—" never masquerades as measurement. */
+function pct(numerator: number, denominator: number): string {
   return `${Math.round((numerator / denominator) * 100)}%`;
 }
 
-function RateTile({ icon, value, label, basis }: {
-  icon: React.ReactNode; value: string; label: string; basis: string;
+function Tile({ icon, value, label, sub, to }: {
+  icon: React.ReactNode; value: string; label: string; sub?: string; to?: string;
 }) {
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 text-[#9B9B8F] mb-1.5">{icon}
+  const body = (
+    <>
+      <div className="flex items-center gap-1.5 text-[#9B9B8F] mb-2">{icon}
         <span className="text-[11px]">{label}</span>
       </div>
-      <p className="font-geist-mono font-bold text-xl text-[#111111]">{value}</p>
-      <p className="text-[11px] text-[#9B9B8F] mt-0.5">{basis}</p>
-    </div>
+      <p className="font-geist-mono font-bold text-2xl text-[#111111]">{value}</p>
+      {sub && <p className="text-[11px] text-[#9B9B8F] mt-0.5">{sub}</p>}
+    </>
+  );
+  return to ? (
+    <Link to={to} className="pop-card pop-card-hover p-4 block">{body}</Link>
+  ) : (
+    <div className="pop-card p-4">{body}</div>
   );
 }
 
-function StatTile({ to, icon, iconBg, value, label, accent = false }: {
-  to: string; icon: React.ReactNode; iconBg: string; value: number; label: string;
-  /** Draws the eye when the number demands action (e.g. needs-reply > 0). */
-  accent?: boolean;
-}) {
+/** "Booking inquiries · Instagram · @aubin · Live · the numbers that are
+ *  real for that channel" — one compact row per automation. */
+function AutomationRow({ row }: { row: DashboardData['automationPerformance'][number] }) {
+  const facts: string[] = [];
+  if (row.replied && row.replied.messaged > 0) {
+    facts.push(`${pct(row.replied.contacts, row.replied.messaged)} replied`);
+  }
+  if (row.read && row.read.sent > 0) {
+    facts.push(`${pct(row.read.read, row.read.sent)} read`);
+  }
   return (
     <Link
-      to={to}
-      className={`pop-card pop-card-hover p-4 block ${accent ? 'ring-2 ring-chartreuse' : ''}`}
+      to={`/automations/${row.id}`}
+      className="flex items-center gap-3 rounded-xl px-2 py-2.5 -mx-2 hover:bg-[#FAFAF8] transition-colors"
     >
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconBg}`}>
-        {icon}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-[13.5px] font-semibold text-[#111111] truncate">{row.name}</p>
+          {row.status === 'live' ? (
+            <span className="flex-shrink-0 rounded-full bg-chartreuse/25 px-2 py-0.5 text-[10px] font-semibold text-[#3F5212]">Live</span>
+          ) : (
+            <span className="flex-shrink-0 rounded-full bg-[#F0EDE8] px-2 py-0.5 text-[10px] font-medium text-[#8A857E]">Paused</span>
+          )}
+        </div>
+        {row.platform && (
+          <div className="flex items-center gap-1.5 mt-1">
+            <PlatformDot platform={row.platform} size={6} />
+            <p className="text-[11px] text-[#9B9B8F]">
+              {platformMeta(row.platform).name}
+              {row.account?.handle ? ` · ${row.account.handle}` : row.account?.displayName ? ` · ${row.account.displayName}` : ''}
+            </p>
+          </div>
+        )}
+        <p className="text-[11.5px] text-[#6B6B6B] mt-1.5">
+          {facts.length > 0 ? facts.join(' · ') : 'No messages sent yet'}
+        </p>
       </div>
-      <p className="font-geist-mono font-bold text-2xl text-[#111111]">{value}</p>
-      <p className="text-[12px] text-[#6B6B6B] mt-1">{label}</p>
+      <div className="text-right flex-shrink-0">
+        <p className="font-geist-mono font-bold text-[15px] text-[#111111]">{row.audience.toLocaleString()}</p>
+        <p className="text-[10px] text-[#9B9B8F]">audience</p>
+        {row.audienceGrowth30d > 0 && (
+          <p className="text-[10.5px] font-medium text-[#5F8B18] mt-0.5">+{row.audienceGrowth30d} this month</p>
+        )}
+      </div>
     </Link>
   );
 }
 
+function activityLine(event: DashboardData['recentActivity'][number]): string {
+  switch (event.kind) {
+    case 'went_live':
+      return `${event.automationName} went live${event.accountHandle ? ` on ${event.accountHandle}` : ''}`;
+    case 'audience_joined':
+      return `${event.count} ${event.count === 1 ? 'person' : 'people'} entered ${event.automationName} this week`;
+    case 'member_joined':
+      return `${event.email} joined your workspace`;
+    case 'conversation_started':
+      return `${event.contactHandle ?? event.contactName ?? 'Someone'} started a conversation`;
+    case 'messages_sent':
+      return `${event.automationName} sent ${event.count} message${event.count === 1 ? '' : 's'} today`;
+  }
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
+  const { beginCreateAutomation } = useCreateAutomation();
   const backendConfigured = isBackendConfigured();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(backendConfigured);
@@ -103,7 +154,7 @@ export default function HomePage() {
   if (!backendConfigured) {
     return (
       <div className="pop-page max-w-[900px]">
-        <PageHeader title="Home" subtitle="Your automations, working while you don't." />
+        <PageHeader title="Home" subtitle="Your automations are working while you're not." />
         <div className="pop-card p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
@@ -126,13 +177,11 @@ export default function HomePage() {
     <div className="pop-page max-w-[900px]">
       <PageHeader
         title="Home"
-        subtitle="Your automations, working while you don't."
+        subtitle="Your automations are working while you're not."
         action={
-          <>
-          <Link to="/automations/new" className="pop-btn-primary">
+          <button type="button" onClick={beginCreateAutomation} className="pop-btn-primary">
             <Plus size={15} />Create an automation
-          </Link>
-          </>
+          </button>
         }
       />
 
@@ -178,10 +227,11 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Needs-you strip: time-sensitive, so it outranks the numbers. */}
+          {/* ATTENTION — the one place this count appears. Opens Inbox
+              already filtered to the conversations that need a human. */}
           {totals!.needsReply > 0 && (
             <button
-              onClick={() => navigate('/inbox')}
+              onClick={() => navigate('/inbox?f=needs-you')}
               className="pop-card pop-card-hover p-4 w-full flex items-center gap-3 text-left ring-2 ring-chartreuse"
             >
               <div className="w-9 h-9 rounded-xl bg-chartreuse flex items-center justify-center flex-shrink-0">
@@ -189,10 +239,10 @@ export default function HomePage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-[#111111]">
-                  {totals!.needsReply} conversation{totals!.needsReply === 1 ? '' : 's'} waiting on you
+                  {totals!.needsReply} conversation{totals!.needsReply === 1 ? '' : 's'} need{totals!.needsReply === 1 ? 's' : ''} you
                 </p>
                 <p className="text-[12px] text-[#6B6B6B]">
-                  Questions your automations couldn&apos;t answer — AI drafts are ready where possible.
+                  Questions your automations handed over to you.
                 </p>
               </div>
               <ArrowRight size={16} className="text-[#9B9B8F] flex-shrink-0" />
@@ -207,12 +257,12 @@ export default function HomePage() {
               </div>
               <p className="text-[16px] font-bold text-[#111111]">Set up your first automation</p>
               <p className="text-[13px] text-[#6B6B6B] mt-2 max-w-md mx-auto leading-relaxed">
-                Pick a post, choose trigger words, and write the reply — Populr answers comments
-                and DMs for you, sends your tracked link, and turns engagement into contacts.
+                Describe it in your own words — Populr answers comments and DMs for you,
+                sends your links, and turns engagement into an audience.
               </p>
-              <Link to="/automations/new" className="pop-btn-primary mt-5 inline-flex">
+              <button type="button" onClick={beginCreateAutomation} className="pop-btn-primary mt-5 inline-flex">
                 <Plus size={15} />Create an automation
-              </Link>
+              </button>
               {data.connectedAccounts.length === 0 && (
                 <p className="text-[12px] text-[#9B9B8F] mt-4">
                   You&apos;ll connect an account along the way, or{' '}
@@ -222,129 +272,73 @@ export default function HomePage() {
             </div>
           ) : (
             <>
-              {/* The numbers automations generate — every tile opens the
-                  surface where that number lives. */}
+              {/* PERFORMANCE — four marketer tiles. Tiles whose metric can't
+                  be measured for this workspace are omitted, never zeroed. */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <StatTile
+                <Tile
                   to="/automations"
-                  icon={<Zap size={16} className="text-[#111111]" />}
-                  iconBg="bg-chartreuse/20"
-                  value={totals!.activeAutomations}
+                  icon={<Zap size={13} />}
+                  value={String(totals!.activeAutomations)}
                   label="Live automations"
                 />
-                <StatTile
-                  to="/inbox"
-                  icon={<InboxIcon size={16} className={totals!.needsReply > 0 ? 'text-[#111111]' : 'text-[#6B6B6B]'} />}
-                  iconBg={totals!.needsReply > 0 ? 'bg-chartreuse/20' : 'bg-[#FAFAF8]'}
-                  value={totals!.needsReply}
-                  label="Need your reply"
-                />
-                <StatTile
+                {data.engagement && data.engagement.contactsDmd > 0 && (
+                  <Tile
+                    icon={<MessageCircleReply size={13} />}
+                    value={pct(data.engagement.contactsReplied, data.engagement.contactsDmd)}
+                    label="Reply rate"
+                    sub={`of ${data.engagement.contactsDmd} ${data.engagement.contactsDmd === 1 ? 'person' : 'people'} messaged`}
+                  />
+                )}
+                <Tile
                   to="/contacts"
-                  icon={<Flame size={16} className="text-[#D97706]" />}
-                  iconBg="bg-[#FFF3E0]"
-                  value={totals!.warmLeads}
-                  label="Warm leads"
+                  icon={<TrendingUp size={13} />}
+                  value={`+${data.performance.audienceGrowth30d}`}
+                  label="Audience growth"
+                  sub="this month"
                 />
-                <StatTile
-                  to="/contacts"
-                  icon={<Users size={16} className="text-[#6B6B6B]" />}
-                  iconBg="bg-[#FAFAF8]"
-                  value={totals!.contacts}
-                  label="Contacts"
-                />
+                {data.performance.readRate && (
+                  <Tile
+                    icon={<Eye size={13} />}
+                    value={pct(data.performance.readRate.read, data.performance.readRate.sent)}
+                    label="Read rate"
+                    sub={`of ${data.performance.readRate.sent} DM${data.performance.readRate.sent === 1 ? '' : 's'} sent`}
+                  />
+                )}
               </div>
 
-              {/* How fans respond to what automations send: real platform
-                  activity — link taps, replies, read receipts — as rates
-                  with their denominators in view. Hidden until something
-                  has actually been sent; empty analytics teach nothing.
-                  The optional check also covers a backend that predates the
-                  engagement block — Home must render without it, not crash. */}
-              {data.engagement && (data.engagement.dmsSent > 0 || data.engagement.linkSends > 0) && (
+              {/* AUTOMATION PERFORMANCE — per automation, from the account
+                  it actually runs on. */}
+              {data.automationPerformance.length > 0 && (
                 <section className="pop-card p-5">
-                  <h2 className="pop-card-title mb-1">How fans respond</h2>
-                  <p className="text-[12px] text-[#6B6B6B] mb-4">
-                    From platform receipts, replies, and tracked-link taps.
+                  <h2 className="pop-card-title mb-1">Automation performance</h2>
+                  <p className="text-[12px] text-[#6B6B6B] mb-3">
+                    Only what each channel can really measure — nothing padded with zeros.
                   </p>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <RateTile
-                      icon={<MousePointerClick size={13} />}
-                      label="Link taps"
-                      value={rate(data.engagement.uniqueLinkClicks, data.engagement.linkSends)}
-                      basis={`of ${data.engagement.linkSends} link${data.engagement.linkSends === 1 ? '' : 's'} sent`}
-                    />
-                    <RateTile
-                      icon={<MessageCircleReply size={13} />}
-                      label="Wrote back"
-                      value={rate(data.engagement.contactsReplied, data.engagement.contactsDmd)}
-                      basis={`of ${data.engagement.contactsDmd} fan${data.engagement.contactsDmd === 1 ? '' : 's'} DM'd`}
-                    />
-                    <RateTile
-                      icon={<Eye size={13} />}
-                      label="DMs read"
-                      value={rate(data.engagement.dmsRead, data.engagement.dmsSent)}
-                      basis={`of ${data.engagement.dmsSent} DM${data.engagement.dmsSent === 1 ? '' : 's'} sent`}
-                    />
-                    <RateTile
-                      icon={<TrendingUp size={13} />}
-                      label="With media"
-                      value={String(data.engagement.mediaDmsSent)}
-                      basis={`DM${data.engagement.mediaDmsSent === 1 ? '' : 's'} carried media`}
-                    />
-                  </div>
-                </section>
-              )}
-
-              {/* The question this product exists to answer: which content
-                  is actually producing leads. */}
-              {data.topPostsByWarmLeads.length > 0 && (
-                <section className="pop-card p-5">
-                  <h2 className="pop-card-title mb-1 flex items-center gap-2">
-                    <TrendingUp size={15} />What&apos;s bringing you leads
-                  </h2>
-                  <p className="text-[12px] text-[#6B6B6B] mb-4">
-                    Posts ranked by the warm leads their automations generated.
-                  </p>
-                  <div className="space-y-3">
-                    {data.topPostsByWarmLeads.slice(0, 3).map(post => (
-                      <div key={post.id} className="flex items-center gap-3">
-                        {post.media_url ? (
-                          <img src={post.media_url} alt="" className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-11 h-11 rounded-lg bg-[#FAFAF8] flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] text-[#111111] line-clamp-1">{post.caption || 'Untitled post'}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <PlatformDot platform={post.platform} size={6} />
-                            <p className="text-[11px] text-[#9B9B8F]">
-                              {post.account_username ? `@${post.account_username}` : platformMeta(post.platform).name} · {post.contacts} contact{post.contacts === 1 ? '' : 's'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-geist-mono font-bold text-[15px] text-[#111111]">{post.warm_leads}</p>
-                          <p className="text-[10px] text-[#9B9B8F]">warm leads</p>
-                        </div>
-                      </div>
+                  <div className="divide-y divide-[#F0EDE8]">
+                    {data.automationPerformance.map(row => (
+                      <AutomationRow key={row.id} row={row} />
                     ))}
                   </div>
+                  <div className="mt-3 text-right">
+                    <Link to="/automations" className="text-[12px] text-[#6B6B6B] hover:text-[#111111] inline-flex items-center gap-1">
+                      View all automations <ArrowRight size={12} />
+                    </Link>
+                  </div>
                 </section>
               )}
 
-              {/* Proof of work: the last few things automations did. */}
+              {/* RECENT — a few meaningful things, quietly. */}
               {data.recentActivity.length > 0 && (
                 <section className="pop-card p-5">
-                  <h2 className="pop-card-title mb-3">Recent activity</h2>
+                  <h2 className="pop-card-title mb-3">Recent</h2>
                   <div className="space-y-2.5">
-                    {data.recentActivity.slice(0, 5).map(event => (
-                      <div key={event.id} className="flex items-start gap-2.5">
-                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${event.status === 'failed' ? 'bg-[#DC2626]' : event.status === 'skipped' ? 'bg-[#9B9B8F]' : 'bg-chartreuse'}`} />
-                        <p className="text-[12px] text-[#6B6B6B] flex-1 leading-relaxed line-clamp-2">
-                          {event.detail || event.event_type.replace(/_/g, ' ')}
+                    {data.recentActivity.map((event, i) => (
+                      <div key={`${event.kind}-${i}`} className="flex items-start gap-2.5">
+                        <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-chartreuse" />
+                        <p className="text-[12px] text-[#6B6B6B] flex-1 leading-relaxed">
+                          {activityLine(event)}
                         </p>
-                        <span className="text-[11px] text-[#9B9B8F] flex-shrink-0">{timeAgo(event.created_at)}</span>
+                        <span className="text-[11px] text-[#9B9B8F] flex-shrink-0">{timeAgo(event.at)}</span>
                       </div>
                     ))}
                   </div>

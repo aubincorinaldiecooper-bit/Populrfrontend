@@ -520,18 +520,35 @@ export interface DashboardData {
     linkClicks: number;
     uniqueLinkClicks: number;
   };
-  topPostsByWarmLeads: {
-    id: string; platform: string; caption: string | null; url: string | null;
-    media_url: string | null; account_username: string | null;
-    warm_leads: number; contacts: number;
+  /** Home's marketer tiles, honest by construction: readRate is null (not
+   *  zero) until a DM has left on a platform that reports read receipts. */
+  performance: {
+    audienceGrowth30d: number;
+    readRate: { read: number; sent: number } | null;
+  };
+  /** Per automation, from the account IT is bound to — never a workspace
+   *  default. Metrics a channel can't measure arrive null and are omitted
+   *  from the row, never rendered as 0%. */
+  automationPerformance: {
+    id: string;
+    name: string;
+    status: string;
+    platform: string | null;
+    account: { handle: string | null; displayName: string | null } | null;
+    audience: number;
+    audienceGrowth30d: number;
+    replied: { contacts: number; messaged: number } | null;
+    read: { read: number; sent: number } | null;
   }[];
-  topPlatformsByWarmLeads: { platform: string; warm_leads: number; contacts: number }[];
-  topFunnelsByClicks: { id: string; name: string; template_key: string | null; clicks: number; unique_clicks: number }[];
-  recentActivity: {
-    id: string; event_type: string; status: string; detail: string | null;
-    created_at: string; contact_handle: string | null; contact_name: string | null;
-    automation_name: string | null; source_platform: string | null;
-  }[];
+  /** A few meaningful things that happened, derived from state tables —
+   *  the UI writes the sentences, so engine internals can't leak through. */
+  recentActivity: (
+    | { kind: 'went_live'; automationName: string; accountHandle: string | null; at: string }
+    | { kind: 'audience_joined'; automationName: string; count: number; at: string }
+    | { kind: 'member_joined'; email: string; at: string }
+    | { kind: 'conversation_started'; contactHandle: string | null; contactName: string | null; at: string }
+    | { kind: 'messages_sent'; automationName: string; count: number; at: string }
+  )[];
 }
 
 /** GET /api/dashboard — everything Home needs in one scoped call. */
@@ -1099,7 +1116,7 @@ export async function fetchFlow(id: string): Promise<AutomationFlow> {
   return data.flow;
 }
 
-export async function createFlow(input: { name?: string; graph?: FlowGraph } = {}): Promise<AutomationFlow> {
+export async function createFlow(input: { name?: string; graph?: FlowGraph; accountId?: string } = {}): Promise<AutomationFlow> {
   const data = await apiFetch<{ flow: AutomationFlow }>('/api/flows', { method: 'POST', body: input });
   return data.flow;
 }
