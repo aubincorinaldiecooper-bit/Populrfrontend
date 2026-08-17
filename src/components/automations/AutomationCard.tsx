@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Zap, GitBranch, Pause, Play, MoreHorizontal, Pencil, Copy, Trash2, Loader2, AlertTriangle,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import StatusPill from '../StatusPill';
 import { platformMeta } from '../../lib/platformMeta';
 import { timeAgo } from '../../lib/timeAgo';
@@ -77,33 +84,10 @@ export default function AutomationCard({
   flow, audience, onOpen, onToggleStatus, canToggle = true, canEdit = true, canDelete = true, onRename, onDuplicate, onDelete, onShowAudience,
   busy = false,
 }: AutomationCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(flow.name);
   const [savingName, setSavingName] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-
-  // Same menu behaviour as the account menu in the sidebar: click away to
-  // dismiss, Escape hands focus back to what opened it rather than dropping it.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setMenuOpen(false);
-      menuTriggerRef.current?.focus();
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [menuOpen]);
 
   useEffect(() => {
     if (renaming) nameInputRef.current?.select();
@@ -111,7 +95,6 @@ export default function AutomationCard({
 
   const startRename = () => {
     setDraftName(flow.name);
-    setMenuOpen(false);
     setRenaming(true);
   };
 
@@ -251,65 +234,56 @@ export default function AutomationCard({
             {live ? <Pause size={15} /> : <Play size={15} />}
           </button>}
 
-          {(canEdit || canDelete || canToggle) && <div ref={menuRef} className="relative">
-            <button
-              ref={menuTriggerRef}
-              onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
-              aria-label={`More options for ${flow.name}`}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className="p-2 rounded-lg text-[#9B9B8F] hover:bg-[#F4F1EC] hover:text-[#111111]
-                transition-colors"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            {menuOpen && (
-              <div
-                role="menu"
-                aria-label={`${flow.name} options`}
-                onClick={e => e.stopPropagation()}
-                className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#E8E4DF]
-                  rounded-xl shadow-lg overflow-hidden py-1 z-20"
-              >
-                {canEdit && <button
-                  role="menuitem"
-                  onClick={startRename}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
-                    text-[#111111] hover:bg-[#FAFAF8] transition-colors"
-                >
-                  <Pencil size={14} className="text-[#6B6B6B]" />Rename
-                </button>}
-                {canEdit && <button
-                  role="menuitem"
-                  onClick={() => { setMenuOpen(false); onDuplicate(); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
-                    text-[#111111] hover:bg-[#FAFAF8] transition-colors"
-                >
-                  <Copy size={14} className="text-[#6B6B6B]" />Duplicate
-                </button>}
-                {canToggle && <button
-                  role="menuitem"
-                  onClick={() => { setMenuOpen(false); onToggleStatus(); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
-                    text-[#111111] hover:bg-[#FAFAF8] transition-colors"
-                >
-                  {live
-                    ? <><Pause size={14} className="text-[#6B6B6B]" />Pause</>
-                    : <><Play size={14} className="text-[#6B6B6B]" />Activate</>}
-                </button>}
+          {(canEdit || canDelete || canToggle) && (
+            // The popup lives in a DOM portal, but React synthetic events
+            // bubble through the REACT tree — so trigger and menu clicks
+            // alike would reach the card's own open handler without this
+            // stop at the boundary.
+            <div onClick={e => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    aria-label={`More options for ${flow.name}`}
+                    className="p-2 rounded-lg text-[#9B9B8F] hover:bg-[#F4F1EC] hover:text-[#111111]
+                      transition-colors"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                }
+              />
+              <DropdownMenuContent aria-label={`${flow.name} options`} className="w-44">
+                {canEdit && (
+                  <DropdownMenuItem onClick={startRename}>
+                    <Pencil size={14} className="text-[#6B6B6B]" />Rename
+                  </DropdownMenuItem>
+                )}
+                {canEdit && (
+                  <DropdownMenuItem onClick={onDuplicate}>
+                    <Copy size={14} className="text-[#6B6B6B]" />Duplicate
+                  </DropdownMenuItem>
+                )}
+                {canToggle && (
+                  <DropdownMenuItem onClick={onToggleStatus}>
+                    {live
+                      ? <><Pause size={14} className="text-[#6B6B6B]" />Pause</>
+                      : <><Play size={14} className="text-[#6B6B6B]" />Activate</>}
+                  </DropdownMenuItem>
+                )}
                 {/* Still red — it is still deletion. Red inside a menu you
                     opened on purpose is a warning; red on the card was noise. */}
-                {canDelete && <button
-                  role="menuitem"
-                  onClick={() => { setMenuOpen(false); onDelete(); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
-                    text-[#DC2626] hover:bg-[#FEF2F2] transition-colors border-t border-[#F0EEEA]"
-                >
-                  <Trash2 size={14} />Delete
-                </button>}
-              </div>
-            )}
-          </div>}
+                {canDelete && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem destructive onClick={onDelete}>
+                      <Trash2 size={14} />Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
+          )}
         </div>
       </div>
 

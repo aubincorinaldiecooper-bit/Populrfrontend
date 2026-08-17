@@ -1,4 +1,5 @@
 import { Check, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { getSubscriptionCheckoutUrl } from '../lib/api';
 
 const INCLUDED_POINTS = [
@@ -9,9 +10,10 @@ const INCLUDED_POINTS = [
 
 /**
  * Shown whenever a social-connect attempt comes back subscription_required
- * (Zernio 402) — never Zernio's own error, never a raw error card alongside
- * this. Persistent (no backdrop dismiss) since "Not now" is the only
- * intended way out besides subscribing.
+ * (402) — never the provider's own error, never a raw error card alongside
+ * this. Persistent (no backdrop dismiss — `disablePointerDismissal`) since
+ * "Not now" is the only intended way out besides subscribing; Escape maps
+ * to the same onClose as "Not now".
  */
 export default function SubscriptionModal({
   platform, onClose,
@@ -45,8 +47,8 @@ export default function SubscriptionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-6 relative">
+    <Dialog open onOpenChange={next => { if (!next) onClose(); }} disablePointerDismissal>
+      <DialogContent className="relative">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-[#9B9B8F] hover:text-[#111111] hover:bg-[#FAFAF8] rounded-lg transition-all"
@@ -56,7 +58,7 @@ export default function SubscriptionModal({
         </button>
 
         <p className="text-[11px] font-bold tracking-[0.1em] text-[#5C6B00] uppercase mb-2">Populr Pro</p>
-        <h3 className="font-geist font-bold text-xl text-[#111111] mb-1">Connect more accounts</h3>
+        <DialogTitle className="mb-1">Connect more accounts</DialogTitle>
         <p className="text-[26px] font-bold text-[#111111] mb-3">
           $12<span className="text-[14px] font-medium text-[#6B6B6B]"> / month</span>
         </p>
@@ -90,7 +92,7 @@ export default function SubscriptionModal({
             Not now
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

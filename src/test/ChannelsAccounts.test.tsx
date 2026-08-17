@@ -131,8 +131,11 @@ describe('ChannelsPage — independent per-account lifecycle', () => {
     await waitFor(() => expect(apiMocks.getPlatformConnectUrl).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: /Copy connection link/ }));
     await waitFor(() => expect(mockClipboardWrite).toHaveBeenCalled());
+    // The dialog is a real modal now — the page behind it is inert until it
+    // closes, so close it before reaching for page-level buttons.
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     // First-time connect on a platform with no accounts (Facebook card).
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
     expect(mockBeginPlatformConnect).toHaveBeenCalled();
     expect(mockDisconnectAccount).not.toHaveBeenCalled();

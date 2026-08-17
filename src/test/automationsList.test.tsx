@@ -208,7 +208,7 @@ describe('the actions on a card', () => {
     await screen.findByText('Menu comments');
 
     await user.click(screen.getByLabelText('More options for Menu comments'));
-    await user.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
 
     const field = await screen.findByLabelText('Rename Menu comments');
     await user.clear(field);
@@ -227,7 +227,7 @@ describe('the actions on a card', () => {
     await screen.findByText('Menu comments');
 
     await user.click(screen.getByLabelText('More options for Menu comments'));
-    await user.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
     const field = await screen.findByLabelText('Rename Menu comments');
     await user.clear(field);
     await user.type(field, 'Menu DMs{Enter}');
@@ -243,7 +243,7 @@ describe('the actions on a card', () => {
     await screen.findByText('Menu comments');
 
     await user.click(screen.getByLabelText('More options for Menu comments'));
-    await user.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
 
     await waitFor(() => expect(createFlowMock).toHaveBeenCalledWith({
       name: 'Menu comments copy', graph: MENU_GRAPH,
@@ -259,7 +259,8 @@ describe('the actions on a card', () => {
     await screen.findByText('Menu comments');
 
     await user.click(screen.getByLabelText('More options for Menu comments'));
-    expect(screen.getByRole('menu')).toBeInTheDocument();
+    // The shared menu mounts its popup asynchronously (portal + positioner).
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
 

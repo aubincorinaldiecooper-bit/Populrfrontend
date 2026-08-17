@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import AutomationsPage from '../pages/AutomationsPage';
@@ -112,7 +112,7 @@ vi.mock('../lib/api', async () => {
  */
 async function deleteFirst(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getAllByLabelText(/more options for/i)[0]);
-  await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 }
 
 /** The toast's Undo handler, captured from the success toast. */
@@ -182,40 +182,41 @@ describe('deleting an automation, then coming back to the page', () => {
     // are now three ways of doing nothing, because it has already gone. A
     // second dispatch would be worse than none: it would 404 against a row
     // already deleted and report a failure for a delete that succeeded.
+    serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
+    reset();
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    const user = userEvent.setup();
+
+    const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
+
+    await deleteFirst(user);
+    landPendingDelete();
+    await act(async () => { await Promise.resolve(); });
+    await deleteFirst(user);
+    landPendingDelete();
+    await act(async () => { await Promise.resolve(); });
+
+    expect(mockDeleteFlow.mock.calls.map(c => c[0]).sort()).toEqual(['f1', 'f2']);
+
+    // The document goes away, then React tears down, then time passes well
+    // past the old undo window. None of it may send anything. The clock is
+    // faked only for this stretch — the shared menu opens on real timers.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
-      reset();
-      const showToast = vi.fn();
-      mockUseApp.mockReturnValue({ showToast, accounts: [] });
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-      const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
-      await waitFor(() => expect(screen.getByText('daytime party')).toBeInTheDocument());
-
-      await deleteFirst(user);
-      landPendingDelete();
-      await act(async () => { await Promise.resolve(); });
-      await deleteFirst(user);
-      landPendingDelete();
-      await act(async () => { await Promise.resolve(); });
-
-      expect(mockDeleteFlow.mock.calls.map(c => c[0]).sort()).toEqual(['f1', 'f2']);
-
-      // The document goes away, then React tears down, then time passes well
-      // past the old undo window. None of it may send anything.
       act(() => { window.dispatchEvent(new Event('pagehide')); });
       view.unmount();
       await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
-
-      expect(mockDeleteFlow).toHaveBeenCalledTimes(2);
-
-      // And they are gone from the server, so the next load agrees.
-      render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
-      await waitFor(() => expect(screen.getByText('No automations yet')).toBeInTheDocument());
     } finally {
       vi.useRealTimers();
     }
+
+    expect(mockDeleteFlow).toHaveBeenCalledTimes(2);
+
+    // And they are gone from the server, so the next load agrees.
+    render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('No automations yet')).toBeInTheDocument());
   });
 
   it('puts it back and says why when the delete actually failed', async () => {
@@ -274,19 +275,21 @@ describe('deleting an automation, then coming back to the page', () => {
     // long as the tab is open. The wait gives up — and the automation being
     // deleted still does not come back, because the list is filtered by what
     // is in flight rather than by what the wait managed to observe.
+    serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
+    reset();
+    const showToast = vi.fn();
+    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    const user = userEvent.setup();
+
+    const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
+    await deleteFirst(user);
+    view.unmount();
+
+    // The clock is faked only for the bounded-wait stretch — the shared menu
+    // above opens on real timers.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
-      reset();
-      const showToast = vi.fn();
-      mockUseApp.mockReturnValue({ showToast, accounts: [] });
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-      const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
-      await waitFor(() => expect(screen.getByText('Half-built draft')).toBeInTheDocument());
-      await deleteFirst(user);
-      view.unmount();
-
       render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
       // The DELETE is never released. Past the bounded wait, the page must
       // show the rest of the list rather than a skeleton.
@@ -315,13 +318,16 @@ describe('Undo', () => {
     reset();
     const showToast = vi.fn();
     mockUseApp.mockReturnValue({ showToast, accounts: [] });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup();
 
     render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Guide DM')).toBeInTheDocument());
     await deleteFirst(user);
-    expect(screen.queryByText('Guide DM')).not.toBeInTheDocument();
+    // Live automations get the deliberate question (an alertdialog now, not
+    // window.confirm) before anything is sent.
+    const ask = await screen.findByRole('alertdialog', { name: /Delete .Guide DM/ });
+    await user.click(within(ask).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByText('Guide DM')).not.toBeInTheDocument());
 
     landPendingDelete();
     await act(async () => { await Promise.resolve(); });
