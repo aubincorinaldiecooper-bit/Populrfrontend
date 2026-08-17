@@ -33,6 +33,13 @@ export interface AutomationCardProps {
   audience: number | null;
   onOpen: () => void;
   onToggleStatus: () => void;
+  /** False for members and canvas collaborators: switching an automation on
+   *  or off stays with the workspace owner, so the affordance isn't shown. */
+  canToggle?: boolean;
+  /** Rename/duplicate ride the "Edit automations" grant. */
+  canEdit?: boolean;
+  /** Deleting an automation stays with the owner. */
+  canDelete?: boolean;
   onRename: (name: string) => Promise<void>;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -67,7 +74,7 @@ function StateIcon({ status }: { status: AutomationFlow['status'] }) {
 }
 
 export default function AutomationCard({
-  flow, audience, onOpen, onToggleStatus, onRename, onDuplicate, onDelete, onShowAudience,
+  flow, audience, onOpen, onToggleStatus, canToggle = true, canEdit = true, canDelete = true, onRename, onDuplicate, onDelete, onShowAudience,
   busy = false,
 }: AutomationCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -233,7 +240,7 @@ export default function AutomationCard({
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button
+          {canToggle && <button
             onClick={e => { e.stopPropagation(); onToggleStatus(); }}
             disabled={busy}
             className="p-2 rounded-lg text-[#6B6B6B] hover:bg-[#F4F1EC] hover:text-[#111111]
@@ -242,9 +249,9 @@ export default function AutomationCard({
             aria-label={`${live ? 'Pause' : 'Activate'} ${flow.name}`}
           >
             {live ? <Pause size={15} /> : <Play size={15} />}
-          </button>
+          </button>}
 
-          <div ref={menuRef} className="relative">
+          {(canEdit || canDelete || canToggle) && <div ref={menuRef} className="relative">
             <button
               ref={menuTriggerRef}
               onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
@@ -264,23 +271,23 @@ export default function AutomationCard({
                 className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#E8E4DF]
                   rounded-xl shadow-lg overflow-hidden py-1 z-20"
               >
-                <button
+                {canEdit && <button
                   role="menuitem"
                   onClick={startRename}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
                     text-[#111111] hover:bg-[#FAFAF8] transition-colors"
                 >
                   <Pencil size={14} className="text-[#6B6B6B]" />Rename
-                </button>
-                <button
+                </button>}
+                {canEdit && <button
                   role="menuitem"
                   onClick={() => { setMenuOpen(false); onDuplicate(); }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
                     text-[#111111] hover:bg-[#FAFAF8] transition-colors"
                 >
                   <Copy size={14} className="text-[#6B6B6B]" />Duplicate
-                </button>
-                <button
+                </button>}
+                {canToggle && <button
                   role="menuitem"
                   onClick={() => { setMenuOpen(false); onToggleStatus(); }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
@@ -289,20 +296,20 @@ export default function AutomationCard({
                   {live
                     ? <><Pause size={14} className="text-[#6B6B6B]" />Pause</>
                     : <><Play size={14} className="text-[#6B6B6B]" />Activate</>}
-                </button>
+                </button>}
                 {/* Still red — it is still deletion. Red inside a menu you
                     opened on purpose is a warning; red on the card was noise. */}
-                <button
+                {canDelete && <button
                   role="menuitem"
                   onClick={() => { setMenuOpen(false); onDelete(); }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
                     text-[#DC2626] hover:bg-[#FEF2F2] transition-colors border-t border-[#F0EEEA]"
                 >
                   <Trash2 size={14} />Delete
-                </button>
+                </button>}
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 

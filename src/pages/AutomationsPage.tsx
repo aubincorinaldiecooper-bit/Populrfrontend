@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
+import { isOwnerView, canEditAutomations } from '../lib/access';
 import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
 import { Search, Plus, AlertCircle, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
@@ -152,7 +153,12 @@ function keywordsOf(graph: FlowGraph): string[] {
 
 export default function AutomationsPage() {
   const navigate = useNavigate();
-  const { showToast } = useApp();
+  const { showToast, workspaceAccess } = useApp();
+  const ownerView = isOwnerView(workspaceAccess);
+  const mayCreate = canEditAutomations(workspaceAccess) && workspaceAccess?.role !== 'canvas';
+  // List mutations: rename/duplicate ride the edit grant (canvas users edit
+  // in the builder, not here); deleting stays with the owner.
+  const editGrant = workspaceAccess?.role === 'canvas' ? false : canEditAutomations(workspaceAccess);
   const [searchParams, setSearchParams] = useSearchParams();
   const backendConfigured = isBackendConfigured();
 
@@ -467,14 +473,14 @@ export default function AutomationsPage() {
                 placeholder="Search automations..." className="pop-search w-full sm:w-56"
               />
             </div>
-            <button
+            {mayCreate && <button
               onClick={startNew}
               disabled={creatingAutomation}
               className="pop-btn-primary w-full sm:w-auto justify-center disabled:opacity-60"
             >
               {creatingAutomation ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={2.5} />}
               New automation
-            </button>
+            </button>}
           </div>
         }
       />
@@ -520,11 +526,11 @@ export default function AutomationsPage() {
           icon="automations"
           title={search || statusTab !== 'all' ? 'No automations match that search' : 'No automations yet'}
           description="Describe what should happen and Populr builds the steps for you."
-          action={
+          action={mayCreate ? (
             <button onClick={startNew} className="pop-btn-primary" disabled={creatingAutomation}>
               New automation
             </button>
-          }
+          ) : undefined}
         />
       ) : !error && (
         <div className="space-y-2.5">
@@ -535,6 +541,9 @@ export default function AutomationsPage() {
               audience={audience[flow.id] ?? null}
               onOpen={() => navigate(`/automations/${flow.id}`)}
               onToggleStatus={() => toggleStatus(flow)}
+              canToggle={ownerView}
+              canEdit={editGrant}
+              canDelete={ownerView}
               onRename={name => rename(flow, name)}
               onDuplicate={() => duplicate(flow)}
               onDelete={() => remove(flow)}

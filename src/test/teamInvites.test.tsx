@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import TeamPage from '../pages/TeamPage';
+import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
 import InviteAcceptPage from '../pages/InviteAcceptPage';
 import { ApiError, type TeamInvitation, type TeamMember } from '../lib/api';
 
@@ -32,13 +33,27 @@ const mockInvite = vi.fn();
 const mockRevoke = vi.fn();
 const mockAccept = vi.fn();
 
+// The workspace access the chrome reads (owner by default; tests flip it to
+// walk in a member's or canvas invitee's shoes).
+let mockAccess: unknown = null;
+
+const mockRefreshAccess = vi.fn();
+
+vi.mock('../context/AppContext', () => ({
+  useApp: () => ({
+    showToast: vi.fn(),
+    workspaceAccess: mockAccess,
+    refreshWorkspaceAccess: mockRefreshAccess,
+  }),
+}));
+
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
   return {
     ...actual,
     isBackendConfigured: () => true,
     fetchTeam: () => mockFetchTeam(),
-    inviteTeammate: (email: string, permissions: unknown) => mockInvite(email, permissions),
+    inviteTeammate: (...args: unknown[]) => mockInvite(...args),
     revokeInvitation: (id: string) => mockRevoke(id),
     acceptInvitation: (token: string) => mockAccept(token),
   };
@@ -53,6 +68,7 @@ function invitation(over: Partial<TeamInvitation> = {}): TeamInvitation {
     emailDelivery: 'sent',
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    automation: null,
     ...over,
   };
 }
@@ -62,12 +78,14 @@ function member(over: Partial<TeamMember> = {}): TeamMember {
     email: 'jo@example.com',
     permissions: { editAutomations: true, contactOutreach: false },
     joinedAt: new Date().toISOString(),
+    automation: null,
     ...over,
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockAccess = null;
   mockFetchTeam.mockResolvedValue({ invitations: [], members: [] });
 });
 
@@ -229,12 +247,9 @@ describe('/invite/:token — accepting', () => {
     expect(mockAccept).toHaveBeenCalledWith('a'.repeat(64));
   });
 
-  it('is honest that shared-workspace access is not switched on yet', async () => {
-    mockAccept.mockResolvedValue({ status: 'accepted', workspaceId: 'prof_1' });
-    renderAccept();
-    await screen.findByText('You’re in');
-    expect(screen.getByText(/your place on the team is already saved/)).toBeInTheDocument();
-  });
+  // The old "shared access is being switched on next" disclaimer is retired
+  // on purpose: membership now resolves real access. The truthful copy is
+  // pinned in the canvas-acceptance describe below.
 
   it('accepting twice with the same account is calm, not an error', async () => {
     mockAccept.mockResolvedValue({ status: 'already_member', workspaceId: 'prof_1' });
@@ -291,5 +306,93 @@ describe('the invite link survives sign-in', () => {
     const { rememberReturnTo, consumeReturnTo } = await vi.importActual<typeof import('../lib/returnTo')>('../lib/returnTo');
     rememberReturnTo(`/invite/${'b'.repeat(64)}`);
     expect(consumeReturnTo()).toBe(`/invite/${'b'.repeat(64)}`);
+  });
+});
+
+describe('canvas-scoped invites', () => {
+  const memberAccess = {
+    id: 'w1', name: 'Summer Drop', role: 'member',
+    permissions: { editAutomations: false, contactOutreach: false },
+    canvasAutomation: null,
+  };
+
+  it('a canvas member is listed with the one automation they work on', async () => {
+    mockFetchTeam.mockResolvedValue({
+      invitations: [invitation({ id: 'i9', email: 'casey@example.com', automation: { id: '7', name: 'Culture comments' } })],
+      members: [member({ email: 'alex@example.com', automation: { id: '7', name: 'Culture comments' } })],
+    });
+    render(<TeamPage />);
+    await waitFor(() => expect(screen.getByText('alex@example.com')).toBeInTheDocument());
+    // Both the joined member and the still-pending invite say WHICH canvas.
+    expect(screen.getAllByText(/Works on/)).toHaveLength(2);
+    expect(screen.getAllByText('“Culture comments”')).toHaveLength(2);
+  });
+
+  it('the builder invite sends the automation id, scoped to that canvas', async () => {
+    const user = userEvent.setup();
+    mockInvite.mockResolvedValue(invitation({ automation: { id: '7', name: 'Culture comments' } }));
+    render(<InviteToAutomationButton flowId="7" flowName="Culture comments" />);
+
+    await user.click(screen.getByRole('button', { name: /Invite/ }));
+    // The popover says exactly what is being handed over.
+    expect(screen.getByText(/nothing else in your workspace/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Their email'), 'casey@example.com');
+    await user.click(screen.getByRole('button', { name: /Send invite/ }));
+
+    await waitFor(() => expect(mockInvite).toHaveBeenCalledWith(
+      'casey@example.com',
+      { editAutomations: false, contactOutreach: false },
+      '7',
+    ));
+    expect(await screen.findByText(/Invite sent to/)).toHaveTextContent('casey@example.com');
+  });
+
+  it('the builder invite is not offered to members — inviting is the owner’s', () => {
+    mockAccess = memberAccess;
+    const { container } = render(<InviteToAutomationButton flowId="7" flowName="Culture comments" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('a member sees the roster read-only: no inviting, no withdrawing', async () => {
+    mockAccess = memberAccess;
+    mockFetchTeam.mockResolvedValue({
+      invitations: [invitation({ email: 'pending@example.com' })],
+      members: [member()],
+    });
+    render(<TeamPage />);
+    await waitFor(() => expect(screen.getByText('jo@example.com')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Invite teammate/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('/invite/:token — canvas acceptance', () => {
+  it('names the automation and opens it, not the workspace', async () => {
+    mockAccept.mockResolvedValue({
+      status: 'accepted',
+      workspaceId: 'w1',
+      automation: { id: '7', name: 'Culture comments' },
+    });
+    renderAccept();
+
+    expect(await screen.findByText('You’re in')).toBeInTheDocument();
+    expect(screen.getByText('“Culture comments”')).toBeInTheDocument();
+    const open = screen.getByRole('link', { name: 'Open the automation' });
+    expect(open).toHaveAttribute('href', '/automations/7');
+    // The generic Go to Populr is replaced by the specific door.
+    expect(screen.queryByRole('link', { name: 'Go to Populr' })).not.toBeInTheDocument();
+  });
+
+  it('a workspace acceptance says the workspace is theirs to see now', async () => {
+    mockAccept.mockResolvedValue({ status: 'accepted', workspaceId: 'w1', automation: null });
+    renderAccept();
+
+    expect(await screen.findByText('You’re in')).toBeInTheDocument();
+    // The app re-resolves who they are NOW — the chrome must not keep
+    // showing the pre-acceptance workspace until a reload.
+    expect(mockRefreshAccess).toHaveBeenCalled();
+    expect(screen.getByText(/it’s what Populr opens for you now/)).toBeInTheDocument();
+    // The pre-access-era disclaimer is gone: membership now resolves access.
+    expect(screen.queryByText(/being switched on next/)).not.toBeInTheDocument();
   });
 });

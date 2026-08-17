@@ -50,7 +50,7 @@ const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
  * would cause infinite loops during callback processing.
  */
 function AppContent() {
-  const { isLoading } = useApp();
+  const { isLoading, workspaceAccess } = useApp();
   const { session, loading: authLoading } = useAuth();
   const location = useLocation();
 
@@ -96,6 +96,21 @@ function AppContent() {
   }
 
   // From here: authenticated user.
+
+  // A canvas invitee's whole surface is one automation — Home, Inbox and the
+  // rest of the workspace aren't shared with them (the API refuses those
+  // reads), so every route outside their canvas, their own account settings,
+  // and invite links redirects there. A bookmarked /contacts must not render
+  // a page whose every request answers 403.
+  if (workspaceAccess?.role === 'canvas' && workspaceAccess.canvasAutomation) {
+    const canvasHome = `/automations/${workspaceAccess.canvasAutomation.id}`;
+    const allowed =
+      location.pathname === canvasHome ||
+      location.pathname.startsWith('/settings') ||
+      location.pathname.startsWith('/invite/');
+    if (!allowed) return <Navigate to={canvasHome} replace />;
+  }
+
 
   // Authenticated: the full product surface. `/` renders Home;
   // the retired `/opportunities` and `/segments` routes land on Contacts,

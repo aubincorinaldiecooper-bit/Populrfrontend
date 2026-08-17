@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { AlertCircle, Check, Loader2, RefreshCw, Users } from 'lucide-react';
-import { ApiError, acceptInvitation, type InviteAcceptStatus } from '../lib/api';
+import { ApiError, acceptInvitation, type AutomationScope, type InviteAcceptStatus } from '../lib/api';
+import { useApp } from '../context/AppContext';
 
 /**
  * Where a team invite link lands: /invite/<token>.
@@ -21,7 +22,7 @@ import { ApiError, acceptInvitation, type InviteAcceptStatus } from '../lib/api'
 
 type Outcome =
   | { kind: 'working' }
-  | { kind: 'done'; status: InviteAcceptStatus }
+  | { kind: 'done'; status: InviteAcceptStatus; automation: AutomationScope | null }
   | { kind: 'refused'; title: string; detail: string; retryable: boolean };
 
 function refusal(err: unknown): Outcome {
@@ -67,6 +68,7 @@ function refusal(err: unknown): Outcome {
 
 export default function InviteAcceptPage() {
   const { token = '' } = useParams();
+  const { refreshWorkspaceAccess } = useApp();
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'working' });
   // The token is single-use: a second POST for the same link would be told
   // it was already used and turn a success into an error message. React 18's
@@ -76,9 +78,15 @@ export default function InviteAcceptPage() {
   const accept = useCallback(() => {
     setOutcome({ kind: 'working' });
     acceptInvitation(token)
-      .then(result => setOutcome({ kind: 'done', status: result.status }))
+      .then(result => {
+        // Membership just changed what this account can reach; re-resolve the
+        // workspace context NOW so "Go to Populr" opens the joined workspace
+        // (or the canvas) instead of a stale view of the old one.
+        void refreshWorkspaceAccess();
+        setOutcome({ kind: 'done', status: result.status, automation: result.automation ?? null });
+      })
       .catch(err => setOutcome(refusal(err)));
-  }, [token]);
+  }, [token, refreshWorkspaceAccess]);
 
   useEffect(() => {
     if (claimed.current) return;
@@ -126,17 +134,17 @@ export default function InviteAcceptPage() {
             <p className="text-[13px] text-[#6B6B6B] mt-2 leading-relaxed">
               {outcome.status === 'already_member'
                 ? 'This invite was already accepted with this account — nothing else to do.'
-                : 'You’ve joined the workspace. Whoever invited you can see you on their team now.'}
+                : outcome.automation
+                  ? <>You can now open and edit <span className="font-semibold text-[#111111]">&ldquo;{outcome.automation.name}&rdquo;</span>. Whoever invited you can see you on their team.</>
+                  : 'You’ve joined the workspace — it’s what Populr opens for you now.'}
             </p>
-            {/* Said plainly rather than implied: the membership is real, and
-                working inside the shared workspace is not switched on yet.
-                Landing them somewhere that looks empty with no explanation
-                would read as a broken invite. */}
-            <p className="text-[12px] text-[#9B9B8F] mt-3 leading-relaxed">
-              Populr opens your own workspace below. Working inside a shared workspace
-              is being switched on next — your place on the team is already saved.
-            </p>
-            <Link to="/" className="pop-btn-primary mt-5 inline-flex">Go to Populr</Link>
+            {outcome.automation ? (
+              <Link to={`/automations/${outcome.automation.id}`} className="pop-btn-primary mt-5 inline-flex">
+                Open the automation
+              </Link>
+            ) : (
+              <Link to="/" className="pop-btn-primary mt-5 inline-flex">Go to Populr</Link>
+            )}
           </>
         )}
 

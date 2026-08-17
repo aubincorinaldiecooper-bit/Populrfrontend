@@ -4,6 +4,8 @@ import {
   AlertTriangle, ArrowLeft, Check, Cloud, CloudOff, Eye, Loader2, Pause, PenLine, Sparkles, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { isOwnerView, canEditAutomations } from '../lib/access';
+import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
@@ -76,7 +78,11 @@ function roomForBothColumns(): boolean {
 export default function AutomationBuilderPage() {
   const { flowId = null } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
-  const { showToast } = useApp();
+  const { showToast, workspaceAccess } = useApp();
+  const ownerView = isOwnerView(workspaceAccess);
+  // View-only members can open and read everything; every write affordance
+  // below is gated on this so nothing is offered that the API would refuse.
+  const mayEdit = canEditAutomations(workspaceAccess);
 
   const builder = useFlowBuilder(flowId);
   const {
@@ -335,8 +341,8 @@ export default function AutomationBuilderPage() {
     if (loading || loadError || openedForEmpty.current) return;
     openedForEmpty.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time post-load decision, same pattern as the loader
-    if (graph.nodes.length === 0) setPanel('ai');
-  }, [loading, loadError, graph.nodes.length]);
+    if (graph.nodes.length === 0 && mayEdit) setPanel('ai');
+  }, [loading, loadError, graph.nodes.length, mayEdit]);
 
   /** Take the creator to the step a notification is about, and ask it there. */
   const openNotification = useCallback((notification: BuilderNotification) => {
@@ -482,6 +488,9 @@ export default function AutomationBuilderPage() {
   /** The same editor content wherever it mounts — anchored card or sheet. */
   const editorFor = (variant: 'anchored' | 'sheet') =>
     selectedNode ? (
+      // View-only: the card still opens — reading a step's configuration is
+      // the point — but every control inside is natively disabled.
+      <fieldset disabled={!mayEdit} className="contents">
       <NodeEditorCard
         key={selectedNode.id}
         variant={variant}
@@ -494,10 +503,11 @@ export default function AutomationBuilderPage() {
         workspaceTags={workspaceTags}
         problems={nodeProblems}
         question={activeQuestion}
-        onChange={patch => updateNodeConfig(selectedNode.id, patch)}
-        onDelete={deleteSelected}
+        onChange={patch => { if (mayEdit) updateNodeConfig(selectedNode.id, patch); }}
+        onDelete={() => { if (mayEdit) deleteSelected(); }}
         onClose={() => setSelectedNodeId(null)}
       />
+      </fieldset>
     ) : null;
 
   if (loading) return <LoadingState />;
@@ -544,7 +554,9 @@ export default function AutomationBuilderPage() {
           </button>
           <span className="hidden sm:inline text-[13px] text-[#D8D3CC]">/</span>
 
-          {editingName ? (
+          {!mayEdit ? (
+            <span className="truncate text-[14px] font-semibold text-[#111111]">{name}</span>
+          ) : editingName ? (
             <input
               ref={nameRef}
               value={name}
@@ -574,10 +586,23 @@ export default function AutomationBuilderPage() {
               Live
             </span>
           )}
+          {!mayEdit && (
+            <span
+              className="ml-1 shrink-0 rounded-full bg-[#F4F1EC] px-2 py-0.5 text-[10.5px]
+                font-semibold uppercase tracking-wide text-[#8A857E]"
+              title="Editing automations wasn't shared with you — you can read everything here."
+            >
+              View only
+            </span>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
           <SaveIndicator state={saveState} savedAt={savedAt} />
+
+          {/* Canvas-scoped invites: owner-only, like every other way of
+              granting access. flowId is null only before the flow exists. */}
+          {flowId && <InviteToAutomationButton flowId={flowId} flowName={name} />}
 
           {/* Three different jobs, three different weights. Preview is a
               secondary action and looks like one; the bell is chrome that
@@ -606,7 +631,7 @@ export default function AutomationBuilderPage() {
             />
           </div>
 
-          {live ? (
+          {live && ownerView ? (
             <button
               type="button"
               onClick={onPause}
@@ -616,6 +641,12 @@ export default function AutomationBuilderPage() {
             >
               <Pause size={14} /> Pause
             </button>
+          ) : !ownerView ? (
+            // Members and canvas collaborators build; switching on stays with
+            // the owner. Absence would read as a bug — say it instead.
+            <span className="hidden md:inline text-[11.5px] text-[#9B9B8F]">
+              {live ? 'Live — the owner runs it' : 'The owner turns it on'}
+            </span>
           ) : (
             <button
               type="button"
@@ -676,9 +707,10 @@ export default function AutomationBuilderPage() {
               setPanel(null);
             }
           }}
-          onMove={moveNode}
-          onConnect={connectNodes}
-          onAddAfter={onAddAfter}
+          onMove={mayEdit ? moveNode : () => {}}
+          onConnect={mayEdit ? connectNodes : () => {}}
+          onAddAfter={mayEdit ? onAddAfter : () => {}}
+          readOnly={!mayEdit}
           fitSignal={fitSignal}
           focusNodeId={focus.nodeId || null}
           focusSignal={focus.signal}
@@ -700,7 +732,7 @@ export default function AutomationBuilderPage() {
           </div>
         )}
 
-        {isEmpty && !composing && (
+        {isEmpty && !composing && mayEdit && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
             <button
               type="button"
@@ -753,7 +785,7 @@ export default function AutomationBuilderPage() {
             unseen results surface HERE, because here is all the AI shows of
             itself while collapsed — a quiet spin while it builds, a lime dot
             when something landed after the panel was closed. */}
-        {panel !== 'ai' && (
+        {panel !== 'ai' && mayEdit && (
           <button
             type="button"
             onClick={openAi}

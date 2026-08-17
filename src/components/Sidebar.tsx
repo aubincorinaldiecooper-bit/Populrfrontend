@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Menu, X, Plus, PanelLeftClose } from 'lucide-react';
+import { Menu, X, Plus, PanelLeftClose, Zap, Settings } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
+import { useApp } from '../context/AppContext';
 import { useInboxUnread } from './inbox/useInboxUnread';
 import { useCreateAutomation } from '../context/CreateAutomationContext';
 
@@ -12,6 +13,22 @@ function NavContent({ pathname, onNavigate, inboxCount }: {
   pathname: string; onNavigate: () => void; inboxCount: number;
 }) {
   const { beginCreateAutomation } = useCreateAutomation();
+  const { workspaceAccess } = useApp();
+  // A canvas invitee's world is one automation: the nav offers exactly that
+  // plus their own account settings — a menu of doors that all say 403
+  // would be worse than a short one. Creating is likewise only offered to
+  // people whose role can create (owners and edit-granted members).
+  const canvas = workspaceAccess?.role === 'canvas' ? workspaceAccess.canvasAutomation : null;
+  const items = canvas
+    ? [
+        { path: `/automations/${canvas.id}`, label: canvas.name, icon: Zap },
+        { path: '/settings', label: 'Settings', icon: Settings },
+      ]
+    : navItems;
+  const offerCreate =
+    workspaceAccess == null ||
+    workspaceAccess.role === 'owner' ||
+    (workspaceAccess.role === 'member' && workspaceAccess.permissions.editAutomations);
   return (
     <>
       {/* Brand */}
@@ -22,18 +39,18 @@ function NavContent({ pathname, onNavigate, inboxCount }: {
 
       {/* Create CTA — the same action as Home's "Create an automation":
           one creation experience, two entry points. */}
-      <button
+      {offerCreate && <button
         type="button"
         onClick={() => { onNavigate?.(); beginCreateAutomation(); }}
         className="mx-1 flex items-center justify-center gap-2 bg-secondary-fixed text-primary font-semibold py-3.5 px-6 rounded-full hover:bg-secondary-fixed-dim transition-colors"
       >
         <Plus size={18} strokeWidth={2.5} />
         Create
-      </button>
+      </button>}
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-1.5 mt-2">
-        {navItems.map(item => {
+        {items.map(item => {
           const active = isActivePath(pathname, item.path);
           const Icon = item.icon;
           return (

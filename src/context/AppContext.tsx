@@ -5,8 +5,9 @@ import { connectFailure } from '../lib/connectErrors';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
+  fetchWorkspaceAccess,
 } from '../lib/api';
-import type { ConnectedAccount } from '../lib/api';
+import type { ConnectedAccount, WorkspaceAccess } from '../lib/api';
 import { useAuth } from './AuthContext';
 
 export interface Toast {
@@ -46,6 +47,12 @@ interface AppState {
   // null = closed. `platform` is remembered so it can be retried once the
   // user returns from checkout.
   subscriptionModal: { platform: string | null } | null;
+  // Which workspace this account acts in and what it may do there, served by
+  // GET /api/me — the same resolution the API enforces. null while unknown
+  // (loading, backend unreachable): consumers treat null as "hide nothing",
+  // because the majority case is an owner and the API refuses anything a
+  // member truly can't do. The chrome catches up when this resolves.
+  workspaceAccess: WorkspaceAccess | null;
 }
 
 interface AppContextType extends AppState {
@@ -63,6 +70,9 @@ interface AppContextType extends AppState {
   closeSubscriptionModal: () => void;
   // Connected accounts (authoritative, backend-backed)
   refreshAccounts: () => Promise<void>;
+  /** Re-resolve which workspace this account acts in — call after anything
+   *  that changes it, i.e. accepting an invitation. */
+  refreshWorkspaceAccess: () => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   // Toast
   showToast: (message: string, type?: Toast['type'], options?: ToastOptions) => void;
@@ -105,6 +115,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toasts: [],
     isLoading: false,
     subscriptionModal: null,
+    workspaceAccess: null,
   });
 
   const { user } = useAuth();
@@ -449,6 +460,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshAccounts();
   }, [authedUserId, refreshAccounts]);
 
+  // The signed-in account's workspace access (owner / member / canvas),
+  // loaded per session and re-loaded whenever something changes what the
+  // account can reach — accepting an invitation being the one in-app event
+  // that does. A failure leaves it as-is — the UI then hides nothing and
+  // lets the API be the judge, which is the safe direction.
+  const refreshWorkspaceAccess = useCallback(async () => {
+    if (!isBackendConfigured()) return;
+    try {
+      const access = await fetchWorkspaceAccess();
+      setState(prev => ({ ...prev, workspaceAccess: access }));
+    } catch (err) {
+      console.warn('[access] could not resolve workspace access:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authedUserId) return;
+    // Data fetch from the backend on sign-in, not derived state — the same
+    // pattern (and the same lint carve-out) as the accounts refresh above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshWorkspaceAccess();
+  }, [authedUserId, refreshWorkspaceAccess]);
+
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));
   }, []);
@@ -463,6 +497,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSubscriptionModal,
       closeSubscriptionModal,
       refreshAccounts,
+      refreshWorkspaceAccess,
       disconnectAccount,
       showToast,
       removeToast,
