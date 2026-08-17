@@ -9,7 +9,7 @@ import LoadingState from './components/LoadingState';
 import LoginPage from './pages/LoginPage';
 import AuthCompletePage from './pages/AuthCompletePage';
 import ConnectCompletePage from './pages/ConnectCompletePage';
-import ToastContainer from './components/ToastContainer';
+import { Toaster } from './components/ui/sonner';
 import SubscriptionModal from './components/SubscriptionModal';
 
 // MVP pages
@@ -178,7 +178,7 @@ export default function App() {
           owns drawers) isn't mounted.
           The last-resort ErrorBoundary lives in main.tsx above every
           provider — see there for why placing it here isn't enough. */}
-      <ToastContainer />
+      <Toaster />
       <SubscriptionModalHost />
     </>
   );

@@ -50,30 +50,49 @@
     --pop-coral: 14 100% 64%;
     --pop-purple: 262 83% 58%;
 
-    /* ─── shadcn mapping (Material-3 redesign palette) ─────────────────
-     * Black primary, lime secondary/accent, warm off-white surfaces.
-     * Kept in sync with the literal Material-3 tokens in tailwind.config.js
-     * so shadcn primitives and ported mockup markup render identically. */
-    --background: 45 29% 97%;
-    --foreground: 120 4% 11%;
+    /* ─── The canonical token layer ────────────────────────────────────
+     * One source of truth, in shadcn's variable dialect, pointed at the
+     * exact values Populr's pages already render in hex. The ui/
+     * primitives consume ONLY these; the pop-* classes below re-express
+     * their colors through the same variables, so migrated and
+     * not-yet-migrated surfaces cannot drift apart.
+     *
+     * Semantics worth knowing:
+     *  - primary IS Populr lime (with charcoal foreground) — the single
+     *    accent, reserved for the one action that matters on a surface.
+     *  - accent is NOT lime: it's the quiet hover/selected fill shadcn
+     *    menus and items use. Making it lime would light up every hover.
+     *  - foreground is Populr charcoal #111111, exactly the hex the
+     *    pages hardcode today.                                        */
+    --background: 45 29% 97%;               /* warm off-white app ground */
+    --foreground: 0 0% 7%;                  /* #111111 charcoal */
     --card: 0 0% 100%;
-    --card-foreground: 120 4% 11%;
+    --card-foreground: 0 0% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 120 4% 11%;
-    --primary: 0 0% 0%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 73 80% 68%;
-    --secondary-foreground: 0 0% 0%;
-    --muted: 45 11% 93%;
-    --muted-foreground: 351 5% 28%;
-    --accent: 73 80% 68%;
-    --accent-foreground: 0 0% 0%;
-    --destructive: 0 75% 42%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 78 100% 62%;                 /* #C5FF3D Populr lime */
+    --primary-foreground: 0 0% 7%;          /* charcoal on lime */
+    --secondary: 0 0% 7%;                   /* charcoal fill (pop-btn-secondary) */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 60 17% 98%;                    /* #FAFAF8 soft fill */
+    --muted-foreground: 0 0% 42%;           /* #6B6B6B supporting text */
+    --accent: 60 17% 98%;                   /* quiet hover fill — never lime */
+    --accent-foreground: 0 0% 7%;
+    --destructive: 0 72% 51%;               /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
-    --border: 40 5% 88%;
-    --input: 40 5% 88%;
-    --ring: 0 0% 0%;
+    --border: 33 16% 89%;                   /* #E8E4DF */
+    --input: 33 16% 89%;
+    --ring: 78 100% 62%;                    /* focus ring is the accent */
     --radius: 0.75rem;
+
+    /* Populr extensions beyond the stock shadcn set. */
+    --foreground-subtle: 60 5% 58%;         /* #9B9B8F meta/captions */
+    --border-subtle: 38 21% 93%;            /* #F0EDE8 hairlines inside cards */
+    --border-strong: 35 13% 82%;            /* #D8D3CC hover/active borders */
+    --success: 161 94% 30%;                 /* #059669 */
+    --success-soft: 145 52% 92%;            /* #E0F5E9 */
+    --warning: 32 95% 44%;                  /* #D97706 */
+    --warning-soft: 34 100% 94%;            /* #FFF3E0 */
     --sidebar-background: 45 29% 97%;
     --sidebar-foreground: 120 4% 11%;
     --sidebar-primary: 0 0% 0%;
@@ -117,7 +136,7 @@
 
   /* Cards */
   .pop-card {
-    @apply bg-white rounded-2xl border border-[#E8E4DF];
+    @apply bg-card rounded-2xl border border-border;
   }
   .pop-card-hover {
     @apply hover:border-[#D4CFC8] hover:shadow-card transition-all;
@@ -139,61 +158,84 @@
            hover:border-[#D4CFC8] hover:shadow-card motion-safe:hover:-translate-y-px;
   }
   .pop-card-compact {
-    @apply bg-white rounded-2xl border border-[#E8E4DF] p-4;
+    @apply bg-card rounded-2xl border border-border p-4;
   }
 
   /* Inputs */
   .pop-input {
-    @apply bg-white border border-[#E8E4DF] rounded-xl px-4 py-2.5 text-sm placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
+    @apply bg-card border border-border rounded-xl px-4 py-2.5 text-sm placeholder:text-foreground-subtle focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
   }
 
   /* Search input (shared across all pages) */
   .pop-search {
-    @apply w-full bg-white border border-[#E8E4DF] rounded-xl pl-9 pr-3 py-2 text-sm placeholder:text-[#9B9B8F] focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
+    @apply w-full bg-card border border-border rounded-xl pl-9 pr-3 py-2 text-sm placeholder:text-foreground-subtle focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
   }
 
   /* ─── CTA Hierarchy ─── */
 
   /* Primary: Acid lime */
   .pop-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 bg-chartreuse text-[#111111] rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-chartreuse-hover transition-all;
+    @apply inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-chartreuse-hover transition-all;
   }
 
   /* Secondary: Black */
   .pop-btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 bg-[#111111] text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-[#333] transition-all;
+    @apply inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-[#333] transition-all;
   }
 
   /* Tertiary: Outline */
   .pop-btn-tertiary {
-    @apply inline-flex items-center justify-center gap-2 border border-[#E8E4DF] text-[#111111] rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-[#FAFAF8] transition-all;
+    @apply inline-flex items-center justify-center gap-2 border border-border text-foreground rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-muted transition-all;
   }
 
   /* Ghost: Text only */
   .pop-btn-ghost {
-    @apply inline-flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#111111] transition-colors;
+    @apply inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors;
   }
 
   /* ─── Typography ─── */
 
   .pop-title {
-    @apply font-geist font-bold text-2xl lg:text-[32px] text-[#111111] tracking-tight leading-tight;
+    @apply font-geist font-bold text-2xl lg:text-[32px] text-foreground tracking-tight leading-tight;
   }
 
   .pop-section-heading {
-    @apply font-geist font-bold text-xl lg:text-2xl text-[#111111];
+    @apply font-geist font-bold text-xl lg:text-2xl text-foreground;
   }
 
   .pop-card-title {
-    @apply font-geist font-semibold text-base text-[#111111];
+    @apply font-geist font-semibold text-base text-foreground;
   }
 
   .pop-body {
-    @apply text-sm text-[#6B6B6B] leading-relaxed;
+    @apply text-sm text-muted-foreground leading-relaxed;
   }
 
   .pop-meta {
-    @apply text-xs text-[#9B9B8F];
+    @apply text-xs text-foreground-subtle;
+  }
+
+  /* ─── Typography roles ───
+   * The six-role hierarchy every migrated surface uses instead of ad-hoc
+   * size/weight/color triples. `.type-*` rather than Tailwind fontSize
+   * entries because `text-secondary` would collide with the color scale. */
+  .type-page-title {
+    @apply font-geist text-2xl font-semibold tracking-tight text-foreground;
+  }
+  .type-section-title {
+    @apply font-geist text-[15px] font-semibold text-foreground;
+  }
+  .type-body {
+    @apply text-[13.5px] leading-relaxed text-foreground;
+  }
+  .type-body-secondary {
+    @apply text-[12.5px] leading-relaxed text-muted-foreground;
+  }
+  .type-label {
+    @apply text-xs font-medium text-foreground;
+  }
+  .type-caption {
+    @apply text-[11px] text-foreground-subtle;
   }
 
   /* ─── Status badges ─── */
@@ -379,6 +421,21 @@
 }
 .react-flow__node.dragging {
   transition: none;
+}
+
+/* ─── Toasts vs the mobile top bar ───
+ * Sonner switches to its `mobileOffset` at its own fixed 600px breakpoint,
+ * but Populr's mobile top bar (Sidebar.tsx) stays until Tailwind's md at
+ * 768px. Between the two, Sonner is back on the 16px desktop offset while
+ * the bar is still on screen, and a top-positioned toast slides underneath
+ * it. Bridge the seam by holding the toaster's top offset below the bar —
+ * the same 4rem + safe-area expression the bar itself is sized with.
+ * `!important` because Sonner writes --offset-top as an inline style on
+ * the toaster element; nothing weaker can outrank that. */
+@media (min-width: 601px) and (max-width: 767px) {
+  [data-sonner-toaster][data-y-position='top'] {
+    --offset-top: calc(4rem + env(safe-area-inset-top) + 0.75rem) !important;
+  }
 }
 
 /* ─── Reduced motion ───

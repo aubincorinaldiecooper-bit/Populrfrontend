@@ -9,6 +9,7 @@ import {
 } from '../lib/api';
 import type { ConnectedAccount, WorkspaceAccess } from '../lib/api';
 import { useAuth } from './AuthContext';
+import { toast as sonnerToast } from 'sonner';
 
 export interface Toast {
   id: string;
@@ -193,7 +194,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
 
-  // Toast
+  // Toast. Sonner renders (see components/ui/sonner.tsx); this stays the one
+  // door feature code calls, with the same signature it has always had —
+  // including the action/Undo option. The `toasts` array is kept as
+  // observable state alongside Sonner's own store: it is the record of what
+  // was raised, mirrored on the same schedule, so anything reading it (tests
+  // included) keeps working unchanged.
   const showToast = useCallback((
     message: string,
     type: Toast['type'] = 'info',
@@ -203,17 +209,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // millisecond (deleting a step raises one, the save that follows can raise
     // another), and React then rendered two children with the same key.
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const duration = options?.durationMs ?? (options?.action ? 7000 : 3000);
     setState(prev => ({
       ...prev,
       toasts: [...prev.toasts, { id, message, type, action: options?.action }],
     }));
     setTimeout(() => {
       setState(prev => ({ ...prev, toasts: prev.toasts.filter(t => t.id !== id) }));
-    }, options?.durationMs ?? (options?.action ? 7000 : 3000));
+    }, duration);
+    sonnerToast[type](message, {
+      id,
+      duration,
+      action: options?.action
+        ? {
+            label: options.action.label,
+            onClick: options.action.onClick,
+          }
+        : undefined,
+    });
   }, []);
 
   const removeToast = useCallback((id: string) => {
     setState(prev => ({ ...prev, toasts: prev.toasts.filter(t => t.id !== id) }));
+    sonnerToast.dismiss(id);
   }, []);
 
   const openSubscriptionModal = useCallback((platform?: string) => {

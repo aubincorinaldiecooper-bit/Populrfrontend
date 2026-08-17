@@ -24,4 +24,15 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  // shadcn-style primitives export their CVA variant builders alongside the
+  // component (`export { Button, buttonVariants }`) so link-shaped elements
+  // can borrow button styling without being buttons. That mixed export trips
+  // react-refresh's components-only rule; losing Fast Refresh on these small
+  // leaf files is the accepted cost of the pattern.
+  {
+    files: ['src/components/ui/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
