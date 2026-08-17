@@ -1374,3 +1374,76 @@ export async function fetchFlowAiMessages(
   const qs = params.toString();
   return apiFetch(`/api/flows/${id}/ai-messages${qs ? `?${qs}` : ''}`);
 }
+
+// ============================================================
+// Team — collaborators and the invitations that create them.
+//
+// Every collaborator gets View access; `editAutomations` and
+// `contactOutreach` are the two grantable extras. Owner is not an invite
+// permission — activating automations, managing the team, connected
+// accounts and billing stay with the workspace owner (see the backend's
+// workspace_invitations / workspace_members).
+//
+// The invite token exists in exactly two places, ever: the emailed link,
+// and the accept call that presents it back. No read endpoint returns one,
+// so nothing here can leak it into the UI.
+// ============================================================
+
+export interface TeamPermissions {
+  editAutomations: boolean;
+  contactOutreach: boolean;
+}
+
+export interface TeamInvitation {
+  id: string;
+  email: string;
+  permissions: TeamPermissions;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  /** 'failed' when the email couldn't be delivered — the invitation is still
+   *  pending, so the owner can see why nobody arrived. */
+  emailDelivery: 'sent' | 'failed';
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface TeamMember {
+  /** The address they were invited at. Null only for a membership whose
+   *  invitation no longer exists — the UI says "A teammate" rather than
+   *  showing an account id. */
+  email: string | null;
+  permissions: TeamPermissions;
+  joinedAt: string;
+}
+
+/** GET /api/team — this workspace's collaborators and its invitations. */
+export async function fetchTeam(): Promise<{ invitations: TeamInvitation[]; members: TeamMember[] }> {
+  return apiFetch('/api/team');
+}
+
+/** POST /api/team/invites — create and email an invitation. */
+export async function inviteTeammate(
+  email: string,
+  permissions: TeamPermissions,
+): Promise<TeamInvitation> {
+  const data = await apiFetch<{ invitation: TeamInvitation }>('/api/team/invites', {
+    method: 'POST',
+    body: { email, permissions },
+  });
+  return data.invitation;
+}
+
+/** DELETE /api/team/invites/:id — withdraw an invitation that hasn't been used. */
+export async function revokeInvitation(id: string): Promise<void> {
+  await apiFetch(`/api/team/invites/${id}`, { method: 'DELETE' });
+}
+
+export type InviteAcceptStatus = 'accepted' | 'already_member' | 'owner';
+
+/** POST /api/team/invites/accept — redeem the token from an invite link.
+ *  Rejects with an ApiError whose `code` says why (invite_expired,
+ *  invite_revoked, invite_used, invite_not_found). */
+export async function acceptInvitation(
+  token: string,
+): Promise<{ status: InviteAcceptStatus; workspaceId: string }> {
+  return apiFetch('/api/team/invites/accept', { method: 'POST', body: { token } });
+}
