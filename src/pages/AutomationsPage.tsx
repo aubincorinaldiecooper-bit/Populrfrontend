@@ -14,6 +14,7 @@ import {
   type AutomationFlow,
 } from '../lib/api';
 import { readTrigger, triggerNodes, type FlowGraph } from '../lib/flowSchema';
+import { useCreateAutomation } from '../context/CreateAutomationContext';
 
 /**
  * Automations — the list.
@@ -171,7 +172,7 @@ export default function AutomationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
-  const [creating, setCreating] = useState(false);
+  
 
   // There is deliberately nothing here for teardown to do. A delete is a
   // request that has already been sent by the time anything can tear this page
@@ -231,18 +232,12 @@ export default function AutomationsPage() {
     load();
   }, [load]);
 
-  const startNew = useCallback(async () => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const flow = await createFlow({ name: 'New automation' });
-      navigate(`/automations/${flow.id}`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not start a new automation.', 'error');
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, navigate, showToast]);
+  // One creation experience everywhere: this page's New button goes through
+  // the same shared action as Home's CTA and the sidebar's Create — which
+  // also asks "Run this automation from…" when the workspace has several
+  // connected accounts, instead of silently minting an unbound draft.
+  const { beginCreateAutomation, creatingAutomation } = useCreateAutomation();
+  const startNew = useCallback(() => beginCreateAutomation(), [beginCreateAutomation]);
 
   // The retired /automations/new route lands here with ?new=1 so a bookmark
   // or a stale tab still ends up creating an automation rather than 404ing.
@@ -252,8 +247,7 @@ export default function AutomationsPage() {
   useEffect(() => {
     if (searchParams.get('new') !== '1' || !backendConfigured) return;
     setSearchParams({}, { replace: true });
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void startNew();
+    startNew();
   }, [searchParams, setSearchParams, startNew, backendConfigured]);
 
   const live = flows.filter(f => f.status === 'live');
@@ -475,10 +469,10 @@ export default function AutomationsPage() {
             </div>
             <button
               onClick={startNew}
-              disabled={creating}
+              disabled={creatingAutomation}
               className="pop-btn-primary w-full sm:w-auto justify-center disabled:opacity-60"
             >
-              {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={2.5} />}
+              {creatingAutomation ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={2.5} />}
               New automation
             </button>
           </div>
@@ -527,7 +521,7 @@ export default function AutomationsPage() {
           title={search || statusTab !== 'all' ? 'No automations match that search' : 'No automations yet'}
           description="Describe what should happen and Populr builds the steps for you."
           action={
-            <button onClick={startNew} className="pop-btn-primary" disabled={creating}>
+            <button onClick={startNew} className="pop-btn-primary" disabled={creatingAutomation}>
               New automation
             </button>
           }

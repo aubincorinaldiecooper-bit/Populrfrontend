@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router';
 import type { ReactNode } from 'react';
 import Sidebar from './Sidebar';
+import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import EditorRail from './EditorRail';
 import ErrorBoundary from './ErrorBoundary';
 import { useBuilderNav } from '../lib/navPreference';
@@ -33,6 +34,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
   const railed = editor && collapsed;
 
   return (
+    <CreateAutomationProvider>
     <div className="min-h-screen bg-background">
       {/* Editor mode swaps the navigation, not the app. Everywhere else keeps
           the full sidebar exactly as it was. */}
@@ -64,5 +66,6 @@ export default function Layout({ children }: { children?: ReactNode }) {
           needs to be visible before onboarding completes (Layout isn't
           mounted yet), not just after. */}
     </div>
+    </CreateAutomationProvider>
   );
 }
