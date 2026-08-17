@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { AlertCircle, Check, Loader2, RefreshCw, Users } from 'lucide-react';
 import { ApiError, acceptInvitation, type AutomationScope, type InviteAcceptStatus } from '../lib/api';
+import { useApp } from '../context/AppContext';
 
 /**
  * Where a team invite link lands: /invite/<token>.
@@ -67,6 +68,7 @@ function refusal(err: unknown): Outcome {
 
 export default function InviteAcceptPage() {
   const { token = '' } = useParams();
+  const { refreshWorkspaceAccess } = useApp();
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'working' });
   // The token is single-use: a second POST for the same link would be told
   // it was already used and turn a success into an error message. React 18's
@@ -76,10 +78,15 @@ export default function InviteAcceptPage() {
   const accept = useCallback(() => {
     setOutcome({ kind: 'working' });
     acceptInvitation(token)
-      .then(result =>
-        setOutcome({ kind: 'done', status: result.status, automation: result.automation ?? null }))
+      .then(result => {
+        // Membership just changed what this account can reach; re-resolve the
+        // workspace context NOW so "Go to Populr" opens the joined workspace
+        // (or the canvas) instead of a stale view of the old one.
+        void refreshWorkspaceAccess();
+        setOutcome({ kind: 'done', status: result.status, automation: result.automation ?? null });
+      })
       .catch(err => setOutcome(refusal(err)));
-  }, [token]);
+  }, [token, refreshWorkspaceAccess]);
 
   useEffect(() => {
     if (claimed.current) return;

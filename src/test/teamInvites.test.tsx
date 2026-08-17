@@ -37,8 +37,14 @@ const mockAccept = vi.fn();
 // walk in a member's or canvas invitee's shoes).
 let mockAccess: unknown = null;
 
+const mockRefreshAccess = vi.fn();
+
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({ showToast: vi.fn(), workspaceAccess: mockAccess }),
+  useApp: () => ({
+    showToast: vi.fn(),
+    workspaceAccess: mockAccess,
+    refreshWorkspaceAccess: mockRefreshAccess,
+  }),
 }));
 
 vi.mock('../lib/api', async () => {
@@ -382,6 +388,9 @@ describe('/invite/:token — canvas acceptance', () => {
     renderAccept();
 
     expect(await screen.findByText('You’re in')).toBeInTheDocument();
+    // The app re-resolves who they are NOW — the chrome must not keep
+    // showing the pre-acceptance workspace until a reload.
+    expect(mockRefreshAccess).toHaveBeenCalled();
     expect(screen.getByText(/it’s what Populr opens for you now/)).toBeInTheDocument();
     // The pre-access-era disclaimer is gone: membership now resolves access.
     expect(screen.queryByText(/being switched on next/)).not.toBeInTheDocument();

@@ -70,6 +70,9 @@ interface AppContextType extends AppState {
   closeSubscriptionModal: () => void;
   // Connected accounts (authoritative, backend-backed)
   refreshAccounts: () => Promise<void>;
+  /** Re-resolve which workspace this account acts in — call after anything
+   *  that changes it, i.e. accepting an invitation. */
+  refreshWorkspaceAccess: () => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   // Toast
   showToast: (message: string, type?: Toast['type'], options?: ToastOptions) => void;
@@ -458,20 +461,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [authedUserId, refreshAccounts]);
 
   // The signed-in account's workspace access (owner / member / canvas),
-  // loaded once per session. A failure leaves it null — the UI then hides
-  // nothing and lets the API be the judge, which is the safe direction.
+  // loaded per session and re-loaded whenever something changes what the
+  // account can reach — accepting an invitation being the one in-app event
+  // that does. A failure leaves it as-is — the UI then hides nothing and
+  // lets the API be the judge, which is the safe direction.
+  const refreshWorkspaceAccess = useCallback(async () => {
+    if (!isBackendConfigured()) return;
+    try {
+      const access = await fetchWorkspaceAccess();
+      setState(prev => ({ ...prev, workspaceAccess: access }));
+    } catch (err) {
+      console.warn('[access] could not resolve workspace access:', err);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!authedUserId || !isBackendConfigured()) return;
-    let cancelled = false;
-    fetchWorkspaceAccess()
-      .then(access => {
-        if (!cancelled) setState(prev => ({ ...prev, workspaceAccess: access }));
-      })
-      .catch(err => console.warn('[access] could not resolve workspace access:', err));
-    return () => {
-      cancelled = true;
-    };
-  }, [authedUserId]);
+    if (!authedUserId) return;
+    void refreshWorkspaceAccess();
+  }, [authedUserId, refreshWorkspaceAccess]);
 
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));
@@ -487,6 +494,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSubscriptionModal,
       closeSubscriptionModal,
       refreshAccounts,
+      refreshWorkspaceAccess,
       disconnectAccount,
       showToast,
       removeToast,
