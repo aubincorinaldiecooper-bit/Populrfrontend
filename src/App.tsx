@@ -18,6 +18,7 @@ import CampaignsPage from './pages/CampaignsPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import InboxPage from './pages/InboxPage';
 import SettingsPage from './pages/SettingsPage';
+import TeamPage from './pages/TeamPage';
 import InviteAcceptPage from './pages/InviteAcceptPage';
 
 // Hidden pages (contextual, not in main nav)
@@ -115,6 +116,7 @@ function AppContent() {
         <Route path="/campaigns/new" element={<CampaignBuilderPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/team" element={<TeamPage />} />
         <Route path="/segments" element={<Navigate to="/contacts" replace />} />
         <Route path="/automations" element={<Suspense fallback={<LoadingState />}><AutomationsPage /></Suspense>} />
         {/* The four-step wizard is retired: the builder is the only editor

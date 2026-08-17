@@ -2,15 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import TeamSection from '../components/settings/TeamSection';
+import TeamPage from '../pages/TeamPage';
 import InviteAcceptPage from '../pages/InviteAcceptPage';
 import { ApiError, type TeamInvitation, type TeamMember } from '../lib/api';
 
 /* Inviting a teammate, and being one.
  *
- * Two surfaces, one flow. In Settings → Team an owner invites by email and
- * chooses what the person can do beyond viewing; the invite email carries a
- * link to /invite/<token>, which is where the recipient lands.
+ * Two surfaces, one flow. On the Team page (its own destination in the nav)
+ * an owner invites by email and chooses what the person can do beyond
+ * viewing; the invite email carries a link to /invite/<token>, which is
+ * where the recipient lands.
  *
  * What these tests pin:
  *   - View is stated as always-included, never offered as a toggle a creator
@@ -35,6 +36,7 @@ vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
   return {
     ...actual,
+    isBackendConfigured: () => true,
     fetchTeam: () => mockFetchTeam(),
     inviteTeammate: (email: string, permissions: unknown) => mockInvite(email, permissions),
     revokeInvitation: (id: string) => mockRevoke(id),
@@ -69,16 +71,16 @@ beforeEach(() => {
   mockFetchTeam.mockResolvedValue({ invitations: [], members: [] });
 });
 
-describe('Settings → Team', () => {
+describe('the Team page', () => {
   it('starts empty and honest, with one way in', async () => {
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByText(/You're the only one here/)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /Invite teammate/ })).toBeInTheDocument();
   });
 
   it('View is always included — it is not a toggle', async () => {
     const user = userEvent.setup();
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /Invite teammate/ })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Invite teammate/ }));
 
@@ -99,7 +101,7 @@ describe('Settings → Team', () => {
       email: 'sam@example.com',
       permissions: { editAutomations: true, contactOutreach: false },
     }));
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /Invite teammate/ })).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /Invite teammate/ }));
@@ -116,9 +118,29 @@ describe('Settings → Team', () => {
     expect(screen.getByText('Invited, not joined yet')).toBeInTheDocument();
   });
 
+  it('an invite that was saved but not emailed is never announced as sent', async () => {
+    const user = userEvent.setup();
+    // The API created the invitation but the email never left.
+    mockInvite.mockResolvedValue(invitation({
+      email: 'sam@example.com',
+      emailDelivery: 'failed',
+    }));
+    render(<TeamPage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Invite teammate/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Invite teammate/ }));
+    await user.type(screen.getByLabelText('Their email'), 'sam@example.com');
+    await user.click(screen.getByRole('button', { name: /Send invite/ }));
+
+    // The truthful banner: saved, not delivered — and no green "Invite sent".
+    expect(await screen.findByText(/email couldn't be sent/)).toBeInTheDocument();
+    expect(screen.queryByText(/Invite sent to/)).not.toBeInTheDocument();
+    // The pending row carries its delivery marker, consistent with the banner.
+    expect(screen.getByText(/Couldn't be emailed — try inviting again/)).toBeInTheDocument();
+  });
+
   it('a junk address never reaches the server', async () => {
     const user = userEvent.setup();
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /Invite teammate/ })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Invite teammate/ }));
     await user.type(screen.getByLabelText('Their email'), 'not-an-email');
@@ -131,7 +153,7 @@ describe('Settings → Team', () => {
   it('a failed send keeps the address on screen to retry', async () => {
     const user = userEvent.setup();
     mockInvite.mockRejectedValue(new Error("The invitation couldn't be emailed just now."));
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /Invite teammate/ })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Invite teammate/ }));
     await user.type(screen.getByLabelText('Their email'), 'sam@example.com');
@@ -146,7 +168,7 @@ describe('Settings → Team', () => {
       invitations: [],
       members: [member({ email: 'jo@example.com', permissions: { editAutomations: true, contactOutreach: true } })],
     });
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByText('jo@example.com')).toBeInTheDocument());
     expect(screen.getByText('View · Edit automations · Contact outreach')).toBeInTheDocument();
   });
@@ -156,7 +178,7 @@ describe('Settings → Team', () => {
       invitations: [invitation({ email: 'unlucky@example.com', emailDelivery: 'failed' })],
       members: [],
     });
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByText('unlucky@example.com')).toBeInTheDocument());
     expect(screen.getByText(/Couldn't be emailed/)).toBeInTheDocument();
   });
@@ -165,7 +187,7 @@ describe('Settings → Team', () => {
     const user = userEvent.setup();
     mockFetchTeam.mockResolvedValue({ invitations: [invitation({ id: 'inv_7' })], members: [] });
     mockRevoke.mockResolvedValue(undefined);
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByText('sam@example.com')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /Withdraw the invite to sam@example.com/ }));
@@ -178,7 +200,7 @@ describe('Settings → Team', () => {
     const user = userEvent.setup();
     mockFetchTeam.mockRejectedValueOnce(new Error('The server is busy.'));
     mockFetchTeam.mockResolvedValueOnce({ invitations: [], members: [member()] });
-    render(<TeamSection />);
+    render(<TeamPage />);
     await waitFor(() => expect(screen.getByText('The server is busy.')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /Retry/ }));
     await waitFor(() => expect(screen.getByText('jo@example.com')).toBeInTheDocument());

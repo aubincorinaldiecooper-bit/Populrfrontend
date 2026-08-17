@@ -38,9 +38,6 @@ vi.mock('../lib/api', async () => {
     isBackendConfigured: () => true,
     fetchWorkspaceSettings: () => mockFetchWorkspaceSettings(),
     setWorkspacePause: (paused: boolean) => mockSetWorkspacePause(paused),
-    // The Team section lives on the same page; give it a quiet empty team so
-    // its own load-error Retry never collides with the pause section's.
-    fetchTeam: () => Promise.resolve({ invitations: [], members: [] }),
   };
 });
 

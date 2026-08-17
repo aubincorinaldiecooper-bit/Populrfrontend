@@ -1,4 +1,4 @@
-import { Home, Zap, MessageCircle, Users, Waypoints, Settings } from 'lucide-react';
+import { Home, Zap, MessageCircle, Users, UsersRound, Waypoints, Settings } from 'lucide-react';
 
 /**
  * Populr's primary navigation, in one place because two shells render it —
@@ -24,6 +24,7 @@ export const navItems = [
   { path: '/inbox', label: 'Inbox', icon: MessageCircle },
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/channels', label: 'Channels', icon: Waypoints },
+  { path: '/team', label: 'Team', icon: UsersRound },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
