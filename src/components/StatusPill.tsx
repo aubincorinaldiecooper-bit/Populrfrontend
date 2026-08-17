@@ -1,8 +1,21 @@
-import { Badge, type BadgeVariant } from '@astryxdesign/core/Badge';
+import { Badge } from '@/components/ui/badge';
 
-const statusVariant: Record<string, BadgeVariant> = {
+/**
+ * A state, worn as a pill. The status→tone map is the product's one
+ * vocabulary for "what is this thing right now" — pages pass the raw
+ * status string and this decides how loudly it reads.
+ *
+ * Rendered by the shared Badge (soft tint + strong word) rather than the
+ * Astryx Badge it used to wrap, whose saturated fills came from outside
+ * Populr's palette. Geometry is unchanged: rounded-full, 12px/500,
+ * 20px line, 8px inline padding.
+ */
+type Tone = 'success' | 'warning' | 'neutral' | 'destructive' | 'info';
+
+const statusTone: Record<string, Tone> = {
   // ─── General Status ───
   active: 'success',
+  live: 'success',
   paused: 'warning',
   draft: 'neutral',
   completed: 'success',
@@ -11,20 +24,20 @@ const statusVariant: Record<string, BadgeVariant> = {
   'coming-soon': 'warning',
   connected: 'success',
   available: 'neutral',
-  disconnected: 'error',
+  disconnected: 'destructive',
   syncing: 'warning',
-  reconnect_required: 'error',
+  reconnect_required: 'destructive',
 
   // ─── Intent (strongest signal) ───
-  'strong offer intent': 'error',
-  'intent-conversion': 'error',
+  'strong offer intent': 'destructive',
+  'intent-conversion': 'destructive',
   'pricing question': 'warning',
   'intent-pricing': 'warning',
   'collaboration request': 'info',
   'intent-collaboration': 'info',
   'support request': 'neutral',
   'reply recommended': 'success',
-  'human-review': 'error',
+  'human-review': 'destructive',
   'intent-alert': 'warning',
 
   // ─── Relationship (soft) ───
@@ -40,10 +53,14 @@ const statusVariant: Record<string, BadgeVariant> = {
   converted: 'success',
 
   // ─── Special ───
-  'needs-attention': 'error',
+  'needs-attention': 'destructive',
 };
 
-export default function StatusPill({ status, label, className }: { status: string; label?: string; className?: string }) {
-  const variant = statusVariant[status.toLowerCase()] ?? 'neutral';
-  return <Badge variant={variant} label={label ?? status} className={className} />;
+export default function StatusPill({ status, label, className }: {
+  status: string;
+  label?: string;
+  className?: string;
+}) {
+  const variant = statusTone[status.toLowerCase()] ?? 'neutral';
+  return <Badge variant={variant} className={className}>{label ?? status}</Badge>;
 }
