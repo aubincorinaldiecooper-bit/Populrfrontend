@@ -100,7 +100,15 @@ describe('model picker', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
 
-    await user.keyboard('{ArrowDown}{Enter}');
+    // The highlight is announced, not just painted: the trigger keeps focus,
+    // so it must point at the active row for a screen reader to say its name.
+    await user.keyboard('{ArrowDown}');
+    expect(trigger).toHaveAttribute(
+      'aria-activedescendant',
+      screen.getByRole('option', { name: /Claude/ }).id,
+    );
+
+    await user.keyboard('{Enter}');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(trigger).toHaveTextContent('Claude');
 

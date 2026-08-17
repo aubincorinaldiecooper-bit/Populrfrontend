@@ -145,6 +145,10 @@ export default function PopulrAIComposer({
     onChangeRef.current = onChange;
   });
   const listId = useId();
+  // Focus stays on the trigger while the menu is open, so the highlighted row
+  // must be pointed at through aria-activedescendant for a screen reader to
+  // announce which model Enter would pick.
+  const optionId = (index: number) => `${listId}-option-${index}`;
   const canDictate = speechRecognitionCtor() !== null;
 
   const placeholder = working
@@ -295,6 +299,7 @@ export default function PopulrAIComposer({
               aria-haspopup="listbox"
               aria-expanded={menuOpen}
               aria-controls={menuOpen ? listId : undefined}
+              aria-activedescendant={menuOpen && activeIndex >= 0 ? optionId(activeIndex) : undefined}
               aria-label="Choose model"
               className={`flex h-7 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-[#57524C] transition-colors hover:bg-[#F7F5F2] hover:text-[#111111] ${menuOpen ? 'bg-[#F7F5F2] text-[#111111]' : ''}`}
             >
@@ -311,6 +316,7 @@ export default function PopulrAIComposer({
                 id={listId}
                 role="listbox"
                 aria-label="Choose model"
+                aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
                 tabIndex={-1}
                 onKeyDown={onTriggerKeyDown}
                 className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-56 rounded-xl border border-[#E8E4DF] bg-white p-1 shadow-[0_8px_28px_rgba(17,17,17,0.12)]"
@@ -321,6 +327,7 @@ export default function PopulrAIComposer({
                   return (
                     <div
                       key={choice.key}
+                      id={optionId(i)}
                       role="option"
                       aria-selected={isSelected}
                       onClick={() => commitModel(i)}
