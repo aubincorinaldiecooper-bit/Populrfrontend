@@ -33,7 +33,7 @@ const canvas = vi.hoisted(() => ({ props: null as Record<string, unknown> | null
 vi.mock('../components/automation-builder/FlowCanvas', () => ({
   default: (props: Record<string, unknown>) => {
     canvas.props = props;
-    return <div data-testid="canvas" />;
+    return <div data-testid="canvas">{props.editorSlot as React.ReactNode}</div>;
   },
 }));
 

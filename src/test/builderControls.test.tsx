@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import NodeInspector from '../components/automation-builder/NodeInspector';
+import NodeEditorCard from '../components/automation-builder/NodeEditorCard';
 import TagCombobox from '../components/automation-builder/TagCombobox';
 import { normalizeTag } from '../lib/tags';
 import Select from '../components/automation-builder/Select';
@@ -21,7 +21,8 @@ function inspector(node: FlowNode, onChange = vi.fn(), extra: Partial<{
   posts: PostLibraryItem[]; accounts: ConnectedAccount[]; workspaceTags: string[];
 }> = {}) {
   render(
-    <NodeInspector
+    <NodeEditorCard
+      variant="anchored"
       node={node}
       accounts={extra.accounts ?? []}
       posts={extra.posts ?? []}
@@ -41,6 +42,41 @@ function inspector(node: FlowNode, onChange = vi.fn(), extra: Partial<{
 const waitNode: FlowNode = {
   id: 'wait', type: 'wait', position: { x: 0, y: 0 }, config: { kind: 'duration', minutes: 60 },
 };
+
+describe('More options tracks the config, not just the mount', () => {
+  const conditionNode = (matchMode: string): FlowNode => ({
+    id: 'if-1', type: 'condition', position: { x: 0, y: 0 },
+    config: { kind: 'text_contains', keywords: ['yes'], matchMode, withinMinutes: 0 },
+  });
+  const cardFor = (node: FlowNode) => (
+    <NodeEditorCard
+      variant="anchored" node={node} accounts={[]} posts={[]} postsLoading={false}
+      capabilities={null} workspaceTags={[]} problems={[]}
+      onChange={vi.fn()} onDelete={vi.fn()} onClose={vi.fn()} onRefreshPosts={vi.fn()}
+    />
+  );
+
+  it('an outside edit that activates matching opens the door while the card is mounted', () => {
+    // An AI build or an undo can change the step's config UNDER an open
+    // card — the same node id, so the card never remounts. An active
+    // non-default setting must not stay hidden behind a closed More options.
+    const view = render(cardFor(conditionNode('contains')));
+    expect(screen.queryByLabelText('Matching')).not.toBeInTheDocument();
+
+    view.rerender(cardFor(conditionNode('exact')));
+    expect(screen.getByLabelText('Matching')).toBeInTheDocument();
+  });
+
+  it('but never slams the door a creator opened', () => {
+    const view = render(cardFor(conditionNode('exact')));
+    expect(screen.getByLabelText('Matching')).toBeInTheDocument();
+
+    // The config returns to the default — the section stays open, because
+    // closing it would yank a control mid-interaction.
+    view.rerender(cardFor(conditionNode('contains')));
+    expect(screen.getByLabelText('Matching')).toBeInTheDocument();
+  });
+});
 
 describe('the Wait duration field', () => {
   it('can be cleared so a different number can be typed', () => {

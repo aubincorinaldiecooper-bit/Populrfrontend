@@ -38,7 +38,9 @@ vi.mock('../components/automation-builder/FlowCanvas', () => ({
         data-testid="canvas"
         data-focus-node={String(props.focusNodeId ?? '')}
         data-focus-signal={String(props.focusSignal ?? 0)}
-      />
+      >
+        {props.editorSlot as React.ReactNode}
+      </div>
     );
   },
 }));

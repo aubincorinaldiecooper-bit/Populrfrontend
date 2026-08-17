@@ -8,7 +8,7 @@ import { useFlowBuilder, type ChangeCard } from '../components/automation-builde
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
 import FlowCanvas from '../components/automation-builder/FlowCanvas';
-import NodeInspector, { type BuilderQuestion } from '../components/automation-builder/NodeInspector';
+import NodeEditorCard, { type BuilderQuestion } from '../components/automation-builder/NodeEditorCard';
 import AIChatPanel from '../components/automation-builder/AIChatPanel';
 import PairedRevolution from '../components/PairedRevolution';
 import PreviewPanel from '../components/automation-builder/PreviewPanel';
@@ -170,19 +170,34 @@ export default function AutomationBuilderPage() {
   const selectedNode = nodeById(graph, selectedNodeId);
 
   /**
-   * Whether the contextual region exists at all this render.
+   * Whether the contextual side region exists at all this render.
    *
-   * Two independent things can put something in it — a selected step, and an
-   * explicitly opened panel — and `togglePanel` already makes them mutually
-   * exclusive everywhere except the notifications feed, which is an index
-   * into the canvas and is meant to stay open beside the step it sent you to.
-   * So the region is not "one slot with a winner"; it is however many of the
-   * two are currently live, which is almost always one.
-   *
-   * Nothing live means the region is not rendered at all, so its width goes
-   * back to the canvas instead of sitting there as an empty column.
+   * Only explicitly opened panels live there now. The step editor is no
+   * longer a column: it rides the selected node as a small anchored card
+   * (see the editor slot handed to FlowCanvas), or a bottom sheet on narrow
+   * screens — so selecting a step never takes width away from the canvas.
    */
-  const sideOpen = panel !== null || selectedNode !== null;
+  const sideOpen = panel !== null;
+
+  /**
+   * Where the step editor renders. Wide screens anchor it to the node —
+   * proximity is the point — but below tablet width a card floating over a
+   * small canvas obscures more than it helps, so it becomes a bottom sheet.
+   * Falls back to the window width where matchMedia doesn't exist.
+   */
+  const [narrowEditor, setNarrowEditor] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time environment fallback
+      setNarrowEditor(window.innerWidth < 768);
+      return;
+    }
+    const query = window.matchMedia('(max-width: 767px)');
+    const sync = () => setNarrowEditor(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
 
   /**
    * The question actually on screen.
@@ -449,6 +464,42 @@ export default function AutomationBuilderPage() {
     setSelectedNodeId(id);
   }, [addNode, accounts, setSelectedNodeId]);
 
+  /** Remove the selected step, restorable from the toast. The snapshot is
+   *  captured HERE and restored verbatim — the generic undo would pop
+   *  whatever is newest on the shared stack, which one later edit would make
+   *  the wrong thing. */
+  const deleteSelected = useCallback(() => {
+    if (!selectedNode) return;
+    const label = NODE_LABEL[selectedNode.type];
+    const restored = graph;
+    const restoredName = name;
+    deleteNode(selectedNode.id);
+    showToast(`${label} step removed`, 'success', {
+      action: { label: 'Undo', onClick: () => commitGraph(restored, { nextName: restoredName }) },
+    });
+  }, [selectedNode, graph, name, deleteNode, showToast, commitGraph]);
+
+  /** The same editor content wherever it mounts — anchored card or sheet. */
+  const editorFor = (variant: 'anchored' | 'sheet') =>
+    selectedNode ? (
+      <NodeEditorCard
+        key={selectedNode.id}
+        variant={variant}
+        node={selectedNode}
+        accounts={accounts}
+        posts={posts}
+        postsLoading={postsLoading}
+        onRefreshPosts={refreshPosts}
+        capabilities={capabilities}
+        workspaceTags={workspaceTags}
+        problems={nodeProblems}
+        question={activeQuestion}
+        onChange={patch => updateNodeConfig(selectedNode.id, patch)}
+        onDelete={deleteSelected}
+        onClose={() => setSelectedNodeId(null)}
+      />
+    ) : null;
+
   if (loading) return <LoadingState />;
 
   if (loadError) {
@@ -631,7 +682,23 @@ export default function AutomationBuilderPage() {
           fitSignal={fitSignal}
           focusNodeId={focus.nodeId || null}
           focusSignal={focus.signal}
+          editorSlot={!narrowEditor ? editorFor('anchored') : null}
         />
+
+        {/* Narrow screens: the same editor slides up from the bottom instead
+            of floating at a node the small canvas can barely show. The canvas
+            stays live behind it — tapping another step swaps the sheet,
+            tapping empty canvas closes it. */}
+        {narrowEditor && selectedNode && (
+          <div
+            className="absolute inset-x-0 bottom-0 z-40 rounded-t-2xl border-t border-[#E8E4DF]
+              bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_28px_rgba(17,17,17,0.14)]
+              motion-safe:animate-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-200"
+          >
+            <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
+            {editorFor('sheet')}
+          </div>
+        )}
 
         {isEmpty && !composing && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
@@ -713,21 +780,20 @@ export default function AutomationBuilderPage() {
       </div>
 
       {/* ----------------------------------------- the contextual side region
-          What you are looking at besides the canvas. Almost always exactly one
-          thing — `togglePanel` clears the selection when a whole-automation
-          panel opens, and selecting a step closes the panel — so the second
-          column only ever appears in the notifications case, where the feed is
-          an index into the canvas and closing it would cost the creator their
-          place in the list.
+          Whole-automation panels only — Preview, the bell's feed, History,
+          the AI conversation. The step editor no longer lives here: it rides
+          the selected node on the canvas, so editing a step costs the canvas
+          nothing. `togglePanel` still clears the selection when one of these
+          opens, and selecting a step still closes Preview/History — one
+          context at a time, same rules as before.
 
           Not a landmark itself: each panel below is its own <aside> with its
           own name, and wrapping them in a second one would make a screen
           reader announce the region twice.
 
-          Desktop: real columns, so the canvas reflows to what is left.
+          Desktop: a real column, so the canvas reflows to what is left.
           Narrow: an overlay, because a 320px column beside a canvas on a
-          phone is two unusable things instead of one usable one — and the
-          two-column case is suppressed outright below 640px. */}
+          phone is two unusable things instead of one usable one. */}
       {sideOpen && (
         <div
           className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[360px]
@@ -736,44 +802,6 @@ export default function AutomationBuilderPage() {
             motion-safe:duration-200
             md:static md:z-auto md:w-auto md:max-w-none md:shrink-0 md:shadow-none"
         >
-          {selectedNode && (
-            <div className="w-full border-l border-[#E8E4DF] md:w-[320px] md:shrink-0">
-            <NodeInspector
-              key={selectedNode.id}
-              node={selectedNode}
-              accounts={accounts}
-              posts={posts}
-              postsLoading={postsLoading}
-              onRefreshPosts={refreshPosts}
-              capabilities={capabilities}
-              workspaceTags={workspaceTags}
-              problems={nodeProblems}
-              question={activeQuestion}
-              onChange={patch => updateNodeConfig(selectedNode.id, patch)}
-              onDelete={() => {
-                const label = NODE_LABEL[selectedNode.type];
-                // Captured HERE, and restored verbatim. Calling the generic
-                // undo would pop whatever is newest on the shared stack — so a
-                // creator who edits something else (or deletes a second step)
-                // during the toast's seven seconds would have that unrelated
-                // edit reverted while the step this toast names stayed deleted.
-                const restored = graph;
-                const restoredName = name;
-                deleteNode(selectedNode.id);
-                // No confirm dialog: the step is already restorable, and an
-                // offer to undo is faster to read than a modal is to dismiss.
-                showToast(`${label} step removed`, 'success', {
-                  action: {
-                    label: 'Undo',
-                    onClick: () => commitGraph(restored, { nextName: restoredName }),
-                  },
-                });
-              }}
-              onClose={() => setSelectedNodeId(null)}
-            />
-            </div>
-          )}
-
           {panel && (
             <div
               // The conversation gets a little more width than the other

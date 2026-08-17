@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Background, BackgroundVariant, ReactFlow, ReactFlowProvider,
+  Background, BackgroundVariant, NodeToolbar, Position, ReactFlow, ReactFlowProvider,
   useReactFlow, useNodesInitialized,
   type Edge, type Node, type NodeChange, type Connection,
 } from '@xyflow/react';
@@ -8,6 +8,7 @@ import '@xyflow/react/dist/style.css';
 import { FlowNodeCard, type FlowNodeData } from './FlowNodeCard';
 import DrawnEdge, { type DrawnEdgeData } from './DrawnEdge';
 import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayout';
+import { pickEditorSide } from '../../lib/editorPlacement';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
@@ -42,14 +43,25 @@ export interface FlowCanvasProps {
   focusNodeId?: string | null;
   /** Bumped alongside focusNodeId, so asking for the same step twice works. */
   focusSignal?: number;
+  /**
+   * The contextual step editor, anchored to the selected node. The canvas
+   * only places it — the page owns its content — so the editor rides the
+   * node through pans, zooms and drags without the page knowing about any
+   * of them.
+   */
+  editorSlot?: React.ReactNode;
 }
 
 function CanvasInner({
   graph, selectedNodeId, highlighted, problems, posts, activePath,
   onSelect, onMove, onConnect, onAddAfter, fitSignal, focusNodeId = null, focusSignal = 0,
+  editorSlot = null,
 }: FlowCanvasProps) {
-  const { fitView, setCenter, getViewport, setViewport } = useReactFlow();
+  const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
+  // Bumped when a pan/zoom settles, so the editor's side of the node is
+  // reconsidered — per gesture, not per frame.
+  const [viewportTick, setViewportTick] = useState(0);
 
   // The canvas is a real column beside the contextual panel, so its width
   // changes whenever one opens or closes. Keep whatever is in the middle in
@@ -189,6 +201,57 @@ function CanvasInner({
     onConnect(connection.source, connection.target, branch);
   }, [onConnect]);
 
+  /**
+   * Which side of the node the editor card sits on.
+   *
+   * Below the node by default — that's where the eye goes after clicking —
+   * but the card floats above the canvas plane, so it must dodge two things:
+   * the viewport's edges, and OTHER STEPS. A condition's branch row often
+   * sits directly below the condition, and opening the editor must not bury
+   * the very steps the branches lead to. pickEditorSide scores each side by
+   * how many neighbours the card would cover there (in flow coordinates, so
+   * it's pure geometry); the alignment then hugs the nearer screen edge so
+   * the card stays whole. Recomputed when the selection changes, a node is
+   * dragged (positions flow through `graph`), or a pan/zoom settles —
+   * measurement happens in an effect, where reading the DOM is honest.
+   * Estimates the card at its maximum (~312×440): the estimate must hold
+   * when a section expands in place, and the flip only has to be right,
+   * not exact.
+   */
+  const [editorPlacement, setEditorPlacement] = useState<{
+    position: Position; align: 'start' | 'center' | 'end';
+  }>({ position: Position.Bottom, align: 'center' });
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const node = graph.nodes.find(n => n.id === selectedNodeId);
+    const rect = host.current?.getBoundingClientRect();
+    if (!node || !rect || rect.height === 0) return;
+    const zoom = getViewport().zoom || 1;
+    const topLeft = screenToFlowPosition({ x: rect.left, y: rect.top });
+    const bottomRight = screenToFlowPosition({ x: rect.right, y: rect.bottom });
+    const side = pickEditorSide({
+      selectedId: selectedNodeId,
+      nodes: graph.nodes,
+      cardWidth: 312 / zoom,
+      cardHeight: 440 / zoom,
+      viewport: { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y },
+    });
+    const position = { bottom: Position.Bottom, top: Position.Top, right: Position.Right, left: Position.Left }[side];
+    const nodeCenter = flowToScreenPosition({
+      x: node.position.x + NODE_WIDTH / 2,
+      y: node.position.y + NODE_HEIGHT / 2,
+    });
+    // Above/below: hug the nearer horizontal edge. Beside: top-align with
+    // the node, so the card reads as belonging to it.
+    const align =
+      side === 'left' || side === 'right' ? ('start' as const)
+      : nodeCenter.x - rect.left < 170 ? ('start' as const)
+      : rect.right - nodeCenter.x < 170 ? ('end' as const)
+      : ('center' as const);
+    setEditorPlacement(current =>
+      current.position === position && current.align === align ? current : { position, align });
+  }, [selectedNodeId, graph.nodes, viewportTick, flowToScreenPosition, screenToFlowPosition, getViewport]);
+
   return (
     <div ref={host} className="h-full w-full">
     <ReactFlow
@@ -198,6 +261,7 @@ function CanvasInner({
       edgeTypes={edgeTypes}
       onNodesChange={handleNodesChange}
       onConnect={handleConnect}
+      onMoveEnd={() => setViewportTick(t => t + 1)}
       onNodeClick={(_, node) => onSelect(node.id)}
       // Clicking empty canvas closes the inspector — the brief's rule that no
       // panel is permanently open.
@@ -214,6 +278,20 @@ function CanvasInner({
       className="bg-[#F7F5F2]"
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />
+      {editorSlot && selectedNodeId && (
+        // React Flow's own anchored-element primitive: rendered in a portal
+        // above the canvas, tracking the node through pan and drag WITHOUT
+        // scaling with zoom — form controls stay readable at any zoom level.
+        <NodeToolbar
+          nodeId={selectedNodeId}
+          isVisible
+          position={editorPlacement.position}
+          align={editorPlacement.align}
+          offset={12}
+        >
+          {editorSlot}
+        </NodeToolbar>
+      )}
     </ReactFlow>
     </div>
   );
