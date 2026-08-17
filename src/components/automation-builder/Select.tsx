@@ -47,6 +47,10 @@ export default function Select<T extends string>({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  // Focus never leaves the button while the list is open, so the highlighted
+  // row is exposed through aria-activedescendant — without it a screen reader
+  // has no idea which option the arrow keys have reached.
+  const optionId = (index: number) => `${listId}-option-${index}`;
 
   const selected = options.find(o => o.value === value) ?? null;
   const selectableIndex = (from: number, step: number): number => {
@@ -138,6 +142,7 @@ export default function Select<T extends string>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
         aria-label={ariaLabel}
         className={`w-full flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-left
           text-[13px] transition-colors focus:outline-none focus:ring-2 focus:ring-[#C5FF3D]
@@ -159,6 +164,7 @@ export default function Select<T extends string>({
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
+          aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
           tabIndex={-1}
           onKeyDown={onKeyDown}
           className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-72 overflow-y-auto
@@ -174,6 +180,7 @@ export default function Select<T extends string>({
             return (
               <div
                 key={option.value}
+                id={optionId(i)}
                 role="option"
                 aria-selected={isSelected}
                 aria-disabled={option.disabled}
