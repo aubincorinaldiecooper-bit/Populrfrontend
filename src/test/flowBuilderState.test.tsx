@@ -15,6 +15,7 @@ import type { FlowGraph, FlowNode } from '../lib/flowSchema';
 const updateFlow = vi.fn();
 const proposeFlowMock = vi.fn();
 const commitProposalMock = vi.fn();
+const discardProposalMock = vi.fn(async () => ({ ok: true }));
 const activateFlowMock = vi.fn();
 const pauseFlowMock = vi.fn();
 const fetchFlowValidationMock = vi.fn();
@@ -51,7 +52,7 @@ vi.mock('../lib/api', async () => {
     updateFlow: (...args: unknown[]) => updateFlow(...args),
     proposeFlow: (...args: unknown[]) => proposeFlowMock(...args),
     commitProposal: (...args: unknown[]) => commitProposalMock(...args),
-    discardProposal: vi.fn(async () => ({ ok: true })),
+    discardProposal: (...args: unknown[]) => discardProposalMock(...(args as [])),
     fetchActiveProposal: vi.fn(async () => ({ proposal: null })),
     fetchFlowAiMessages: vi.fn(async () => ({ messages: [], hasMore: false })),
     activateFlow: (...args: unknown[]) => activateFlowMock(...args),
@@ -301,6 +302,57 @@ describe('the AI round trip', () => {
     await act(async () => { await result.current.compose('anything') });
 
     expect(result.current.history[result.current.history.length - 1]?.summary).toBe('The model is unavailable.');
+  });
+
+  it('Build this flushes a pending edit first, so the server judges the real canvas', async () => {
+    // The creator edits and clicks Build this inside the autosave debounce.
+    // Committing against the server's older version would either lose the
+    // edit under the build or let the late autosave overwrite the build —
+    // so the save must land first, and the commit answer to what it made.
+    proposeFlowMock.mockResolvedValue(draftResult());
+    commitProposalMock.mockResolvedValue({
+      applied: true, summary: 'Built it.', operations: [], touchedNodeIds: [],
+      previousGraph: baseGraph(), flow: flowFixture(),
+    });
+
+    const { result } = await mountBuilder();
+    await act(async () => { await result.current.compose('wait two days') });
+    act(() => result.current.updateNodeConfig('send', { text: 'Edited mid-draft' }));
+    await act(async () => { await result.current.confirmProposal(); });
+
+    expect(updateFlow).toHaveBeenCalledTimes(1);
+    const saved = updateFlow.mock.calls[0][1] as { graph: FlowGraph };
+    expect(saved.graph.nodes.find(n => n.id === 'send')!.config.text).toBe('Edited mid-draft');
+    expect(updateFlow.mock.invocationCallOrder[0]).toBeLessThan(commitProposalMock.mock.invocationCallOrder[0]);
+  });
+
+  it('opening a different automation does not carry the old draft along', async () => {
+    proposeFlowMock.mockResolvedValue(draftResult());
+    const hook = renderHook(({ id }: { id: string }) => useFlowBuilder(id), { initialProps: { id: 'flow_1' } });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    await act(async () => { await hook.result.current.compose('wait two days') });
+    expect(hook.result.current.proposal).not.toBeNull();
+
+    hook.rerender({ id: 'flow_2' });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    // flow_2 has no draft; Build this here must have nothing to submit.
+    expect(hook.result.current.proposal).toBeNull();
+  });
+
+  it('a discard the server never heard brings the card back, with a word', async () => {
+    proposeFlowMock.mockResolvedValue(draftResult());
+    discardProposalMock.mockRejectedValueOnce(new Error('offline'));
+
+    const { result } = await mountBuilder();
+    await act(async () => { await result.current.compose('wait two days') });
+    act(() => { result.current.discardDraft(); });
+
+    // Optimistically gone…
+    expect(result.current.proposal).toBeNull();
+    // …but the server still holds it, so it returns rather than lying.
+    await waitFor(() => expect(result.current.proposal?.id).toBe('p1'));
+    expect(result.current.proposalError).toMatch(/try the X again/i);
   });
 });
 

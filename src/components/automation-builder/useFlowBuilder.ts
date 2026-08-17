@@ -162,6 +162,9 @@ export function useFlowBuilder(flowId: string | null) {
   const dirty = useRef(false);
   const saving = useRef(false);
   const pending = useRef<{ graph: FlowGraph; name: string } | null>(null);
+  /** The in-flight save's drain loop, so a commit can wait for the canvas to
+   *  really be on the server before building on top of it. */
+  const saveRun = useRef<Promise<void> | null>(null);
 
   // ------------------------------------------------------- validate/activate
   /**
@@ -204,6 +207,12 @@ export function useFlowBuilder(flowId: string | null) {
     }
     setLoading(true);
     setLoadError(null);
+    // A different automation is a different conversation: the previous
+    // flow's draft must not survive the switch, or Build this would submit
+    // the old proposal against the new flow.
+    setProposal(null);
+    setProposalTrace(null);
+    setProposalError(null);
     fetchFlow(flowId)
       .then(loaded => {
         if (cancelled) return;
@@ -257,6 +266,8 @@ export function useFlowBuilder(flowId: string | null) {
 
     saving.current = true;
     setSaveState('saving');
+    let resolveRun: () => void = () => {};
+    saveRun.current = new Promise<void>(resolve => { resolveRun = resolve; });
     // Drain rather than recurse: whatever arrived while a save was in flight
     // is written by this same loop, so the last thing the creator typed is
     // always the thing that ends up stored.
@@ -287,6 +298,8 @@ export function useFlowBuilder(flowId: string | null) {
       console.error('[builder] autosave failed', err);
     } finally {
       saving.current = false;
+      saveRun.current = null;
+      resolveRun();
     }
   }, [flowId, refreshValidation]);
 
@@ -504,6 +517,16 @@ export function useFlowBuilder(flowId: string | null) {
     setProposalError(null);
     const before = { graph, name };
     try {
+      // The server must hold the canvas the creator is looking at before it
+      // decides whether the draft still fits it. An unflushed edit here would
+      // either be silently overwritten by the build, or — worse — land AFTER
+      // it and overwrite the build. Flush first; if the edit moved the flow's
+      // version past the draft's, the commit answers stale, which is honest.
+      if (dirty.current) {
+        dirty.current = false;
+        await persist(before);
+      }
+      if (saveRun.current) await saveRun.current;
       const result = await commitProposal(flowId, proposal.id);
       if (!result.applied || !result.flow) {
         throw new Error(result.summary || "Couldn't build this. Nothing was changed.");
@@ -549,17 +572,28 @@ export function useFlowBuilder(flowId: string | null) {
     } finally {
       setCommitting(false);
     }
-  }, [flowId, proposal, committing, graph, name, pushUndo, highlight, refreshValidation]);
+  }, [flowId, proposal, committing, graph, name, persist, pushUndo, highlight, refreshValidation]);
 
   /** Never mind — the draft goes away; the canvas never moved. */
   const discardDraft = useCallback(() => {
     if (!flowId || !proposal) return;
-    const id = proposal.id;
+    const snapshot = proposal;
+    const trace = proposalTrace;
     setProposal(null);
     setProposalTrace(null);
     setProposalError(null);
-    void discardProposal(flowId, id).catch(() => {});
-  }, [flowId, proposal]);
+    // Optimistic, but not silent: if the server never heard the discard, the
+    // draft would still be active there and reappear on refresh — so the card
+    // comes back with a word, unless a newer draft has already replaced it.
+    void discardProposal(flowId, snapshot.id).catch(() => {
+      setProposal(current => {
+        if (current) return current;
+        setProposalTrace(trace);
+        setProposalError("Couldn't put the draft away just now — try the X again.");
+        return snapshot;
+      });
+    });
+  }, [flowId, proposal, proposalTrace]);
 
   /** Undo the last change — AI or manual — and save the restored graph. */
   const undo = useCallback(() => {

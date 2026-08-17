@@ -1089,22 +1089,6 @@ export interface ComposerProgressEvent {
   planItemId?: string;
 }
 
-export interface FlowComposeResult {
-  applied: boolean;
-  summary: string;
-  /** 'intent': an explicit structural instruction, planned deterministically —
-   *  no model chose any operation. */
-  source: 'model' | 'fallback' | 'intent';
-  /** The summary is a question — nothing changed, one detail is needed. */
-  clarification?: boolean;
-  operations: unknown[];
-  touchedNodeIds?: string[];
-  previousGraph?: FlowGraph;
-  flow: AutomationFlow | null;
-  /** The build sequence that actually ran, in order. */
-  progress?: ComposerProgressEvent[];
-}
-
 export async function fetchFlows(): Promise<AutomationFlow[]> {
   const data = await apiFetch<{ count: number; flows: AutomationFlow[] }>('/api/flows');
   return data.flows;
@@ -1312,13 +1296,6 @@ export async function commitProposal(
 /** POST …/discard — never mind; the draft goes away, the canvas never moved. */
 export async function discardProposal(id: string, proposalId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/flows/${id}/proposal/${proposalId}/discard`, { method: 'POST' });
-}
-
-export async function composeFlow(
-  id: string,
-  input: { prompt: string; selectedNodeId?: string | null },
-): Promise<FlowComposeResult> {
-  return apiFetch(`/api/flows/${id}/compose`, { method: 'POST', body: input });
 }
 
 export interface FlowActivityStep {
