@@ -49,17 +49,27 @@ export default function NotificationsPage() {
 
   const openOne = (n: WorkspaceNotification) => {
     if (n.readAt !== null) return;
-    void markNotificationsRead(n.id).then(() => {
-      // The row itself turns read — a linkless notification stays on this
-      // page, and leaving readAt null would keep it clickable, each click
-      // spending another decrement the badge never owed.
+    // The row turns read where it stands, before the request leaves — a
+    // linkless notification stays on this page, and an impatient second
+    // click would otherwise send a second request and spend a second
+    // decrement the badge never owed. If the server never hears it, the
+    // dot comes back.
+    setItems(prev =>
+      prev
+        ? prev.map(row => (row.id === n.id ? { ...row, readAt: new Date().toISOString() } : row))
+        : prev,
+    );
+    setUnread(u => {
+      const next = Math.max(0, u - 1);
+      reportNotificationsUnread(next);
+      return next;
+    });
+    void markNotificationsRead(n.id).catch(() => {
       setItems(prev =>
-        prev
-          ? prev.map(row => (row.id === n.id ? { ...row, readAt: new Date().toISOString() } : row))
-          : prev,
+        prev ? prev.map(row => (row.id === n.id ? { ...row, readAt: null } : row)) : prev,
       );
       setUnread(u => {
-        const next = Math.max(0, u - 1);
+        const next = u + 1;
         reportNotificationsUnread(next);
         return next;
       });

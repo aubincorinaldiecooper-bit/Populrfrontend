@@ -9,7 +9,11 @@ import {
   type WorkspaceNotification,
 } from '../../lib/api';
 import { headerIconButton } from './headerIconButton';
-import { useNotificationsUnread, reportNotificationsUnread } from './useNotificationsUnread';
+import {
+  useNotificationsUnread,
+  reportNotificationsUnread,
+  refreshNotificationsUnread,
+} from './useNotificationsUnread';
 import NotificationRow from './NotificationRow';
 
 /**
@@ -52,9 +56,11 @@ export default function NotificationMenu() {
   const openOne = (n: WorkspaceNotification) => {
     setOpen(false);
     if (n.readAt === null) {
-      void markNotificationsRead(n.id).then(() =>
-        reportNotificationsUnread(Math.max(0, count - 1)),
-      );
+      // The dot drops immediately — the creator is already on their way to
+      // the thing. A failed request asks the server what the truth is
+      // rather than guessing the count back up.
+      reportNotificationsUnread(Math.max(0, count - 1));
+      void markNotificationsRead(n.id).catch(() => refreshNotificationsUnread());
     }
   };
 
