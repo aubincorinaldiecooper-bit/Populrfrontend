@@ -448,11 +448,26 @@ function ConditionEditor({
   node, workspaceTags, onChange,
 }: { node: FlowNode; workspaceTags: string[]; onChange: (patch: Record<string, unknown>) => void }) {
   const cfg = readCondition(node);
-  // Auto-open when the stored config already uses the option — hiding an
-  // active setting behind a closed door would make the card lie about what
-  // this step does.
-  const [moreMatch, setMoreMatch] = useState(cfg.matchMode !== 'contains');
-  const [moreTiming, setMoreTiming] = useState(cfg.withinMinutes > 0);
+  // Auto-open when the stored config uses the option — hiding an active
+  // setting behind a closed door would make the card lie about what this
+  // step does. Synced against the PROP, not only read at mount: an outside
+  // edit (an AI build, an undo) can make the option active while this card
+  // stays mounted, and the door must open with it. Never forced closed —
+  // a creator who opened it keeps it open.
+  const matchActive = cfg.matchMode !== 'contains';
+  const [moreMatch, setMoreMatch] = useState(matchActive);
+  const [prevMatchActive, setPrevMatchActive] = useState(matchActive);
+  if (matchActive !== prevMatchActive) {
+    setPrevMatchActive(matchActive);
+    if (matchActive) setMoreMatch(true);
+  }
+  const timingActive = cfg.withinMinutes > 0;
+  const [moreTiming, setMoreTiming] = useState(timingActive);
+  const [prevTimingActive, setPrevTimingActive] = useState(timingActive);
+  if (timingActive !== prevTimingActive) {
+    setPrevTimingActive(timingActive);
+    if (timingActive) setMoreTiming(true);
+  }
 
   return (
     <>
@@ -680,10 +695,16 @@ function TriggerEditor({
   const account = accounts.find(a => a.id === cfg.accountId) ?? null;
   const selectedPost = posts.find(p => String(p.id) === cfg.postId) ?? null;
   const [pickingPost, setPickingPost] = useState(false);
-  // The stored mode is non-default matching worth surfacing on open.
-  const [moreMatch, setMoreMatch] = useState(
-    cfg.matchMode === 'exact' || (cfg.matchMode === 'any' && cfg.keywords.length > 0),
-  );
+  // Non-default matching is worth surfacing — and kept in sync with the
+  // PROP, so an outside edit that makes it non-default while the card is
+  // mounted opens the door too (see ConditionEditor for the pattern).
+  const matchActive = cfg.matchMode === 'exact' || (cfg.matchMode === 'any' && cfg.keywords.length > 0);
+  const [moreMatch, setMoreMatch] = useState(matchActive);
+  const [prevMatchActive, setPrevMatchActive] = useState(matchActive);
+  if (matchActive !== prevMatchActive) {
+    setPrevMatchActive(matchActive);
+    if (matchActive) setMoreMatch(true);
+  }
 
   // Only connected accounts are offered — plus the one this flow is already
   // bound to, annotated, so the picker never denies a binding that exists.

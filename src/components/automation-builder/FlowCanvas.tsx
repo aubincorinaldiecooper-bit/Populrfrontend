@@ -8,6 +8,7 @@ import '@xyflow/react/dist/style.css';
 import { FlowNodeCard, type FlowNodeData } from './FlowNodeCard';
 import DrawnEdge, { type DrawnEdgeData } from './DrawnEdge';
 import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayout';
+import { pickEditorSide } from '../../lib/editorPlacement';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
@@ -56,7 +57,7 @@ function CanvasInner({
   onSelect, onMove, onConnect, onAddAfter, fitSignal, focusNodeId = null, focusSignal = 0,
   editorSlot = null,
 }: FlowCanvasProps) {
-  const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition } = useReactFlow();
+  const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
   // Bumped when a pan/zoom settles, so the editor's side of the node is
   // reconsidered — per gesture, not per frame.
@@ -204,13 +205,18 @@ function CanvasInner({
    * Which side of the node the editor card sits on.
    *
    * Below the node by default — that's where the eye goes after clicking —
-   * flipping above when the node is low in the viewport, and hugging the
-   * nearer edge when it's close to one side, so the card stays whole instead
-   * of sliding off-screen. Recomputed when the selection changes, the node is
-   * dragged (its position flows through `graph`), or a pan/zoom settles —
+   * but the card floats above the canvas plane, so it must dodge two things:
+   * the viewport's edges, and OTHER STEPS. A condition's branch row often
+   * sits directly below the condition, and opening the editor must not bury
+   * the very steps the branches lead to. pickEditorSide scores each side by
+   * how many neighbours the card would cover there (in flow coordinates, so
+   * it's pure geometry); the alignment then hugs the nearer screen edge so
+   * the card stays whole. Recomputed when the selection changes, a node is
+   * dragged (positions flow through `graph`), or a pan/zoom settles —
    * measurement happens in an effect, where reading the DOM is honest.
-   * Estimates rather than measures the card (~320×430): measuring would need
-   * a second layout pass, and the flip only has to be right, not exact.
+   * Estimates the card at its maximum (~312×440): the estimate must hold
+   * when a section expands in place, and the flip only has to be right,
+   * not exact.
    */
   const [editorPlacement, setEditorPlacement] = useState<{
     position: Position; align: 'start' | 'center' | 'end';
@@ -220,20 +226,31 @@ function CanvasInner({
     const node = graph.nodes.find(n => n.id === selectedNodeId);
     const rect = host.current?.getBoundingClientRect();
     if (!node || !rect || rect.height === 0) return;
-    const bottomCenter = flowToScreenPosition({
-      x: node.position.x + NODE_WIDTH / 2,
-      y: node.position.y + NODE_HEIGHT,
+    const zoom = getViewport().zoom || 1;
+    const topLeft = screenToFlowPosition({ x: rect.left, y: rect.top });
+    const bottomRight = screenToFlowPosition({ x: rect.right, y: rect.bottom });
+    const side = pickEditorSide({
+      selectedId: selectedNodeId,
+      nodes: graph.nodes,
+      cardWidth: 312 / zoom,
+      cardHeight: 440 / zoom,
+      viewport: { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y },
     });
-    const roomBelow = rect.bottom - bottomCenter.y;
-    const roomAbove = bottomCenter.y - (getViewport().zoom * NODE_HEIGHT) - rect.top;
-    const position = roomBelow < 440 && roomAbove > roomBelow ? Position.Top : Position.Bottom;
+    const position = { bottom: Position.Bottom, top: Position.Top, right: Position.Right, left: Position.Left }[side];
+    const nodeCenter = flowToScreenPosition({
+      x: node.position.x + NODE_WIDTH / 2,
+      y: node.position.y + NODE_HEIGHT / 2,
+    });
+    // Above/below: hug the nearer horizontal edge. Beside: top-align with
+    // the node, so the card reads as belonging to it.
     const align =
-      bottomCenter.x - rect.left < 170 ? ('start' as const)
-      : rect.right - bottomCenter.x < 170 ? ('end' as const)
+      side === 'left' || side === 'right' ? ('start' as const)
+      : nodeCenter.x - rect.left < 170 ? ('start' as const)
+      : rect.right - nodeCenter.x < 170 ? ('end' as const)
       : ('center' as const);
     setEditorPlacement(current =>
       current.position === position && current.align === align ? current : { position, align });
-  }, [selectedNodeId, graph.nodes, viewportTick, flowToScreenPosition, getViewport]);
+  }, [selectedNodeId, graph.nodes, viewportTick, flowToScreenPosition, screenToFlowPosition, getViewport]);
 
   return (
     <div ref={host} className="h-full w-full">
