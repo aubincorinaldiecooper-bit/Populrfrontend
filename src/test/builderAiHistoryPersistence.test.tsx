@@ -26,7 +26,7 @@ import type { FlowGraph } from '../lib/flowSchema';
  */
 
 vi.mock('../components/automation-builder/FlowCanvas', () => ({
-  default: () => <div data-testid="canvas" />,
+  default: (props: Record<string, unknown>) => <div data-testid="canvas">{props.editorSlot as React.ReactNode}</div>,
 }));
 
 function graphFixture(): FlowGraph {

@@ -4,8 +4,15 @@ import { X } from 'lucide-react';
 const MAX_KEYWORDS = 10;
 
 export default function KeywordInput({
-  keywords, onChange,
-}: { keywords: string[]; onChange: (keywords: string[]) => void }) {
+  keywords, onChange, hint,
+}: {
+  keywords: string[];
+  onChange: (keywords: string[]) => void;
+  /** Contextual helper under the field. The default speaks about comments,
+   *  which is wrong wherever the keywords match a reply or a DM — pass the
+   *  sentence that's true where the field actually lives. */
+  hint?: string;
+}) {
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -56,7 +63,7 @@ export default function KeywordInput({
         />
       </div>
       <div className="flex items-center justify-between mt-1.5">
-        <p className="text-[11px] text-[#9B9B8F]">{notice ?? 'Matching is case-insensitive and checks if a comment contains the keyword.'}</p>
+        <p className="text-[11px] text-[#9B9B8F]">{notice ?? hint ?? 'Matching is case-insensitive and checks if a comment contains the keyword.'}</p>
         <p className="text-[11px] text-[#9B9B8F] flex-shrink-0">{keywords.length}/{MAX_KEYWORDS}</p>
       </div>
     </div>

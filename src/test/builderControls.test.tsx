@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import NodeInspector from '../components/automation-builder/NodeInspector';
+import NodeEditorCard from '../components/automation-builder/NodeEditorCard';
 import TagCombobox from '../components/automation-builder/TagCombobox';
 import { normalizeTag } from '../lib/tags';
 import Select from '../components/automation-builder/Select';
@@ -21,7 +21,8 @@ function inspector(node: FlowNode, onChange = vi.fn(), extra: Partial<{
   posts: PostLibraryItem[]; accounts: ConnectedAccount[]; workspaceTags: string[];
 }> = {}) {
   render(
-    <NodeInspector
+    <NodeEditorCard
+      variant="anchored"
       node={node}
       accounts={extra.accounts ?? []}
       posts={extra.posts ?? []}

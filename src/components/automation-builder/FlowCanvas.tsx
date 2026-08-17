@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Background, BackgroundVariant, ReactFlow, ReactFlowProvider,
+  Background, BackgroundVariant, NodeToolbar, Position, ReactFlow, ReactFlowProvider,
   useReactFlow, useNodesInitialized,
   type Edge, type Node, type NodeChange, type Connection,
 } from '@xyflow/react';
@@ -42,14 +42,25 @@ export interface FlowCanvasProps {
   focusNodeId?: string | null;
   /** Bumped alongside focusNodeId, so asking for the same step twice works. */
   focusSignal?: number;
+  /**
+   * The contextual step editor, anchored to the selected node. The canvas
+   * only places it — the page owns its content — so the editor rides the
+   * node through pans, zooms and drags without the page knowing about any
+   * of them.
+   */
+  editorSlot?: React.ReactNode;
 }
 
 function CanvasInner({
   graph, selectedNodeId, highlighted, problems, posts, activePath,
   onSelect, onMove, onConnect, onAddAfter, fitSignal, focusNodeId = null, focusSignal = 0,
+  editorSlot = null,
 }: FlowCanvasProps) {
-  const { fitView, setCenter, getViewport, setViewport } = useReactFlow();
+  const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition } = useReactFlow();
   const initialized = useNodesInitialized();
+  // Bumped when a pan/zoom settles, so the editor's side of the node is
+  // reconsidered — per gesture, not per frame.
+  const [viewportTick, setViewportTick] = useState(0);
 
   // The canvas is a real column beside the contextual panel, so its width
   // changes whenever one opens or closes. Keep whatever is in the middle in
@@ -189,6 +200,41 @@ function CanvasInner({
     onConnect(connection.source, connection.target, branch);
   }, [onConnect]);
 
+  /**
+   * Which side of the node the editor card sits on.
+   *
+   * Below the node by default — that's where the eye goes after clicking —
+   * flipping above when the node is low in the viewport, and hugging the
+   * nearer edge when it's close to one side, so the card stays whole instead
+   * of sliding off-screen. Recomputed when the selection changes, the node is
+   * dragged (its position flows through `graph`), or a pan/zoom settles —
+   * measurement happens in an effect, where reading the DOM is honest.
+   * Estimates rather than measures the card (~320×430): measuring would need
+   * a second layout pass, and the flip only has to be right, not exact.
+   */
+  const [editorPlacement, setEditorPlacement] = useState<{
+    position: Position; align: 'start' | 'center' | 'end';
+  }>({ position: Position.Bottom, align: 'center' });
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const node = graph.nodes.find(n => n.id === selectedNodeId);
+    const rect = host.current?.getBoundingClientRect();
+    if (!node || !rect || rect.height === 0) return;
+    const bottomCenter = flowToScreenPosition({
+      x: node.position.x + NODE_WIDTH / 2,
+      y: node.position.y + NODE_HEIGHT,
+    });
+    const roomBelow = rect.bottom - bottomCenter.y;
+    const roomAbove = bottomCenter.y - (getViewport().zoom * NODE_HEIGHT) - rect.top;
+    const position = roomBelow < 440 && roomAbove > roomBelow ? Position.Top : Position.Bottom;
+    const align =
+      bottomCenter.x - rect.left < 170 ? ('start' as const)
+      : rect.right - bottomCenter.x < 170 ? ('end' as const)
+      : ('center' as const);
+    setEditorPlacement(current =>
+      current.position === position && current.align === align ? current : { position, align });
+  }, [selectedNodeId, graph.nodes, viewportTick, flowToScreenPosition, getViewport]);
+
   return (
     <div ref={host} className="h-full w-full">
     <ReactFlow
@@ -198,6 +244,7 @@ function CanvasInner({
       edgeTypes={edgeTypes}
       onNodesChange={handleNodesChange}
       onConnect={handleConnect}
+      onMoveEnd={() => setViewportTick(t => t + 1)}
       onNodeClick={(_, node) => onSelect(node.id)}
       // Clicking empty canvas closes the inspector — the brief's rule that no
       // panel is permanently open.
@@ -214,6 +261,20 @@ function CanvasInner({
       className="bg-[#F7F5F2]"
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />
+      {editorSlot && selectedNodeId && (
+        // React Flow's own anchored-element primitive: rendered in a portal
+        // above the canvas, tracking the node through pan and drag WITHOUT
+        // scaling with zoom — form controls stay readable at any zoom level.
+        <NodeToolbar
+          nodeId={selectedNodeId}
+          isVisible
+          position={editorPlacement.position}
+          align={editorPlacement.align}
+          offset={12}
+        >
+          {editorSlot}
+        </NodeToolbar>
+      )}
     </ReactFlow>
     </div>
   );
