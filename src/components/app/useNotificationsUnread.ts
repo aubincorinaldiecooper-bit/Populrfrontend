@@ -21,17 +21,32 @@ function emit(next: number) {
   for (const l of listeners) l();
 }
 
-/** Ask the server again. Fire-and-forget; a dot is not worth a toast. */
+/**
+ * Ask the server again. Fire-and-forget; a dot is not worth a toast — and a
+ * question that never reached the server is not an answer, so a failed
+ * refresh leaves the count exactly where it was. Claiming zero would clear
+ * a badge the server still owes, precisely when the network is the thing
+ * that's broken.
+ */
 export function refreshNotificationsUnread(): void {
   if (!isBackendConfigured()) return;
   fetchNotifications()
     .then(res => emit(res.unread))
-    .catch(() => emit(0));
+    .catch(() => {});
 }
 
 /** A surface that already holds the fresh answer hands it over. */
 export function reportNotificationsUnread(count: number): void {
   emit(count);
+}
+
+/**
+ * Move the count by a known amount: one read spent optimistically, or that
+ * same read taken back when the request didn't land. Relative, because the
+ * surface doing it may no longer be mounted to know the absolute answer.
+ */
+export function adjustNotificationsUnread(delta: number): void {
+  emit(Math.max(0, unread + delta));
 }
 
 function subscribe(listener: () => void): () => void {

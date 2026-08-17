@@ -13,6 +13,7 @@ import {
   useNotificationsUnread,
   reportNotificationsUnread,
   refreshNotificationsUnread,
+  adjustNotificationsUnread,
 } from './useNotificationsUnread';
 import NotificationRow from './NotificationRow';
 
@@ -57,10 +58,15 @@ export default function NotificationMenu() {
     setOpen(false);
     if (n.readAt === null) {
       // The dot drops immediately — the creator is already on their way to
-      // the thing. A failed request asks the server what the truth is
-      // rather than guessing the count back up.
-      reportNotificationsUnread(Math.max(0, count - 1));
-      void markNotificationsRead(n.id).catch(() => refreshNotificationsUnread());
+      // the thing. If the read never lands, the count goes back where it
+      // was first, then we ask the server for the truth: a refresh that
+      // fails for the same reason leaves the restored count standing
+      // instead of claiming everything is read.
+      adjustNotificationsUnread(-1);
+      void markNotificationsRead(n.id).catch(() => {
+        adjustNotificationsUnread(1);
+        refreshNotificationsUnread();
+      });
     }
   };
 

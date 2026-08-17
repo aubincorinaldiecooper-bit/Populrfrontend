@@ -11,7 +11,10 @@ import {
   markNotificationsRead,
   type WorkspaceNotification,
 } from '../lib/api';
-import { reportNotificationsUnread } from '../components/app/useNotificationsUnread';
+import {
+  reportNotificationsUnread,
+  adjustNotificationsUnread,
+} from '../components/app/useNotificationsUnread';
 
 /**
  * The whole feed, on a page — the same rows the bell's popover shows
@@ -59,20 +62,18 @@ export default function NotificationsPage() {
         ? prev.map(row => (row.id === n.id ? { ...row, readAt: new Date().toISOString() } : row))
         : prev,
     );
-    setUnread(u => {
-      const next = Math.max(0, u - 1);
-      reportNotificationsUnread(next);
-      return next;
-    });
+    setUnread(u => Math.max(0, u - 1));
+    // The shared badge is moved outside the state updater deliberately: a
+    // row WITH a link navigates as it's followed, so this page can be gone
+    // by the time the request settles. React drops state updates on an
+    // unmounted page — the store's count doesn't live here, and survives.
+    adjustNotificationsUnread(-1);
     void markNotificationsRead(n.id).catch(() => {
+      adjustNotificationsUnread(1);
       setItems(prev =>
         prev ? prev.map(row => (row.id === n.id ? { ...row, readAt: null } : row)) : prev,
       );
-      setUnread(u => {
-        const next = u + 1;
-        reportNotificationsUnread(next);
-        return next;
-      });
+      setUnread(u => u + 1);
     });
   };
 
