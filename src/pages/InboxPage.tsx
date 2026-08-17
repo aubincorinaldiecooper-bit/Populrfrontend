@@ -87,7 +87,7 @@ export default function InboxPage() {
     // a full-viewport child hangs that far below the fold — composer included.
     // Take the remaining height, not the whole viewport.
     <div className="p-4 lg:p-6 max-w-[1400px] mx-auto flex flex-col
-      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-screen">
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-[calc(100vh-3.5rem)]">
       <PageHeader
         title="Inbox"
         subtitle={loading

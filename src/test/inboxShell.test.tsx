@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import Sidebar from '../components/Sidebar';
+import AppSidebar from '../components/app/AppSidebar';
+import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import EditorRail from '../components/EditorRail';
 import { resetInboxUnreadForTests } from '../components/inbox/useInboxUnread';
@@ -67,7 +68,7 @@ function renderShell(ui: React.ReactNode, url = '/') {
   return render(
     <MemoryRouter initialEntries={[url]}>
       <CreateAutomationProvider>
-        {ui}
+        <SidebarProvider>{ui}</SidebarProvider>
         <Routes>
           <Route path="/" element={<div>home stub</div>} />
           <Route path="/inbox" element={<div>inbox page stub</div>} />
@@ -80,7 +81,7 @@ function renderShell(ui: React.ReactNode, url = '/') {
 describe('the left navigation', () => {
   it('offers Inbox as a destination, and it navigates — no overlay', async () => {
     const user = userEvent.setup();
-    renderShell(<Sidebar />);
+    renderShell(<AppSidebar />);
 
     const inbox = screen.getAllByRole('link', { name: /Inbox/ })[0]!;
     expect(inbox).toHaveAttribute('href', '/inbox');
@@ -92,7 +93,7 @@ describe('the left navigation', () => {
   });
 
   it('counts people waiting, by the same rule the Inbox page counts them', async () => {
-    renderShell(<Sidebar />);
+    renderShell(<AppSidebar />);
 
     // Two conversations waiting (Alex is quiet) → a "2" pill. Same endpoint,
     // same grouping as the page's "N waiting on you" — they cannot disagree.
@@ -105,7 +106,7 @@ describe('the left navigation', () => {
     fetchConversationsMock.mockResolvedValue({
       conversations: [conversation('c1', 'Jordan', 3)],
     });
-    renderShell(<Sidebar />);
+    renderShell(<AppSidebar />);
 
     await waitFor(() => expect(screen.getAllByText('1').length).toBeGreaterThan(0));
     expect(screen.queryByText('3')).not.toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('the left navigation', () => {
 
   it('shows no badge when nobody is waiting', async () => {
     fetchConversationsMock.mockResolvedValue({ conversations: [] });
-    renderShell(<Sidebar />);
+    renderShell(<AppSidebar />);
 
     await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalled());
     expect(screen.queryByText(/waiting/)).not.toBeInTheDocument();
@@ -122,7 +123,7 @@ describe('the left navigation', () => {
   it('however many badges render, there is one poll', async () => {
     // The builder mounts the rail AND keeps the sidebar for mobile nav. Two
     // components, one shared store — not one request each.
-    renderShell(<><Sidebar railMode /><EditorRail /></>);
+    renderShell(<><AppSidebar desktop={false} /><EditorRail /></>);
 
     await screen.findByRole('link', { name: 'Inbox, 2 waiting' });
     expect(fetchConversationsMock).toHaveBeenCalledTimes(1);
