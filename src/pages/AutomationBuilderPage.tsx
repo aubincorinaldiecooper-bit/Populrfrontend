@@ -81,7 +81,7 @@ export default function AutomationBuilderPage() {
   const {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning, composing, changeCard,
-    editsSinceCard, activity, highlighted, history,
+    editsSinceCard, activity, highlighted, history, historyHasMore, loadEarlierHistory,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -793,6 +793,8 @@ export default function AutomationBuilderPage() {
                   onUndo={undo}
                   onOpenHistory={() => { setPanel('history'); setSelectedNodeId(null); }}
                   onCollapse={collapseAi}
+                  hasEarlier={historyHasMore}
+                  onLoadEarlier={() => void loadEarlierHistory()}
                 />
               )}
 

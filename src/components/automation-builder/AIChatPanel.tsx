@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PanelRightClose, Sparkles } from 'lucide-react';
+import { Check, PanelRightClose, Sparkles } from 'lucide-react';
 import { NODE_LABEL, type FlowNode } from '../../lib/flowSchema';
 import type { ChangeCard, HistoryEntry } from './useFlowBuilder';
 import PopulrAIComposer from './PopulrAIComposer';
@@ -18,12 +18,14 @@ export interface AIChatPanelProps {
   activity: string[]; canUndo: boolean; aiConfigured: boolean; empty: boolean;
   selectedNode: FlowNode | null; onSubmit: (prompt: string) => void; onUndo: () => void;
   onOpenHistory: () => void; onCollapse: () => void;
+  /** The server holds conversation older than what's shown. */
+  hasEarlier?: boolean; onLoadEarlier?: () => void;
 }
 
 /** The chronological, canvas-aware Ask Populr conversation. */
 export default function AIChatPanel({
   history, composing, changeCard, activity, canUndo, aiConfigured, empty, selectedNode,
-  onSubmit, onUndo, onOpenHistory, onCollapse,
+  onSubmit, onUndo, onOpenHistory, onCollapse, hasEarlier, onLoadEarlier,
 }: AIChatPanelProps) {
   const [value, setValue] = useState('');
   const [seconds, setSeconds] = useState(0);
@@ -61,12 +63,31 @@ export default function AIChatPanel({
     <div ref={scrollRef} onScroll={event => { const el = event.currentTarget; wasNearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }} className="flex-1 overflow-y-auto bg-[#FCFBF9] px-4 py-5">
       {history.length === 0 && !pendingPrompt && (empty ? <div className="pt-5 text-center"><h3 className="text-[17px] font-semibold tracking-tight text-[#111111]">What should happen?</h3><p className="mt-1.5 text-[12.5px] text-[#6B6B6B]">Describe it naturally. Populr will build it beside you.</p><div className="mt-4 flex flex-wrap justify-center gap-1.5">{SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" onClick={() => setValue(suggestion)} className="rounded-full border border-[#E8E4DF] bg-white px-3 py-1.5 text-[11.5px] text-[#6B6B6B] hover:border-[#C5FF3D] hover:text-[#111111]">{suggestion}</button>)}</div></div> : <p className="pt-2 text-[12.5px] leading-relaxed text-[#8A857E]">Ask for a change and watch it happen on the canvas. You can keep refining it here.</p>)}
 
+      {hasEarlier && onLoadEarlier && (
+        <div className="pb-5 text-center">
+          <button type="button" onClick={onLoadEarlier} className="rounded-full border border-[#E8E4DF] bg-white px-3 py-1 text-[11px] text-[#6B6B6B] hover:border-[#C5FF3D] hover:text-[#111111]">
+            Show earlier
+          </button>
+        </div>
+      )}
       <div className="space-y-7">
         {history.map((entry, index) => {
           const latest = index === history.length - 1;
+          // The live answer's change card carries richer detail than the
+          // stored one-liner; the stored summary takes over once it's gone.
+          const liveChanges = latest && !!changeCard?.touchedNodeIds.length;
           return <article key={`${entry.at}-${index}`} className="space-y-4">
-            <div className="ml-auto max-w-[82%]"><p className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-[#8A857E]">You</p><p className="rounded-2xl rounded-tr-md bg-[#EDEAE5] px-3 py-2 text-[12.5px] leading-relaxed text-[#302D2A]">{entry.prompt}</p></div>
-            <div><p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#687A36]">Populr</p><PopulrAIMessage text={entry.summary} changes={latest && changeCard?.touchedNodeIds.length ? (activity.length ? activity : ['Updated automation']) : []} canUndo={latest && !!changeCard && canUndo} onUndo={onUndo} onOpenHistory={latest && changeCard ? onOpenHistory : undefined} /></div>
+            {entry.prompt && <div className="ml-auto max-w-[82%]">
+              {entry.nodeLabel && <p className="mb-0.5 text-right text-[10px] text-[#8A857E]">Editing: {entry.nodeLabel}</p>}
+              <p className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-[#8A857E]">You</p><p className="rounded-2xl rounded-tr-md bg-[#EDEAE5] px-3 py-2 text-[12.5px] leading-relaxed text-[#302D2A]">{entry.prompt}</p>
+            </div>}
+            {entry.summary && <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#687A36]">Populr</p>
+              <PopulrAIMessage text={entry.summary} changes={liveChanges ? (activity.length ? activity : ['Updated automation']) : []} canUndo={latest && !!changeCard && canUndo} onUndo={onUndo} onOpenHistory={latest && changeCard ? onOpenHistory : undefined} />
+              {entry.operationSummary && !liveChanges && (
+                <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-[#68635D]"><Check size={12} className="shrink-0 text-[#5F8B18]" />{entry.operationSummary}</p>
+              )}
+            </div>}
           </article>;
         })}
         {composing && pendingPrompt && <article className="space-y-4"><div className="ml-auto max-w-[82%]"><p className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-[#8A857E]">You</p><p className="rounded-2xl rounded-tr-md bg-[#EDEAE5] px-3 py-2 text-[12.5px] leading-relaxed text-[#302D2A]">{pendingPrompt}</p></div><div><p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#687A36]">Populr</p><PopulrWorkingState seconds={seconds} /></div></article>}
