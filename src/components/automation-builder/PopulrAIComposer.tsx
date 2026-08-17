@@ -60,7 +60,7 @@ export default function PopulrAIComposer({
           </button>
         </div>
       </div>
-      {!aiConfigured && <p className="mt-1.5 px-1 text-[11px] text-[#8A857E]">Populr understands common requests; full AI composing isn't switched on for this workspace.</p>}
+      {!aiConfigured && <p className="mt-1.5 px-1 text-[11px] text-[#8A857E]">Populr understands common requests. Full AI composing isn't turned on here yet.</p>}
     </div>
   );
 }

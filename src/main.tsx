@@ -6,8 +6,6 @@ import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import { populrTheme } from './design-system/theme'
-import '@fontsource-variable/roboto-flex/index.css'
-import '@fontsource-variable/jetbrains-mono/index.css'
 import './index.css'
 import App from './App.tsx'
 

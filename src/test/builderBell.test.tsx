@@ -173,6 +173,20 @@ describe('the builder’s top bar', () => {
     expect(bell).toHaveTextContent('2');
   });
 
+  it('a provider-worded problem from an old server never reaches the canvas', async () => {
+    // The backend no longer writes sentences like this, but an old deploy or
+    // a provider echo must still die at the client's voice filter (lib/voice)
+    // rather than reach a warning chip. The problem stays — as a calm ask.
+    serverProblems = [
+      { nodeId: 'send', message: "Zernio needs the opening DM's text, so this Send can't be empty." },
+    ];
+    mountBuilder();
+    await screen.findByLabelText('Notifications, 1 unread');
+
+    expect(screen.queryByText(/zernio/i)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/zernio/i);
+  });
+
   it('shows a plain bell when nothing needs the creator', async () => {
     serverProblems = [];
     mountBuilder();
@@ -250,7 +264,7 @@ describe('Activate', () => {
     await user.click(await screen.findByText('Activate'));
 
     expect(activateFlowMock).toHaveBeenCalled();
-    expect(showToast).not.toHaveBeenCalledWith('Automation activated', 'success');
+    expect(showToast).not.toHaveBeenCalledWith('Automation is live', 'success');
     // Not a modal, not a wall of validation — the feed, opened on the thing
     // standing in the way, one tap from the step that fixes it.
     expect(await screen.findByLabelText('Notifications')).toBeInTheDocument();
@@ -268,7 +282,7 @@ describe('Activate', () => {
 
     await user.click(await screen.findByText('Activate'));
 
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Automation activated', 'success'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Automation is live', 'success'));
   });
 });
 

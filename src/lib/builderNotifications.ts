@@ -121,7 +121,7 @@ const PHRASINGS: Phrasing[] = [
   },
   {
     key: 'message',
-    test: /Send step is empty/i,
+    test: /Send step is empty|^Add your message\.$/i,
     kind: 'question',
     ask: 'What should this message say?',
     done: 'Message is ready',

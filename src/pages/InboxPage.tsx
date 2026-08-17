@@ -57,7 +57,7 @@ export default function InboxPage() {
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">
-              Populr isn&apos;t connected to a backend yet
+              Populr isn&apos;t connected to its server yet
             </p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
               Populr can&apos;t reach its server, so your conversations can&apos;t be loaded.

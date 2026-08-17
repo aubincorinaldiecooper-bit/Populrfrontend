@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import ProfileImage from '../components/ProfileImage';
 import { useApp } from '../context/AppContext';
+import { isCreatorSafe } from '../lib/voice';
 import PageHeader from '../components/PageHeader';
 import ConnectAnotherModal from '../components/ConnectAnotherModal';
 import type { ConnectAnotherInitialMode } from '../components/ConnectAnotherModal';
@@ -204,7 +205,7 @@ export default function ChannelsPage() {
         <div className="pop-card p-6 mb-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
               Populr can&apos;t reach its server, so accounts can&apos;t be connected right now.
             </p>
@@ -253,7 +254,7 @@ export default function ChannelsPage() {
                     )}
                     {platformStatus === 'error' && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEE2E2] text-[#DC2626]">
-                        Connection failed
+                        Couldn't connect
                       </span>
                     )}
                     {accts.length === 0 && !connectBusy && platformStatus !== 'error' && (
@@ -271,7 +272,7 @@ export default function ChannelsPage() {
                     <p className="text-[12px] text-[#DC2626] mt-0.5">{cp.errorMessage}</p>
                   )}
                   {limited && caps?.caveat && (
-                    <p className="text-[11px] text-[#9B9B8F] mt-1 leading-relaxed">{caps.caveat}</p>
+                    <p className="text-[11px] text-[#9B9B8F] mt-1 leading-relaxed">{isCreatorSafe(caps.caveat) ? caps.caveat : null}</p>
                   )}
                 </div>
                 <div className="flex-shrink-0">
@@ -358,7 +359,7 @@ export default function ChannelsPage() {
                           </div>
                           {needsReauth && (
                             <p className="text-[12px] text-[#D97706] mt-0.5">
-                              Authorization expired — reconnect to keep this account active.
+                              Reconnect this account to keep things running.
                             </p>
                           )}
                           {handleTwin && (

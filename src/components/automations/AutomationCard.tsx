@@ -123,7 +123,7 @@ export default function AutomationCard({
 
   const summary = describeFlow(flow.graph);
   const steps = flow.graph.nodes.length;
-  const statusLabel = flow.status === 'live' ? 'active' : flow.status === 'paused' ? 'paused' : 'draft';
+  const statusLabel = flow.status === 'live' ? 'live' : flow.status === 'paused' ? 'paused' : 'draft';
   const live = flow.status === 'live';
 
   return (

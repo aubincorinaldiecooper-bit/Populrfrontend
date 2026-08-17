@@ -120,15 +120,23 @@ export default {
         xl: '16px',
       },
       fontFamily: {
+        // ─── One face ───
+        // Geist is Populr's UI typeface — it's what the design-system theme
+        // has rendered the whole app in, so every role resolves to it. The
+        // roles stay as tokens (display/body/label) so hierarchy is carried
+        // by size and weight, not by switching families. `sans` matters:
+        // without it, Tailwind's preflight left <html> on the OS system
+        // font, which showed for a frame before the theme mounted and in
+        // anything that escaped the theme's wrapper (portals included).
+        sans: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         geist: ['Geist', 'sans-serif'],
+        // GeistMono is the one monospace, reserved for genuinely technical
+        // values (a raw platform account id) and tabular metrics.
         mono: ['GeistMono', 'ui-monospace', 'monospace'],
         'geist-mono': ['GeistMono', 'ui-monospace', 'monospace'],
-        // ─── Redesign type roles ───
-        // Roboto Flex is the primary UI face (display + body); JetBrains Mono
-        // carries data labels / metrics per the mockups' label-sm role.
-        display: ['"Roboto Flex Variable"', 'Roboto Flex', 'sans-serif'],
-        body: ['"Roboto Flex Variable"', 'Roboto Flex', 'sans-serif'],
-        label: ['"JetBrains Mono Variable"', 'ui-monospace', 'monospace'],
+        display: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        body: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        label: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       fontSize: {
         'display-lg': ['48px', { lineHeight: '56px', letterSpacing: '-0.02em', fontWeight: '700' }],

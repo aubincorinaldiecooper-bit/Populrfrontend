@@ -6,6 +6,7 @@
 // ============================================================
 
 import { getApiAuthToken, clearApiAuthToken } from './authClient';
+import { GENERIC_ERROR, UNREACHABLE_ERROR, isCreatorSafe } from './voice';
 import type { FlowGraph } from './flowSchema';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
@@ -118,12 +119,21 @@ async function apiFetch<T>(
   if (init?.body) headers['Content-Type'] = 'application/json';
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: init?.method ?? 'GET',
-    headers: Object.keys(headers).length > 0 ? headers : undefined,
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    ...(init?.keepalive ? { keepalive: true } : {}),
-  });
+  // A request that never reached Populr throws a bare TypeError ("Failed to
+  // fetch"), which is not a sentence for a creator's screen. It becomes an
+  // ApiError carrying Populr's own words; the cause stays in the console.
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: init?.method ?? 'GET',
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+      ...(init?.keepalive ? { keepalive: true } : {}),
+    });
+  } catch (err) {
+    console.warn(`[api] ${path} unreachable`, err);
+    throw new ApiError(UNREACHABLE_ERROR, 0);
+  }
   if (!res.ok) {
     // An expired session used to surface as an ordinary inline error on
     // whichever page happened to fetch — "Could not load contacts." — while
@@ -157,8 +167,13 @@ async function apiFetch<T>(
         problems?: { nodeId: string | null; message: string }[];
       }) => body)
       .catch(() => undefined);
+    // The route path and status stay in the console for developers; the
+    // error's message is for a creator's screen, so a body without one gets
+    // Populr's generic sentence — never `path failed with 502`, and never a
+    // raw error code standing in as prose.
+    console.warn(`[api] ${path} failed with ${res.status}`, parsed);
     throw new ApiError(
-      parsed?.message || parsed?.error || `Populr API ${path} failed with ${res.status}`,
+      isCreatorSafe(parsed?.message) ? parsed.message : GENERIC_ERROR,
       res.status,
       parsed?.error,
       Array.isArray(parsed?.details) ? parsed.details : undefined,
@@ -172,19 +187,26 @@ async function apiFetch<T>(
 /** Same error/status handling as apiFetch, but for a multipart file upload (no JSON body). */
 async function apiUpload<T>(path: string, form: FormData): Promise<T> {
   const token = await getApiAuthToken();
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    // No Content-Type here — the browser sets the multipart boundary itself.
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      // No Content-Type here — the browser sets the multipart boundary itself.
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+  } catch (err) {
+    console.warn(`[api] ${path} unreachable`, err);
+    throw new ApiError(UNREACHABLE_ERROR, 0);
+  }
   if (!res.ok) {
     const parsed = await res
       .json()
       .then((body: { error?: string; message?: string }) => body)
       .catch(() => undefined);
+    console.warn(`[api] ${path} failed with ${res.status}`, parsed);
     throw new ApiError(
-      parsed?.message || parsed?.error || `Populr API ${path} failed with ${res.status}`,
+      isCreatorSafe(parsed?.message) ? parsed.message : GENERIC_ERROR,
       res.status,
       parsed?.error,
     );

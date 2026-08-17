@@ -5,7 +5,7 @@ interface PopulrWorkingStateProps { seconds: number }
 
 /** Observable work only; this never presents model reasoning. */
 export default function PopulrWorkingState({ seconds }: PopulrWorkingStateProps) {
-  const steps = ['Checking the current path', 'Preparing the requested changes', 'Validating the automation'];
+  const steps = ['Reading your request', 'Making the change', 'Checking the automation'];
   const active = seconds < 2 ? 0 : seconds < 5 ? 1 : 2;
   return (
     <section role="status" aria-label="Populr is updating the automation" className="motion-safe:animate-in motion-safe:fade-in">

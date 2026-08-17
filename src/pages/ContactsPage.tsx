@@ -146,7 +146,7 @@ export default function ContactsPage() {
         <div className="pop-card p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to a backend yet</p>
+            <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">
               Populr can&apos;t reach its server, so your contacts can&apos;t be loaded right now.
             </p>

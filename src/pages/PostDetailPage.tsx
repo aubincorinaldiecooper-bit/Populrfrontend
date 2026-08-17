@@ -10,6 +10,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
+import { isCreatorSafe } from '../lib/voice';
 import { platformMeta } from '../lib/platformMeta';
 import { STATUS_LABEL, STATUS_STYLE } from '../lib/postStatus';
 import {
@@ -196,7 +197,7 @@ export default function PostDetailPage() {
                       </span>
                     </div>
                     {t.status === 'failed' && t.error && (
-                      <p className="text-[11px] text-[#DC2626] mt-2 flex items-start gap-1.5"><AlertCircle size={12} className="mt-0.5 flex-shrink-0" /> {t.error}</p>
+                      <p className="text-[11px] text-[#DC2626] mt-2 flex items-start gap-1.5"><AlertCircle size={12} className="mt-0.5 flex-shrink-0" /> {isCreatorSafe(t.error) ? t.error : "Couldn't publish to this account."}</p>
                     )}
                     {t.url && (
                       <a href={t.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[#3B82F6] mt-2 inline-flex items-center gap-1 hover:underline">
