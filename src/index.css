@@ -350,6 +350,15 @@
   to   { background-position: -200% 0; }
 }
 
+/* The composer's mic while it listens: three bars breathing like a level
+ * meter. Scale, not height, so the bars never reflow their row; under
+ * reduced motion the global rule below freezes them mid-breath, which still
+ * reads as "on". */
+@keyframes pop-eq-bounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1); }
+}
+
 /* A count that changed. Small enough to catch the eye at the edge of vision
  * without asking to be looked at — a badge that bounced would. */
 @keyframes pop-badge-bump {
