@@ -38,6 +38,10 @@ describe('isCreatorSafe', () => {
       'The opening DM is 1042 characters; Instagram allows 500 characters.',
       "X doesn't support automated DMs.",
       'Reconnect this account to keep things running.',
+      // The builder's own link problem SAYS "http://" — that's an
+      // instruction about typing an address, not software talking, and the
+      // bell's link-field phrasing depends on it passing through intact.
+      'That link needs to be a full http:// or https:// address.',
     ]) {
       expect(isCreatorSafe(text), text).toBe(true);
     }

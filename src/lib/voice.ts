@@ -12,10 +12,12 @@
  */
 
 /** Markers that mean "software talking" — never shown to a creator. A bare
- *  number is NOT a marker ("Instagram allows 500 characters" is fine); a
- *  number glued to failure phrasing is. */
+ *  number is NOT a marker ("Instagram allows 500 characters" is fine), and
+ *  neither is "http://" in an instruction about typing an address ("a full
+ *  http:// or https:// address") — but a real URL (protocol + host) or
+ *  HTTP-failure phrasing is. */
 const TECHNICAL =
-  /\b(?:zernio|provider|endpoint|webhook|payload|api\b|http|status\s*code|failed with \d+|error \d+|json\b|sql\b|undefined\b|null\b)/i;
+  /\b(?:zernio|provider|endpoint|webhook|payload|api\b|https?:\/\/[^\s/]|http\s+(?:error|request|status|\d)|status\s*code|failed with \d+|error \d+|json\b|sql\b|undefined\b|null\b)/i;
 
 /** The one sentence that stands in when a message can't be shown. */
 export const GENERIC_ERROR = "Couldn't finish that. Try again in a moment.";
