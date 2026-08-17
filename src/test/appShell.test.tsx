@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader';
 import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import { resetInboxUnreadForTests } from '../components/inbox/useInboxUnread';
+import { resetNotificationsUnreadForTests } from '../components/app/useNotificationsUnread';
 import type { Conversation } from '../lib/api';
 
 /* The shell.
@@ -23,6 +24,8 @@ import type { Conversation } from '../lib/api';
  */
 
 const fetchConversationsMock = vi.fn();
+const fetchNotificationsMock = vi.fn();
+const markNotificationsReadMock = vi.fn();
 
 function conversation(contactId: string, name: string, waiting: number): Conversation {
   return {
@@ -39,6 +42,8 @@ vi.mock('../lib/api', async () => {
     ...actual,
     isBackendConfigured: () => true,
     fetchConversations: (...args: unknown[]) => fetchConversationsMock(...args),
+    fetchNotifications: (...args: unknown[]) => fetchNotificationsMock(...args),
+    markNotificationsRead: (...args: unknown[]) => markNotificationsReadMock(...args),
   };
 });
 
@@ -51,6 +56,9 @@ vi.mock('../context/AuthContext', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   resetInboxUnreadForTests();
+  resetNotificationsUnreadForTests();
+  fetchNotificationsMock.mockResolvedValue({ notifications: [], unread: 0 });
+  markNotificationsReadMock.mockResolvedValue({ marked: 0 });
   mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [], workspaceAccess: null });
   fetchConversationsMock.mockResolvedValue({
     conversations: [conversation('c1', 'Jordan', 2), conversation('c2', 'Alex', 0)],
@@ -224,12 +232,58 @@ describe("the header's Inbox glance — reopening while a fetch is in flight", (
 });
 
 describe("the header's bell", () => {
-  it('opens and tells the truth it has: nothing is feeding it yet', async () => {
+  it('says so plainly when the feed is empty', async () => {
     const user = userEvent.setup();
     renderShell(<AppHeader />);
 
     await user.click(screen.getAllByRole('button', { name: 'Notifications' })[0]);
     expect(await screen.findByText(/all caught up/)).toBeInTheDocument();
+  });
+
+  it('lists the feed with deep links, and following a row marks it read', async () => {
+    fetchNotificationsMock.mockResolvedValue({
+      notifications: [
+        {
+          id: '9', kind: 'account_reconnect', title: '@feedmaker needs reconnecting',
+          body: 'Automations using this account are paused until you reconnect it.',
+          linkPath: '/channels', createdAt: new Date().toISOString(), readAt: null,
+        },
+      ],
+      unread: 1,
+    });
+    markNotificationsReadMock.mockResolvedValue({ marked: 1 });
+    const user = userEvent.setup();
+    renderShell(<AppHeader />);
+
+    await user.click(screen.getAllByRole('button', { name: /^Notifications/ })[0]);
+    const row = await screen.findByRole('link', { name: /needs reconnecting/ });
+    expect(row).toHaveAttribute('href', '/channels');
+
+    await user.click(row);
+    await waitFor(() => expect(markNotificationsReadMock).toHaveBeenCalledWith('9'));
+
+    const footer = screen.queryAllByRole('link', { name: 'View all notifications' });
+    // The popover closed on follow; the footer link lived inside it.
+    expect(footer.length).toBe(0);
+  });
+
+  it('Mark all read clears the dot in one press', async () => {
+    fetchNotificationsMock.mockResolvedValue({
+      notifications: [
+        { id: '1', kind: 'automation_live', title: '“Welcome DM” is live', body: null, linkPath: '/automations/1', createdAt: new Date().toISOString(), readAt: null },
+        { id: '2', kind: 'member_joined', title: 'sam@example.com joined your workspace', body: null, linkPath: '/team', createdAt: new Date().toISOString(), readAt: null },
+      ],
+      unread: 2,
+    });
+    markNotificationsReadMock.mockResolvedValue({ marked: 2 });
+    const user = userEvent.setup();
+    renderShell(<AppHeader />);
+
+    await user.click(screen.getAllByRole('button', { name: /^Notifications/ })[0]);
+    await user.click(await screen.findByRole('button', { name: 'Mark all read' }));
+    await waitFor(() => expect(markNotificationsReadMock).toHaveBeenCalledWith());
+    // The rows stay listed — read, not erased.
+    expect(screen.getByText(/Welcome DM/)).toBeInTheDocument();
   });
 });
 

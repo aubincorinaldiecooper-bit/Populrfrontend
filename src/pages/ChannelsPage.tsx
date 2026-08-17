@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   Loader2, Check, AlertCircle, ArrowRight, RefreshCw, Link2Off,
@@ -279,18 +281,18 @@ export default function ChannelsPage() {
                 </div>
                 <div className="flex-shrink-0">
                   {accts.length === 0 && platformStatus === 'idle' && offered && ownerView && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-primary text-[12px] py-2 px-3">
+                    <button onClick={() => beginPlatformConnect(p.id)} className={cn(buttonVariants(), 'text-[12px] py-2 px-3')}>
                       Connect
                     </button>
                   )}
                   {connectBusy && (
-                    <button disabled className="pop-btn-secondary text-[12px] py-2 px-3 opacity-60 cursor-not-allowed">
+                    <button disabled className={cn(buttonVariants({ variant: 'secondary' }), 'text-[12px] py-2 px-3 opacity-60 cursor-not-allowed')}>
                       <Loader2 size={13} className="animate-spin" />
                       {platformStatus === 'syncing' ? 'Finishing…' : 'Connecting…'}
                     </button>
                   )}
                   {platformStatus === 'error' && (
-                    <button onClick={() => beginPlatformConnect(p.id)} className="pop-btn-secondary text-[12px] py-2 px-3">
+                    <button onClick={() => beginPlatformConnect(p.id)} className={cn(buttonVariants({ variant: 'secondary' }), 'text-[12px] py-2 px-3')}>
                       <RefreshCw size={13} /> Try again
                     </button>
                   )}
@@ -300,7 +302,7 @@ export default function ChannelsPage() {
                     // offers the private-window link before anything happens.
                     <button
                       onClick={() => setConnectAnother({ platform: p.id, mode: 'confirm' })}
-                      className="pop-btn-tertiary text-[12px] py-2 px-3"
+                      className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-2 px-3')}
                     >
                       Connect another
                     </button>
@@ -383,14 +385,14 @@ export default function ChannelsPage() {
                               reads as though something were broken and pushes
                               the user through a pointless OAuth round-trip. */}
                           {!ownerView ? null : needsReauth ? (
-                            <button onClick={() => handleReconnect(a)} className="pop-btn-secondary text-[12px] py-1.5 px-3">
+                            <button onClick={() => handleReconnect(a)} className={cn(buttonVariants({ variant: 'secondary' }), 'text-[12px] py-1.5 px-3')}>
                               <RefreshCw size={13} /> Reconnect
                             </button>
                           ) : (
                             <button
                               onClick={() => setConfirmDisconnect(a)}
                               disabled={disconnecting === a.id}
-                              className="pop-btn-tertiary text-[12px] py-1.5 px-3 disabled:opacity-50"
+                              className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1.5 px-3 disabled:opacity-50')}
                             >
                               {disconnecting === a.id
                                 ? <><Loader2 size={13} className="animate-spin" />Disconnecting…</>
@@ -420,7 +422,7 @@ export default function ChannelsPage() {
         <button
           onClick={() => navigate('/automations/new')}
           disabled={connectedCount === 0}
-          className="pop-btn-primary text-[13px] py-2.5 px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+          className={cn(buttonVariants(), 'text-[13px] py-2.5 px-4 disabled:opacity-40 disabled:cursor-not-allowed')}
         >
           Create an automation <ArrowRight size={14} />
         </button>

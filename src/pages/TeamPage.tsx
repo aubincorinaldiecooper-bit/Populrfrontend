@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { AlertCircle, Check, Loader2, Mail, RefreshCw, UserPlus, X } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
@@ -175,7 +177,7 @@ export default function TeamPage() {
           <button
             type="button"
             onClick={() => { setInviting(true); setSent(null); }}
-            className="pop-btn-primary text-[12.5px] py-2 px-3.5 flex-shrink-0"
+            className={cn(buttonVariants(), 'text-[12.5px] py-2 px-3.5 flex-shrink-0')}
           >
             <UserPlus size={14} />Invite teammate
           </button>
@@ -193,7 +195,7 @@ export default function TeamPage() {
           <div className="flex items-start gap-2">
             <AlertCircle size={15} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
             <p className="text-[12px] text-[#6B6B6B] flex-1">{loadError}</p>
-            <button onClick={load} className="pop-btn-tertiary text-[12px] py-1 px-3 flex-shrink-0">
+            <button onClick={load} className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-3 flex-shrink-0')}>
               <RefreshCw size={12} />Retry
             </button>
           </div>
@@ -280,14 +282,14 @@ export default function TeamPage() {
                 )}
 
                 <div className="mt-4 flex items-center gap-2">
-                  <button type="submit" disabled={sending} className="pop-btn-primary text-[12.5px] py-2 px-3.5 disabled:opacity-60">
+                  <button type="submit" disabled={sending} className={cn(buttonVariants(), 'text-[12.5px] py-2 px-3.5 disabled:opacity-60')}>
                     {sending ? <><Loader2 size={14} className="animate-spin" />Sending…</> : <><Mail size={14} />Send invite</>}
                   </button>
                   <button
                     type="button"
                     disabled={sending}
                     onClick={() => { setInviting(false); setFormError(null); }}
-                    className="pop-btn-tertiary text-[12.5px] py-2 px-3.5"
+                    className={cn(buttonVariants({ variant: 'outline' }), 'text-[12.5px] py-2 px-3.5')}
                   >
                     Cancel
                   </button>
@@ -344,7 +346,7 @@ export default function TeamPage() {
                         onClick={() => withdraw(invitation)}
                         disabled={revoking === invitation.id}
                         aria-label={`Withdraw the invite to ${invitation.email}`}
-                        className="pop-btn-tertiary text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50"
+                        className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50')}
                       >
                         {revoking === invitation.id
                           ? <Loader2 size={12} className="animate-spin" />

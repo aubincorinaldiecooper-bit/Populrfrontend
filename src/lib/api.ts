@@ -1486,3 +1486,35 @@ export async function fetchWorkspaceAccess(): Promise<WorkspaceAccess> {
   const me = await apiFetch<{ workspace: WorkspaceAccess }>('/api/me');
   return me.workspace;
 }
+
+/* ─── Notifications ─── */
+
+/**
+ * A line in the workspace feed: something that happened while the creator
+ * wasn't looking, pointing at the place in the app to act on it.
+ */
+export interface WorkspaceNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  /** In-app destination (e.g. /channels); null when there's nowhere to go. */
+  linkPath: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export async function fetchNotifications(): Promise<{
+  notifications: WorkspaceNotification[];
+  unread: number;
+}> {
+  return apiFetch(`/api/notifications`);
+}
+
+/** Mark one notification read, or everything when no id is given. */
+export async function markNotificationsRead(id?: string): Promise<{ marked: number }> {
+  return apiFetch(`/api/notifications/read`, {
+    method: "POST",
+    body: JSON.stringify(id ? { id } : {}),
+  });
+}
