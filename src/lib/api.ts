@@ -1071,12 +1071,22 @@ export interface FlowSimulationResult {
  */
 export interface ComposerProgressEvent {
   id: string;
-  stage: 'understanding' | 'planning' | 'validating' | 'applying' | 'saving' | 'complete' | 'error';
+  stage:
+    | 'understanding'
+    | 'planning'
+    | 'drafting'
+    | 'validating'
+    | 'applying'
+    | 'saving'
+    | 'complete'
+    | 'error';
   label: string;
   /** The step the stage is about, when there is one. */
   nodeId?: string;
   /** The intent kind driving it (add_node, edit_node, delete_node). */
   operation?: string;
+  /** The proposal plan item a drafting event concerns. */
+  planItemId?: string;
 }
 
 export interface FlowComposeResult {
@@ -1235,6 +1245,75 @@ export async function testFlow(
 }
 
 /** POST /api/flows/:id/compose — natural language in, validated operations out. */
+/**
+ * What the agent PLANS to build — held outside the graph until the creator
+ * clicks Build this. The plan checklist is derived server-side from the
+ * proposed operations, so the confirmation card can only claim what the
+ * draft actually contains.
+ */
+export interface FlowProposalPlanItem {
+  id: string;
+  label: string;
+  operationIds: number[];
+  proposedNodeId?: string;
+}
+
+export interface FlowProposal {
+  id: string;
+  status: 'awaiting_confirmation' | 'committed' | 'superseded' | 'discarded';
+  prompt: string;
+  plan: FlowProposalPlanItem[];
+  operations: unknown[];
+  assumptions: string[];
+  summary: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowProposeResult {
+  proposal: FlowProposal | null;
+  /** The summary is a question — the agent needs one detail first. */
+  clarification: boolean;
+  summary: string;
+  source: 'model' | 'fallback' | 'intent';
+  progress?: ComposerProgressEvent[];
+}
+
+/** POST /api/flows/:id/propose — the agent drafts; the canvas doesn't move.
+ *  Pass `proposalId` to revise the active draft instead of starting over. */
+export async function proposeFlow(
+  id: string,
+  input: { prompt: string; selectedNodeId?: string | null; proposalId?: string | null },
+): Promise<FlowProposeResult> {
+  return apiFetch(`/api/flows/${id}/propose`, { method: 'POST', body: input });
+}
+
+/** GET /api/flows/:id/proposal — the draft to restore after a refresh. */
+export async function fetchActiveProposal(id: string): Promise<{ proposal: FlowProposal | null }> {
+  return apiFetch(`/api/flows/${id}/proposal`);
+}
+
+/** POST …/commit — Build this: the explicit human confirmation gate. */
+export async function commitProposal(
+  id: string,
+  proposalId: string,
+): Promise<{
+  applied: boolean;
+  flow: AutomationFlow | null;
+  touchedNodeIds: string[];
+  operations: unknown[];
+  previousGraph?: FlowGraph;
+  summary: string;
+}> {
+  return apiFetch(`/api/flows/${id}/proposal/${proposalId}/commit`, { method: 'POST' });
+}
+
+/** POST …/discard — never mind; the draft goes away, the canvas never moved. */
+export async function discardProposal(id: string, proposalId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/flows/${id}/proposal/${proposalId}/discard`, { method: 'POST' });
+}
+
 export async function composeFlow(
   id: string,
   input: { prompt: string; selectedNodeId?: string | null },

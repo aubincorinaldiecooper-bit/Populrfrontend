@@ -61,9 +61,31 @@ function flowFixture(): AutomationFlow {
   } as unknown as AutomationFlow;
 }
 
-/** Held open so a test can look at the builder mid-compose. */
-let finishCompose: ((result: unknown) => void) | null = null;
-const composeFlowMock = vi.fn(async () => new Promise(resolve => { finishCompose = resolve; }));
+/** Held open so a test can look at the builder mid-draft. */
+let finishPropose: ((result: unknown) => void) | null = null;
+const proposeFlowMock = vi.fn(async () => new Promise(resolve => { finishPropose = resolve; }));
+let commitResult: Record<string, unknown> = {};
+const commitProposalMock = vi.fn(async () => ({
+  applied: true, flow: flowFixture(), touchedNodeIds: [], operations: [],
+  summary: "Built it — it's on your canvas.",
+  ...commitResult,
+}));
+
+/** The agent's draft lands; the canvas has not moved. */
+function draft(result: Record<string, unknown> = {}) {
+  act(() => {
+    finishPropose?.({
+      proposal: {
+        id: 'p1', status: 'awaiting_confirmation', prompt: '', revision: 1,
+        plan: [{ id: 'item-1', label: 'Wait 2 days', operationIds: [0] }],
+        operations: [], assumptions: [],
+        summary: 'Drafted 1 step.', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      },
+      clarification: false, summary: 'Drafted 1 step.', source: 'model', progress: [],
+      ...result,
+    });
+  });
+}
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -73,7 +95,10 @@ vi.mock('../lib/api', async () => {
     fetchFlow: vi.fn(async () => flowFixture()),
     updateFlow: vi.fn(async () => ({ flow: flowFixture() })),
     fetchFlowValidation: vi.fn(async () => ({ ok: true, problems: [] })),
-    composeFlow: (...args: unknown[]) => composeFlowMock(...(args as [])),
+    proposeFlow: (...args: unknown[]) => proposeFlowMock(...(args as [])),
+    commitProposal: (...args: unknown[]) => commitProposalMock(...(args as [])),
+    discardProposal: vi.fn(async () => ({ ok: true })),
+    fetchActiveProposal: vi.fn(async () => ({ proposal: null })),
     testFlow: vi.fn(async () => ({ matched: true, reason: null, steps: [] })),
     fetchConnectedAccounts: vi.fn(async () => [{
       id: 'acc_1', platform: 'instagram', username: 'populr.space', display_name: null,
@@ -132,7 +157,8 @@ function setViewportWidth(px: number) {
 beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
-  finishCompose = null;
+  finishPropose = null;
+  commitResult = {};
   setViewportWidth(1440);
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
 });
@@ -146,8 +172,9 @@ describe('what Populr says it is doing', () => {
     await ask(user, 'follow up if they don’t reply');
 
     // One place reports, and it is the conversation. A disabled box and a
-    // spinning button read as a stall, so the field says it too.
-    expect(await screen.findByText('Updating automation…')).toBeInTheDocument();
+    // spinning button read as a stall, so the field says it too. The label
+    // shimmers over real work — the drafting request is in flight.
+    expect(await screen.findByText('Drafting your automation…')).toBeInTheDocument();
     expect(screen.getByLabelText('Populr is building…')).toBeInTheDocument();
   });
 
@@ -157,24 +184,23 @@ describe('what Populr says it is doing', () => {
     await screen.findByText('Preview');
     await ask(user, 'wait two days then follow up');
 
-    act(() => {
-      finishCompose?.({
-        applied: true, summary: 'Added a follow-up.', source: 'model',
-        operations: [
-          { op: 'create_node', id: 'wait-1', type: 'wait', config: { kind: 'duration', minutes: 2880 } },
-          { op: 'create_node', id: 'send-2', type: 'send', config: { kind: 'dm', text: 'Still there?' } },
-          { op: 'connect', source: 'send', target: 'wait-1', branch: 'next' },
-        ],
-        touchedNodeIds: ['wait-1', 'send-2'], flow: flowFixture(),
-      });
-    });
+    commitResult = {
+      operations: [
+        { op: 'create_node', id: 'wait-1', type: 'wait', config: { kind: 'duration', minutes: 2880 } },
+        { op: 'create_node', id: 'send-2', type: 'send', config: { kind: 'dm', text: 'Still there?' } },
+        { op: 'connect', source: 'send', target: 'wait-1', branch: 'next' },
+      ],
+      touchedNodeIds: ['wait-1', 'send-2'],
+    };
+    draft();
+    await user.click(await screen.findByRole('button', { name: 'Build this' }));
 
-    expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
+    expect(await screen.findByText("Built it — it's on your canvas.")).toBeInTheDocument();
     await user.click(screen.getByText('View changes'));
     expect(await screen.findByText('Added a wait of 2 days')).toBeInTheDocument();
     expect(await screen.findByText('Added a message')).toBeInTheDocument();
     // The working line is gone: this is a report of something finished.
-    expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument();
+    expect(screen.queryByText('Drafting your automation…')).not.toBeInTheDocument();
   });
 
   it('claims nothing when nothing was applied', async () => {
@@ -184,16 +210,19 @@ describe('what Populr says it is doing', () => {
     await ask(user, 'do something impossible');
 
     act(() => {
-      finishCompose?.({
-        applied: false, summary: "Populr couldn't work out what to change.",
-        source: 'model', operations: [], flow: flowFixture(),
+      finishPropose?.({
+        proposal: null, clarification: true,
+        summary: "Populr couldn't work out what to change.",
+        source: 'model', progress: [],
       });
     });
 
     expect(await screen.findByText("Populr couldn't work out what to change.")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument());
+      expect(screen.queryByText('Drafting your automation…')).not.toBeInTheDocument());
     expect(screen.queryByText('Undo')).not.toBeInTheDocument();
+    // And nothing to build — no draft means no gate to click.
+    expect(screen.queryByText('Build this')).not.toBeInTheDocument();
   });
 
   it('reports from one place only — nothing floats over the canvas', async () => {
@@ -204,20 +233,19 @@ describe('what Populr says it is doing', () => {
     mountBuilder();
     await screen.findByText('Preview');
     await ask(user, 'wait two days then follow up');
-    act(() => {
-      finishCompose?.({
-        applied: true, summary: 'Added a follow-up.', source: 'model',
-        operations: [{ op: 'create_node', id: 'wait-1', type: 'wait', config: { kind: 'duration', minutes: 2880 } }],
-        touchedNodeIds: ['wait-1'], flow: flowFixture(),
-      });
-    });
-    await screen.findByText('Added a follow-up.');
+    commitResult = {
+      operations: [{ op: 'create_node', id: 'wait-1', type: 'wait', config: { kind: 'duration', minutes: 2880 } }],
+      touchedNodeIds: ['wait-1'],
+    };
+    draft();
+    await user.click(await screen.findByRole('button', { name: 'Build this' }));
+    await screen.findByText("Built it — it's on your canvas.");
 
     expect(screen.queryByText('Populr made that change')).not.toBeInTheDocument();
     expect(screen.queryByText('Populr built your automation')).not.toBeInTheDocument();
     expect(screen.queryByText('Done')).not.toBeInTheDocument();
     // Exactly one place says what happened.
-    expect(screen.getAllByText('Added a follow-up.')).toHaveLength(1);
+    expect(screen.getAllByText("Built it — it's on your canvas.")).toHaveLength(1);
   });
 });
 

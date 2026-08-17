@@ -61,11 +61,15 @@ function flowFixture(): AutomationFlow {
   } as unknown as AutomationFlow;
 }
 
-/** Held open so a test can look at the builder mid-compose. */
-let finishCompose: ((result: unknown) => void) | null = null;
-let rejectCompose: ((err: unknown) => void) | null = null;
-const composeFlowMock = vi.fn(async () =>
-  new Promise((resolve, reject) => { finishCompose = resolve; rejectCompose = reject; }));
+/** Held open so a test can look at the builder mid-draft. */
+let finishPropose: ((result: unknown) => void) | null = null;
+let rejectPropose: ((err: unknown) => void) | null = null;
+const proposeFlowMock = vi.fn(async () =>
+  new Promise((resolve, reject) => { finishPropose = resolve; rejectPropose = reject; }));
+const commitProposalMock = vi.fn(async () => ({
+  applied: true, flow: flowFixture(), touchedNodeIds: ['wait-1'], operations: [],
+  summary: "Built it — it's on your canvas.",
+}));
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -75,7 +79,10 @@ vi.mock('../lib/api', async () => {
     fetchFlow: vi.fn(async () => flowFixture()),
     updateFlow: vi.fn(async () => ({ flow: flowFixture() })),
     fetchFlowValidation: vi.fn(async () => ({ ok: true, problems: [] })),
-    composeFlow: (...args: unknown[]) => composeFlowMock(...(args as [])),
+    proposeFlow: (...args: unknown[]) => proposeFlowMock(...(args as [])),
+    commitProposal: (...args: unknown[]) => commitProposalMock(...(args as [])),
+    discardProposal: vi.fn(async () => ({ ok: true })),
+    fetchActiveProposal: vi.fn(async () => ({ proposal: null })),
     testFlow: vi.fn(async () => ({ matched: true, reason: null, steps: [], awaitingReply: false })),
     fetchConnectedAccounts: vi.fn(async () => []),
     fetchCapabilities: vi.fn(async () => []),
@@ -114,20 +121,34 @@ async function openPanel(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('complementary', { name: 'Ask Populr' });
 }
 
+/** The agent answers with a DRAFT — the canvas does not move here. */
 function answer(result: Record<string, unknown>) {
+  const summary = (result.summary as string) ?? 'Drafted 1 step.';
   act(() => {
-    finishCompose?.({
-      applied: true, source: 'model', operations: [], touchedNodeIds: [],
-      flow: flowFixture(), ...result,
+    finishPropose?.({
+      proposal: {
+        id: 'p1', status: 'awaiting_confirmation', prompt: '', revision: 1,
+        plan: [{ id: 'item-1', label: 'Wait 1 day', operationIds: [0], proposedNodeId: 'wait-1' }],
+        operations: [], assumptions: [],
+        summary, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      },
+      clarification: false, summary, source: 'intent', progress: [],
+      ...result,
     });
   });
+}
+
+/** Draft, then Build this — the two-step path that changes the canvas. */
+async function answerAndBuild(user: ReturnType<typeof userEvent.setup>, result: Record<string, unknown>) {
+  answer(result);
+  await user.click(await screen.findByRole('button', { name: 'Build this' }));
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
-  finishCompose = null;
-  rejectCompose = null;
+  finishPropose = null;
+  rejectPropose = null;
   fixtures.empty = false;
   setViewportWidth(1440);
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
@@ -223,8 +244,8 @@ describe('the conversation', () => {
     await screen.findByText('Preview');
     await openPanel(user);
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
-    answer({ summary: 'Added a follow-up.', touchedNodeIds: ['wait-1'] });
-    await screen.findByText('Added a follow-up.');
+    await answerAndBuild(user, { summary: 'Drafted a follow-up.' });
+    await screen.findByText("Built it — it's on your canvas.");
 
     expect(screen.getByText('Undo')).toBeInTheDocument();
     expect(screen.getByText('View changes')).toBeInTheDocument();
@@ -236,7 +257,7 @@ describe('the conversation', () => {
     await screen.findByText('Preview');
     await openPanel(user);
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
-    answer({ summary: 'Added a follow-up.', touchedNodeIds: ['wait-1'] });
+    await answerAndBuild(user, { summary: 'Drafted a follow-up.' });
     await screen.findByText('Undo');
 
     await user.click(screen.getByRole('button', { name: 'Collapse AI' }));
@@ -255,7 +276,7 @@ describe('the conversation', () => {
     await screen.findByText('Preview');
     await openPanel(user);
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
-    answer({ summary: 'Added a follow-up.', touchedNodeIds: ['wait-1'] });
+    await answerAndBuild(user, { summary: 'Drafted a follow-up.' });
     await screen.findByText('Undo');
 
     // A recorded manual edit, the way the canvas makes one.
@@ -274,7 +295,7 @@ describe('the conversation', () => {
     await openPanel(user);
 
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add a follow-up.{Enter}');
-    act(() => { rejectCompose?.(new Error('The server is unreachable.')); });
+    act(() => { rejectPropose?.(new Error('The server is unreachable.')); });
 
     // The failure is part of the conversation — a silently re-enabled input
     // reads as being ignored.
@@ -313,8 +334,8 @@ describe('selection context', () => {
 
     await user.type(screen.getByLabelText('Ask Populr to change this step…'), 'Make this less formal.{Enter}');
 
-    expect(composeFlowMock).toHaveBeenCalledWith('flow_1', {
-      prompt: 'Make this less formal.', selectedNodeId: 'send',
+    expect(proposeFlowMock).toHaveBeenCalledWith('flow_1', {
+      prompt: 'Make this less formal.', selectedNodeId: 'send', proposalId: null,
     });
   });
 
@@ -330,8 +351,8 @@ describe('selection context', () => {
 
     await waitFor(() => expect(screen.queryByText('Editing: Message')).not.toBeInTheDocument());
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Rename it.{Enter}');
-    expect(composeFlowMock).toHaveBeenCalledWith('flow_1', {
-      prompt: 'Rename it.', selectedNodeId: null,
+    expect(proposeFlowMock).toHaveBeenCalledWith('flow_1', {
+      prompt: 'Rename it.', selectedNodeId: null, proposalId: null,
     });
   });
 
@@ -386,7 +407,7 @@ describe('the first run', () => {
     // A suggestion is a starting point, not a command: it fills the input.
     await user.click(screen.getByText('Message someone when they comment a keyword'));
     expect(screen.getByLabelText(COMPOSER_LABEL)).toHaveValue('Message someone when they comment a keyword');
-    expect(composeFlowMock).not.toHaveBeenCalled();
+    expect(proposeFlowMock).not.toHaveBeenCalled();
   });
 
   it('a canvas with steps opens quiet — the launcher waits in the corner', async () => {

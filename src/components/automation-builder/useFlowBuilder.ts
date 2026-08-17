@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  activateFlow, composeFlow, fetchFlow, fetchFlowAiMessages, fetchFlowValidation, pauseFlow, updateFlow,
-  FlowNotReadyError,
-  type AutomationFlow, type FlowAiMessage, type FlowProblem,
+  activateFlow, commitProposal, discardProposal, fetchActiveProposal, fetchFlow,
+  fetchFlowAiMessages, fetchFlowValidation, pauseFlow, proposeFlow, updateFlow,
+  ApiError, FlowNotReadyError,
+  type AutomationFlow, type ComposerProgressEvent, type FlowAiMessage, type FlowProblem,
+  type FlowProposal,
 } from '../../lib/api';
 import { NODE_LABEL, emptyGraph, newNodeId, type FlowGraph, type FlowNode, type FlowNodeType } from '../../lib/flowSchema';
 import { isCreatorSafe } from '../../lib/voice';
@@ -128,6 +130,16 @@ export function useFlowBuilder(flowId: string | null) {
    *  loaded. The oldest loaded message id is the cursor for walking back. */
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const historyCursor = useRef<string | null>(null);
+  /**
+   * The agent's draft, awaiting the creator's Build this. While a proposal
+   * exists the graph is exactly what the creator last saw — drafting and
+   * revising happen entirely inside it. `proposalTrace` is the real event
+   * sequence that built the draft, for the panel's build trace.
+   */
+  const [proposal, setProposal] = useState<FlowProposal | null>(null);
+  const [proposalTrace, setProposalTrace] = useState<ComposerProgressEvent[] | null>(null);
+  const [committing, setCommitting] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
   const [problems, setProblemsRaw] = useState<FlowProblem[]>([]);
   // Problem sentences come from the server. They're written for the creator
   // there too, but this is the last line before a canvas warning chip — a
@@ -214,6 +226,13 @@ export function useFlowBuilder(flowId: string | null) {
             historyCursor.current = messages[0].id;
             setHistoryHasMore(hasMore);
             setHistory(entriesFromMessages(messages, loaded.graph));
+          })
+          .catch(() => {});
+        // A draft awaiting confirmation survives a refresh: the creator
+        // comes back to the same card, not to replayed build progress.
+        fetchActiveProposal(flowId)
+          .then(({ proposal: active }) => {
+            if (!cancelled && active) setProposal(active);
           })
           .catch(() => {});
       })
@@ -434,74 +453,113 @@ export function useFlowBuilder(flowId: string | null) {
     }
   }, [flowId, graph]);
 
+  /**
+   * Ask the agent to DRAFT. The graph does not move here — the agent builds
+   * (or revises) a proposal, and the canvas changes only when the creator
+   * clicks Build this (confirmProposal below). While a draft is showing, a
+   * new prompt continues the proposal conversation: "make the first message
+   * shorter" edits the drafted message, not the canvas.
+   */
   const compose = useCallback(async (prompt: string) => {
     if (!flowId || composing) return;
     setComposing(true);
     setActivity([]);
-    const before = { graph, name };
+    setProposalError(null);
     const selected = selectedNodeId ? graph.nodes.find(n => n.id === selectedNodeId) ?? null : null;
     const nodeLabel = selected ? NODE_LABEL[selected.type] : null;
     try {
-      const result = await composeFlow(flowId, { prompt, selectedNodeId });
+      const result = await proposeFlow(flowId, {
+        prompt,
+        selectedNodeId,
+        proposalId: proposal?.status === 'awaiting_confirmation' ? proposal.id : null,
+      });
       setHistory(h => [...h, { prompt, summary: result.summary, at: Date.now(), source: result.source, nodeLabel }]);
-
-      if (!result.applied || !result.flow) {
-        // The composer understood nothing actionable. Say so plainly rather
-        // than silently doing nothing — a canvas that doesn't move after a
-        // request reads as a bug.
-        setChangeCard({
-          summary: result.summary,
-          touchedNodeIds: [],
-          previousGraph: before.graph,
-          previousName: before.name,
-          source: result.source,
-        });
-        return;
+      if (result.proposal) {
+        setProposal(result.proposal);
+        setProposalTrace(result.progress ?? null);
       }
+      // A clarification is just the question, in the conversation — the
+      // agent asked instead of guessing, and there is nothing to confirm yet.
+    } catch (err) {
+      const summary = err instanceof Error ? err.message : "Couldn't draft that. Try again in a moment.";
+      // A failure is part of the conversation. The panel renders answers from
+      // the history, so a request that died on the network must land there
+      // too — a re-enabled input with no reply reads as being ignored.
+      setHistory(h => [...h, { prompt, summary, at: Date.now(), source: 'manual', nodeLabel }]);
+    } finally {
+      setComposing(false);
+    }
+  }, [flowId, composing, graph, selectedNodeId, proposal]);
 
+  /**
+   * Build this — the explicit human confirmation gate. Only here do the
+   * agent's operations reach the stored graph, and only as a whole: the
+   * server re-validates against the live canvas and either builds everything
+   * or nothing. Returns the touched node ids so the page can bring the new
+   * region into view.
+   */
+  const confirmProposal = useCallback(async (): Promise<string[] | null> => {
+    if (!flowId || !proposal || committing) return null;
+    setCommitting(true);
+    setProposalError(null);
+    const before = { graph, name };
+    try {
+      const result = await commitProposal(flowId, proposal.id);
+      if (!result.applied || !result.flow) {
+        throw new Error(result.summary || "Couldn't build this. Nothing was changed.");
+      }
       pushUndo(before);
       setFlow(result.flow);
       setName(result.flow.name);
-      // The server has already saved this graph, so the layout pass is the
-      // only local change — and it must not mark the builder dirty, or every
-      // AI edit would trigger a redundant save of what we just received.
+      // The server saved this graph itself; the layout pass is the only
+      // local change and must not mark the builder dirty.
       setGraph(layoutGraph(result.flow.graph));
       dirty.current = false;
       setSaveState('saved');
       setSavedAt(Date.now());
-      // The server saved this graph itself, so no autosave follows to carry
-      // the re-check. Without this the bell would keep the count from before
-      // the AI's change — which is most of the changes a creator makes.
       void refreshValidation();
-
       setChangeCard({
         summary: result.summary,
         touchedNodeIds: result.touchedNodeIds ?? [],
         previousGraph: before.graph,
         previousName: before.name,
-        source: result.source,
+        source: 'intent',
       });
       setEditsSinceCard(0);
       setActivity(activityLines(parseOperations(result.operations), result.flow.graph));
       highlight(result.touchedNodeIds ?? []);
+      setHistory(h => [...h, { prompt: '', summary: result.summary, at: Date.now(), source: 'intent' }]);
+      setProposal(null);
+      setProposalTrace(null);
+      return result.touchedNodeIds ?? [];
     } catch (err) {
-      const summary = err instanceof Error ? err.message : 'That change could not be applied.';
-      // A failure is part of the conversation. The panel renders answers from
-      // the history, so a request that died on the network must land there
-      // too — a re-enabled input with no reply reads as being ignored.
-      setHistory(h => [...h, { prompt, summary, at: Date.now(), source: 'manual', nodeLabel }]);
-      setChangeCard({
-        summary,
-        touchedNodeIds: [],
-        previousGraph: before.graph,
-        previousName: before.name,
-        source: 'manual',
-      });
-      setEditsSinceCard(0);
+      const message = err instanceof Error ? err.message : "Couldn't build this. Nothing was changed.";
+      // A draft the server can no longer build (the canvas changed under it)
+      // is spent; the next prompt drafts fresh against what's really there.
+      // The card goes with it, so the explanation moves to the conversation —
+      // an error shown only on a card that just vanished is an error unseen.
+      if (err instanceof ApiError && (err.code === 'proposal_stale' || err.code === 'proposal_not_active')) {
+        setProposal(null);
+        setProposalTrace(null);
+        setHistory(h => [...h, { prompt: '', summary: message, at: Date.now(), source: 'manual' }]);
+      } else {
+        setProposalError(message);
+      }
+      return null;
     } finally {
-      setComposing(false);
+      setCommitting(false);
     }
-  }, [flowId, composing, graph, name, selectedNodeId, pushUndo, highlight, refreshValidation]);
+  }, [flowId, proposal, committing, graph, name, pushUndo, highlight, refreshValidation]);
+
+  /** Never mind — the draft goes away; the canvas never moved. */
+  const discardDraft = useCallback(() => {
+    if (!flowId || !proposal) return;
+    const id = proposal.id;
+    setProposal(null);
+    setProposalTrace(null);
+    setProposalError(null);
+    void discardProposal(flowId, id).catch(() => {});
+  }, [flowId, proposal]);
 
   /** Undo the last change — AI or manual — and save the restored graph. */
   const undo = useCallback(() => {
@@ -566,6 +624,7 @@ export function useFlowBuilder(flowId: string | null) {
     updateNodeConfig, moveNode, addNode, deleteNode, connectNodes, disconnect,
     rename, relayout, commitGraph,
     compose, undo, canUndo,
+    proposal, proposalTrace, committing, proposalError, confirmProposal, discardDraft,
     activate, pause,
   };
 }

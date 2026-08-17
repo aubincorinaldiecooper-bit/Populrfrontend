@@ -329,6 +329,27 @@
   to   { opacity: 1; transform: none; }
 }
 
+/* ─── Proposal motion (the Beautiful UI vocabulary, in Populr's accent) ───
+ * The agent's build trace and the confirmation card reveal with these; all
+ * three land on their end state under reduced motion via the global rule
+ * below, so nothing is ever stranded at opacity 0. */
+@keyframes pop-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pop-fade-up {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Text that reads as "working": a highlight sweeping through the label.
+ * Real work only — it shows while the drafting request is in flight. */
+@keyframes pop-shimmer-text {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
 /* A count that changed. Small enough to catch the eye at the edge of vision
  * without asking to be looked at — a badge that bounced would. */
 @keyframes pop-badge-bump {

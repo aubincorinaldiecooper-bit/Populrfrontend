@@ -9,11 +9,13 @@ interface PopulrAIComposerProps {
   working: boolean;
   contextLabel?: string;
   aiConfigured: boolean;
+  /** Bumped to pull focus into the input (Change something). */
+  focusSignal?: number;
 }
 
 /** Populr's intentionally small, responsive prompt bar. */
 export default function PopulrAIComposer({
-  value, onChange, onSubmit, working, contextLabel, aiConfigured,
+  value, onChange, onSubmit, working, contextLabel, aiConfigured, focusSignal,
 }: PopulrAIComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const placeholder = working
@@ -30,6 +32,9 @@ export default function PopulrAIComposer({
   }, [value]);
 
   useEffect(() => { if (!working) ref.current?.focus(); }, [working]);
+  // "Change something" on a draft puts the creator straight back in the
+  // conversation — the input is where the revising happens.
+  useEffect(() => { if (focusSignal) ref.current?.focus(); }, [focusSignal]);
 
   return (
     <div className="border-t border-[#F0EDE8] bg-white p-3">

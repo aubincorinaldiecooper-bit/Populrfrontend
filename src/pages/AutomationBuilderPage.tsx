@@ -83,6 +83,7 @@ export default function AutomationBuilderPage() {
     flow, graph, name, loading, loadError, selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning, composing, changeCard,
     editsSinceCard, activity, highlighted, history, historyHasMore, loadEarlierHistory,
+    proposal, proposalTrace, committing, proposalError, confirmProposal, discardDraft,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -282,6 +283,9 @@ export default function AutomationBuilderPage() {
    * collapsing a panel must never cost the creator their undo.
    */
   const [seenAiCard, setSeenAiCard] = useState<ChangeCard | null>(null);
+  /** Same rule for a DRAFT: a proposal that arrived while the panel was
+   *  collapsed is news — "Ready for you" is exactly what the dot is for. */
+  const [seenProposalId, setSeenProposalId] = useState<string | null>(null);
 
   /**
    * Open the conversation. Like the feed — and unlike Preview — the AI keeps
@@ -294,13 +298,15 @@ export default function AutomationBuilderPage() {
     setPanel('ai');
     keepStepBesideFeed();
     setSeenAiCard(changeCard);
-  }, [keepStepBesideFeed, changeCard]);
+    setSeenProposalId(proposal?.id ?? null);
+  }, [keepStepBesideFeed, changeCard, proposal]);
 
   /** Collapse the conversation; whatever is on screen right now is read. */
   const collapseAi = useCallback(() => {
     setPanel(null);
     setSeenAiCard(changeCard);
-  }, [changeCard]);
+    setSeenProposalId(proposal?.id ?? null);
+  }, [changeCard, proposal]);
 
   /**
    * The builder opens on the conversation when there is nothing else to open
@@ -685,7 +691,7 @@ export default function AutomationBuilderPage() {
             type="button"
             onClick={openAi}
             title="Ask Populr"
-            aria-label={changeCard && changeCard !== seenAiCard && !composing
+            aria-label={((changeCard && changeCard !== seenAiCard) || (proposal && proposal.id !== seenProposalId)) && !composing
               ? 'Ask Populr — new result'
               : 'Ask Populr'}
             className="absolute bottom-5 right-5 z-30 flex h-11 w-11 items-center justify-center
@@ -695,7 +701,7 @@ export default function AutomationBuilderPage() {
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
           >
             {composing ? <PairedRevolution size="sm" /> : <Sparkles size={17} />}
-            {changeCard && changeCard !== seenAiCard && !composing && (
+            {((changeCard && changeCard !== seenAiCard) || (proposal && proposal.id !== seenProposalId)) && !composing && (
               <span
                 aria-hidden
                 className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#C5FF3D]
@@ -796,6 +802,19 @@ export default function AutomationBuilderPage() {
                   onCollapse={collapseAi}
                   hasEarlier={historyHasMore}
                   onLoadEarlier={() => void loadEarlierHistory()}
+                  proposal={proposal}
+                  proposalTrace={proposalTrace}
+                  committing={committing}
+                  proposalError={proposalError}
+                  onConfirmProposal={() => {
+                    // After Build this, bring the newly built region into
+                    // view and let the highlight say what's new — no full
+                    // recenter of the canvas.
+                    void confirmProposal().then(touched => {
+                      if (touched?.[0]) setFocus({ nodeId: touched[0], signal: Date.now() });
+                    });
+                  }}
+                  onDiscardProposal={discardDraft}
                 />
               )}
 
