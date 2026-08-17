@@ -73,9 +73,9 @@ function flowFixture(): AutomationFlow {
 }
 
 const activateFlowMock = vi.fn();
-/** Held open so a test can look at the builder mid-compose. */
-let finishCompose: ((result: unknown) => void) | null = null;
-const composeFlowMock = vi.fn(async () => new Promise(resolve => { finishCompose = resolve; }));
+/** Held open so a test can look at the builder mid-draft. */
+let finishPropose: ((result: unknown) => void) | null = null;
+const proposeFlowMock = vi.fn(async () => new Promise(resolve => { finishPropose = resolve; }));
 const updateFlowMock = vi.fn(async (_id: string, patch: { graph: FlowGraph; name: string }) => {
   serverGraph = patch.graph;
   return { flow: { ...flowFixture(), name: patch.name } };
@@ -92,7 +92,13 @@ vi.mock('../lib/api', async () => {
     updateFlow: (...args: [string, { graph: FlowGraph; name: string }]) => updateFlowMock(...args),
     fetchFlowValidation: vi.fn(async () => ({ ok: serverProblems.length === 0, problems: serverProblems })),
     activateFlow: (...args: unknown[]) => activateFlowMock(...args),
-    composeFlow: (...args: unknown[]) => composeFlowMock(...(args as [])),
+    proposeFlow: (...args: unknown[]) => proposeFlowMock(...(args as [])),
+    commitProposal: vi.fn(async () => ({
+      applied: true, flow: flowFixture(), touchedNodeIds: [], operations: [],
+      summary: "Built it — it's on your canvas.",
+    })),
+    discardProposal: vi.fn(async () => ({ ok: true })),
+    fetchActiveProposal: vi.fn(async () => ({ proposal: null })),
     testFlow: (...args: unknown[]) => testFlowMock(...(args as [])),
     sendInboxReply: (...args: unknown[]) => sendInboxReplyMock(...args),
     fetchConnectedAccounts: vi.fn(async () => [{
@@ -131,7 +137,7 @@ function mountBuilder() {
 beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
-  finishCompose = null;
+  finishPropose = null;
   // The builder reads the viewport width to decide whether the notifications
   // feed and a step's settings fit side by side. Stated rather than inherited
   // from jsdom's 1024 default, which is narrower than the threshold — these
@@ -286,8 +292,8 @@ describe('Activate', () => {
   });
 });
 
-describe('while Populr is building the automation', () => {
-  it('says so in the conversation, and stops saying it when the change lands', async () => {
+describe('while Populr is drafting the automation', () => {
+  it('says so in the conversation, and stops saying it when the draft lands', async () => {
     const user = userEvent.setup();
     mountBuilder();
     await screen.findByText('Preview');
@@ -299,16 +305,24 @@ describe('while Populr is building the automation', () => {
     );
 
     // A still canvas and a spinner inside a button read as nothing happening.
-    expect(await screen.findByText('Updating automation…')).toBeInTheDocument();
+    expect(await screen.findByText('Drafting your automation…')).toBeInTheDocument();
 
-    finishCompose?.({
-      applied: true, summary: 'Added a follow-up.', source: 'model', operations: [],
-      touchedNodeIds: [], flow: flowFixture(),
+    finishPropose?.({
+      proposal: {
+        id: 'p1', status: 'awaiting_confirmation', prompt: '', revision: 1,
+        plan: [{ id: 'item-1', label: 'Wait 1 day', operationIds: [0] }],
+        operations: [], assumptions: [],
+        summary: 'Drafted a follow-up.', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      },
+      clarification: false, summary: 'Drafted a follow-up.', source: 'model', progress: [],
     });
 
     await waitFor(() =>
-      expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument());
-    expect(await screen.findByText('Added a follow-up.')).toBeInTheDocument();
+      expect(screen.queryByText('Drafting your automation…')).not.toBeInTheDocument());
+    expect(await screen.findByText('Drafted a follow-up.')).toBeInTheDocument();
+    // The draft waits for the creator — nothing landed on the canvas yet.
+    expect(screen.getByRole('button', { name: 'Build this' })).toBeInTheDocument();
+    expect(updateFlowMock).not.toHaveBeenCalled();
   });
 });
 

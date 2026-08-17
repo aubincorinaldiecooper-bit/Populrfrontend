@@ -83,8 +83,8 @@ function storedPage(): { messages: FlowAiMessage[]; hasMore: boolean } {
 const aiMessagesMock = vi.fn(async (): Promise<{ messages: FlowAiMessage[]; hasMore: boolean }> =>
   ({ messages: [], hasMore: false }));
 
-let finishCompose: ((result: unknown) => void) | null = null;
-const composeFlowMock = vi.fn(async () => new Promise((resolve) => { finishCompose = resolve; }));
+let finishPropose: ((result: unknown) => void) | null = null;
+const proposeFlowMock = vi.fn(async () => new Promise((resolve) => { finishPropose = resolve; }));
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -95,7 +95,13 @@ vi.mock('../lib/api', async () => {
     updateFlow: vi.fn(async () => ({ flow: flowFixture() })),
     fetchFlowValidation: vi.fn(async () => ({ ok: true, problems: [] })),
     fetchFlowAiMessages: (...args: unknown[]) => aiMessagesMock(...(args as [])),
-    composeFlow: (...args: unknown[]) => composeFlowMock(...(args as [])),
+    proposeFlow: (...args: unknown[]) => proposeFlowMock(...(args as [])),
+    commitProposal: vi.fn(async () => ({
+      applied: true, flow: flowFixture(), touchedNodeIds: [], operations: [],
+      summary: "Built it — it's on your canvas.",
+    })),
+    discardProposal: vi.fn(async () => ({ ok: true })),
+    fetchActiveProposal: vi.fn(async () => ({ proposal: null })),
     testFlow: vi.fn(async () => ({ matched: true, reason: null, steps: [], awaitingReply: false })),
     fetchConnectedAccounts: vi.fn(async () => []),
     fetchCapabilities: vi.fn(async () => []),
@@ -126,7 +132,7 @@ async function openPanel(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  finishCompose = null;
+  finishPropose = null;
   aiMessagesMock.mockImplementation(async () => ({ messages: [], hasMore: false }));
   Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
@@ -149,7 +155,7 @@ describe('the conversation survives a reload', () => {
     // The node-scoped exchange says which step it was about.
     expect(screen.getByText('Editing: Message')).toBeInTheDocument();
     // Idle on open: stored history never replays the working state.
-    expect(screen.queryByText('Updating automation…')).not.toBeInTheDocument();
+    expect(screen.queryByText('Drafting your automation…')).not.toBeInTheDocument();
   });
 
   it('a second mount — a refresh — shows the same conversation', async () => {
@@ -178,13 +184,18 @@ describe('the conversation survives a reload', () => {
 
     await user.type(screen.getByLabelText(COMPOSER_LABEL), 'Add an If after this{Enter}');
     act(() => {
-      finishCompose?.({
-        applied: true, source: 'intent', summary: 'Added an If step.', operations: [],
-        touchedNodeIds: ['if-1'], flow: flowFixture(),
+      finishPropose?.({
+        proposal: {
+          id: 'p1', status: 'awaiting_confirmation', prompt: '', revision: 1,
+          plan: [{ id: 'item-1', label: 'If they reply', operationIds: [0] }],
+          operations: [], assumptions: [],
+          summary: 'Drafted an If step.', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+        clarification: false, summary: 'Drafted an If step.', source: 'intent', progress: [],
       });
     });
 
-    expect(await screen.findByText('Added an If step.')).toBeInTheDocument();
+    expect(await screen.findByText('Drafted an If step.')).toBeInTheDocument();
     expect(screen.getAllByText('Add a wait after the first DM')).toHaveLength(1);
     expect(screen.getAllByText('Add an If after this')).toHaveLength(1);
   });

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, PanelRightClose, Sparkles } from 'lucide-react';
 import { NODE_LABEL, type FlowNode } from '../../lib/flowSchema';
+import type { ComposerProgressEvent, FlowProposal } from '../../lib/api';
 import type { ChangeCard, HistoryEntry } from './useFlowBuilder';
 import PopulrAIComposer from './PopulrAIComposer';
 import PopulrAIMessage from './PopulrAIMessage';
-import PopulrWorkingState from './PopulrWorkingState';
+import BuildTrace from './BuildTrace';
+import ProposalCard from './ProposalCard';
 
 const SUGGESTIONS = [
   'Message someone when they comment a keyword',
@@ -20,25 +22,23 @@ export interface AIChatPanelProps {
   onOpenHistory: () => void; onCollapse: () => void;
   /** The server holds conversation older than what's shown. */
   hasEarlier?: boolean; onLoadEarlier?: () => void;
+  /** The agent's draft awaiting Build this, and how it was built. */
+  proposal?: FlowProposal | null; proposalTrace?: ComposerProgressEvent[] | null;
+  committing?: boolean; proposalError?: string | null;
+  onConfirmProposal?: () => void; onDiscardProposal?: () => void;
 }
 
 /** The chronological, canvas-aware Ask Populr conversation. */
 export default function AIChatPanel({
   history, composing, changeCard, activity, canUndo, aiConfigured, empty, selectedNode,
   onSubmit, onUndo, onOpenHistory, onCollapse, hasEarlier, onLoadEarlier,
+  proposal, proposalTrace, committing, proposalError, onConfirmProposal, onDiscardProposal,
 }: AIChatPanelProps) {
   const [value, setValue] = useState('');
-  const [seconds, setSeconds] = useState(0);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [focusSignal, setFocusSignal] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const wasNearBottom = useRef(true);
-
-  useEffect(() => {
-    if (!composing) return;
-    const start = Date.now();
-    const timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000);
-    return () => window.clearInterval(timer);
-  }, [composing]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -46,12 +46,12 @@ export default function AIChatPanel({
       if (typeof container.scrollTo === 'function') container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
       else container.scrollTop = container.scrollHeight;
     }
-  }, [history.length, composing, activity.length]);
+  }, [history.length, composing, activity.length, proposal]);
 
   const submit = () => {
     const prompt = value.trim();
     if (!prompt || composing) return;
-    setValue(''); setSeconds(0); setPendingPrompt(prompt); onSubmit(prompt);
+    setValue(''); setPendingPrompt(prompt); onSubmit(prompt);
   };
 
   return <aside aria-label="Ask Populr" className="flex h-full w-full flex-col bg-white">
@@ -90,9 +90,23 @@ export default function AIChatPanel({
             </div>}
           </article>;
         })}
-        {composing && pendingPrompt && <article className="space-y-4"><div className="ml-auto max-w-[82%]"><p className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-[#8A857E]">You</p><p className="rounded-2xl rounded-tr-md bg-[#EDEAE5] px-3 py-2 text-[12.5px] leading-relaxed text-[#302D2A]">{pendingPrompt}</p></div><div><p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#687A36]">Populr</p><PopulrWorkingState seconds={seconds} /></div></article>}
+        {composing && pendingPrompt && <article className="space-y-4"><div className="ml-auto max-w-[82%]"><p className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-[#8A857E]">You</p><p className="rounded-2xl rounded-tr-md bg-[#EDEAE5] px-3 py-2 text-[12.5px] leading-relaxed text-[#302D2A]">{pendingPrompt}</p></div><div><p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#687A36]">Populr</p><BuildTrace working events={null} /></div></article>}
+
+        {proposal && !composing && (
+          <div className="space-y-3">
+            <BuildTrace working={false} events={proposalTrace ?? null} />
+            <ProposalCard
+              proposal={proposal}
+              committing={committing ?? false}
+              error={proposalError ?? null}
+              onConfirm={() => onConfirmProposal?.()}
+              onRevise={() => setFocusSignal(s => s + 1)}
+              onDiscard={() => onDiscardProposal?.()}
+            />
+          </div>
+        )}
       </div>
     </div>
-    <PopulrAIComposer value={value} onChange={setValue} onSubmit={submit} working={composing} contextLabel={selectedNode ? NODE_LABEL[selectedNode.type] : undefined} aiConfigured={aiConfigured} />
+    <PopulrAIComposer value={value} onChange={setValue} onSubmit={submit} working={composing} contextLabel={selectedNode ? NODE_LABEL[selectedNode.type] : undefined} aiConfigured={aiConfigured} focusSignal={focusSignal} />
   </aside>;
 }

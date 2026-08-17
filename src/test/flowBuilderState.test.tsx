@@ -13,7 +13,9 @@ import type { AutomationFlow, FlowProblem } from '../lib/api';
 import type { FlowGraph, FlowNode } from '../lib/flowSchema';
 
 const updateFlow = vi.fn();
-const composeFlowMock = vi.fn();
+const proposeFlowMock = vi.fn();
+const commitProposalMock = vi.fn();
+const discardProposalMock = vi.fn(async () => ({ ok: true }));
 const activateFlowMock = vi.fn();
 const pauseFlowMock = vi.fn();
 const fetchFlowValidationMock = vi.fn();
@@ -48,7 +50,11 @@ vi.mock('../lib/api', async () => {
     ...actual,
     fetchFlow: vi.fn(async () => flowFixture()),
     updateFlow: (...args: unknown[]) => updateFlow(...args),
-    composeFlow: (...args: unknown[]) => composeFlowMock(...args),
+    proposeFlow: (...args: unknown[]) => proposeFlowMock(...args),
+    commitProposal: (...args: unknown[]) => commitProposalMock(...args),
+    discardProposal: (...args: unknown[]) => discardProposalMock(...(args as [])),
+    fetchActiveProposal: vi.fn(async () => ({ proposal: null })),
+    fetchFlowAiMessages: vi.fn(async () => ({ messages: [], hasMore: false })),
     activateFlow: (...args: unknown[]) => activateFlowMock(...args),
     fetchFlowValidation: (...args: unknown[]) => fetchFlowValidationMock(...args),
     pauseFlow: (...args: unknown[]) => pauseFlowMock(...args),
@@ -181,7 +187,23 @@ describe('undo', () => {
 });
 
 describe('the AI round trip', () => {
-  it('applies the server\'s graph, reports what changed, and can be undone', async () => {
+  /** What the agent answers with: a draft, not a change. */
+  function draftResult(overrides: Record<string, unknown> = {}) {
+    return {
+      proposal: {
+        id: 'p1', status: 'awaiting_confirmation' as const, prompt: '', revision: 1,
+        plan: [{ id: 'item-1', label: 'Wait 2 days', operationIds: [0] }],
+        operations: [{ op: 'create_node', id: 'wait-1d', type: 'wait', config: { kind: 'duration', minutes: 2880 } }],
+        assumptions: [], summary: 'Drafted 1 step.',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      },
+      clarification: false, summary: 'Drafted 1 step — review it and Build this when you\'re ready.',
+      source: 'model', progress: [],
+      ...overrides,
+    };
+  }
+
+  it('drafts without touching the canvas; Build this applies, reports, and can be undone', async () => {
     const nextGraph: FlowGraph = {
       ...baseGraph(),
       nodes: [
@@ -194,10 +216,10 @@ describe('the AI round trip', () => {
         { id: 'e4', source: 'wait-1d', target: 'tag', branch: 'next' },
       ],
     };
-    composeFlowMock.mockResolvedValue({
+    proposeFlowMock.mockResolvedValue(draftResult());
+    commitProposalMock.mockResolvedValue({
       applied: true,
       summary: 'Added a 2-day delay and follow-up DM.',
-      source: 'model',
       operations: [{ op: 'create_node', id: 'wait-1d', type: 'wait' }],
       touchedNodeIds: ['wait-1d'],
       previousGraph: baseGraph(),
@@ -207,49 +229,130 @@ describe('the AI round trip', () => {
     const { result } = await mountBuilder();
     await act(async () => { await result.current.compose('wait two days before tagging'); });
 
+    // The draft is on the table — and the canvas has not moved an inch.
+    expect(result.current.proposal?.id).toBe('p1');
+    expect(result.current.graph.nodes.some(n => n.id === 'wait-1d')).toBe(false);
+    expect(result.current.changeCard).toBeNull();
+    expect(result.current.history).toHaveLength(1);
+
+    // The creator says Build this. Only now does the graph change.
+    await act(async () => { await result.current.confirmProposal(); });
+
     expect(result.current.graph.nodes.some(n => n.id === 'wait-1d')).toBe(true);
     expect(result.current.changeCard?.summary).toBe('Added a 2-day delay and follow-up DM.');
     expect(result.current.highlighted).toEqual(['wait-1d']);
-    expect(result.current.history).toHaveLength(1);
+    expect(result.current.proposal).toBeNull();
 
     act(() => result.current.undo());
     expect(result.current.graph.nodes.some(n => n.id === 'wait-1d')).toBe(false);
   });
 
   it('does not re-save the graph the server just returned', async () => {
-    composeFlowMock.mockResolvedValue({
-      applied: true, summary: 'Renamed it.', source: 'model',
-      operations: [], touchedNodeIds: [], previousGraph: baseGraph(), flow: flowFixture(),
+    proposeFlowMock.mockResolvedValue(draftResult());
+    commitProposalMock.mockResolvedValue({
+      applied: true, summary: 'Built it.', operations: [], touchedNodeIds: [],
+      previousGraph: baseGraph(), flow: flowFixture(),
     });
 
     const { result } = await mountBuilder();
     await act(async () => { await result.current.compose('rename it') });
+    await act(async () => { await result.current.confirmProposal(); });
     await new Promise(r => setTimeout(r, 900));
 
     expect(updateFlow).not.toHaveBeenCalled();
   });
 
+  it('a Build this the server refuses leaves the canvas alone and says so', async () => {
+    proposeFlowMock.mockResolvedValue(draftResult());
+    const { ApiError } = await import('../lib/api');
+    commitProposalMock.mockRejectedValue(new ApiError(
+      "The canvas changed since this was drafted — ask Populr to draft it again.", 409, 'proposal_stale'));
+
+    const { result } = await mountBuilder();
+    await act(async () => { await result.current.compose('wait two days') });
+    await act(async () => { await result.current.confirmProposal(); });
+
+    expect(result.current.graph.nodes).toHaveLength(3);
+    // The card is gone with the spent draft, so the explanation lives in the
+    // conversation — the one surface that outlives it.
+    expect(result.current.history[result.current.history.length - 1]?.summary).toMatch(/draft it again/);
+    // A stale draft is spent — the next prompt starts fresh.
+    expect(result.current.proposal).toBeNull();
+  });
+
   it('says so plainly when it understood nothing, instead of silently doing nothing', async () => {
-    composeFlowMock.mockResolvedValue({
-      applied: false,
+    proposeFlowMock.mockResolvedValue({
+      proposal: null, clarification: true,
       summary: "I couldn't work out what to change from that.",
-      source: 'fallback', operations: [], flow: flowFixture(),
+      source: 'fallback', progress: [],
     });
 
     const { result } = await mountBuilder();
     await act(async () => { await result.current.compose('do the thing') });
 
-    expect(result.current.changeCard?.summary).toMatch(/couldn't work out/);
+    expect(result.current.history[result.current.history.length - 1]?.summary).toMatch(/couldn't work out/);
+    expect(result.current.proposal).toBeNull();
     expect(result.current.graph.nodes).toHaveLength(3);
   });
 
   it('reports a failure rather than leaving the composer silent', async () => {
-    composeFlowMock.mockRejectedValue(new Error('The model is unavailable.'));
+    proposeFlowMock.mockRejectedValue(new Error('The model is unavailable.'));
 
     const { result } = await mountBuilder();
     await act(async () => { await result.current.compose('anything') });
 
-    expect(result.current.changeCard?.summary).toBe('The model is unavailable.');
+    expect(result.current.history[result.current.history.length - 1]?.summary).toBe('The model is unavailable.');
+  });
+
+  it('Build this flushes a pending edit first, so the server judges the real canvas', async () => {
+    // The creator edits and clicks Build this inside the autosave debounce.
+    // Committing against the server's older version would either lose the
+    // edit under the build or let the late autosave overwrite the build —
+    // so the save must land first, and the commit answer to what it made.
+    proposeFlowMock.mockResolvedValue(draftResult());
+    commitProposalMock.mockResolvedValue({
+      applied: true, summary: 'Built it.', operations: [], touchedNodeIds: [],
+      previousGraph: baseGraph(), flow: flowFixture(),
+    });
+
+    const { result } = await mountBuilder();
+    await act(async () => { await result.current.compose('wait two days') });
+    act(() => result.current.updateNodeConfig('send', { text: 'Edited mid-draft' }));
+    await act(async () => { await result.current.confirmProposal(); });
+
+    expect(updateFlow).toHaveBeenCalledTimes(1);
+    const saved = updateFlow.mock.calls[0][1] as { graph: FlowGraph };
+    expect(saved.graph.nodes.find(n => n.id === 'send')!.config.text).toBe('Edited mid-draft');
+    expect(updateFlow.mock.invocationCallOrder[0]).toBeLessThan(commitProposalMock.mock.invocationCallOrder[0]);
+  });
+
+  it('opening a different automation does not carry the old draft along', async () => {
+    proposeFlowMock.mockResolvedValue(draftResult());
+    const hook = renderHook(({ id }: { id: string }) => useFlowBuilder(id), { initialProps: { id: 'flow_1' } });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    await act(async () => { await hook.result.current.compose('wait two days') });
+    expect(hook.result.current.proposal).not.toBeNull();
+
+    hook.rerender({ id: 'flow_2' });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    // flow_2 has no draft; Build this here must have nothing to submit.
+    expect(hook.result.current.proposal).toBeNull();
+  });
+
+  it('a discard the server never heard brings the card back, with a word', async () => {
+    proposeFlowMock.mockResolvedValue(draftResult());
+    discardProposalMock.mockRejectedValueOnce(new Error('offline'));
+
+    const { result } = await mountBuilder();
+    await act(async () => { await result.current.compose('wait two days') });
+    act(() => { result.current.discardDraft(); });
+
+    // Optimistically gone…
+    expect(result.current.proposal).toBeNull();
+    // …but the server still holds it, so it returns rather than lying.
+    await waitFor(() => expect(result.current.proposal?.id).toBe('p1'));
+    expect(result.current.proposalError).toMatch(/try the X again/i);
   });
 });
 
@@ -257,22 +360,32 @@ describe('the AI round trip', () => {
  * whenever the stored graph changes, that answer has to be asked for again —
  * and the answer that arrives has to be the one for the graph on screen. */
 describe('what still stands in the way', () => {
-  it('re-checks after the AI changes the flow, not only after a manual edit', async () => {
-    composeFlowMock.mockResolvedValue({
-      applied: true, summary: 'Added a follow-up.', source: 'model',
-      operations: [], touchedNodeIds: [], previousGraph: baseGraph(), flow: flowFixture(),
+  it('re-checks after Build this changes the flow, not only after a manual edit', async () => {
+    proposeFlowMock.mockResolvedValue({
+      proposal: {
+        id: 'p1', status: 'awaiting_confirmation', prompt: '', revision: 1,
+        plan: [{ id: 'item-1', label: 'Message — write it after building', operationIds: [0] }],
+        operations: [], assumptions: [], summary: 'Drafted 1 step.',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      },
+      clarification: false, summary: 'Drafted 1 step.', source: 'model', progress: [],
+    });
+    commitProposalMock.mockResolvedValue({
+      applied: true, summary: 'Added a follow-up.', operations: [], touchedNodeIds: [],
+      previousGraph: baseGraph(), flow: flowFixture(),
     });
 
     const { result } = await mountBuilder();
-    // Compose saves server-side and deliberately leaves the builder clean, so
-    // no autosave follows to carry the re-check. Without an explicit one the
-    // bell would keep the count from before the AI's change — which is most
-    // of the changes a creator makes.
+    // Build this saves server-side and deliberately leaves the builder clean,
+    // so no autosave follows to carry the re-check. Without an explicit one
+    // the bell would keep the count from before the AI's change — which is
+    // most of the changes a creator makes.
     fetchFlowValidationMock.mockResolvedValue({
       ok: false, problems: [{ nodeId: 'send-followup', message: 'This Send step is empty — write the message.' }],
     });
 
     await act(async () => { await result.current.compose('follow up in two days') });
+    await act(async () => { await result.current.confirmProposal(); });
 
     await waitFor(() => expect(result.current.problems).toHaveLength(1));
     expect(result.current.problems[0].nodeId).toBe('send-followup');
