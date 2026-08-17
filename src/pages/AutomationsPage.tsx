@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
 import AutomationCard from '../components/automations/AutomationCard';
+import ConfirmDialog from '../components/app/ConfirmDialog';
 import {
   isBackendConfigured, fetchFlows, createFlow, updateFlow, deleteFlow, restoreFlow,
   pauseFlow, activateFlow,
@@ -178,6 +179,8 @@ export default function AutomationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
+  // A live automation queued for the deliberate-answer dialog; null closed.
+  const [confirmDelete, setConfirmDelete] = useState<AutomationFlow | null>(null);
   
 
   // There is deliberately nothing here for teardown to do. A delete is a
@@ -370,10 +373,14 @@ export default function AutomationsPage() {
    * might not look at.
    */
   const remove = (flow: AutomationFlow) => {
-    if (flow.status === 'live' && !window.confirm(
-      `Delete “${flow.name}”? It's live — it will stop running and any scheduled follow-ups are cancelled.`
-    )) return;
+    if (flow.status === 'live') {
+      setConfirmDelete(flow);
+      return;
+    }
+    performDelete(flow);
+  };
 
+  const performDelete = (flow: AutomationFlow) => {
     setFlows(prev => prev.filter(f => f.id !== flow.id));
     const sent = commitDelete(flow.id);
 
@@ -552,6 +559,18 @@ export default function AutomationsPage() {
           ))}
         </div>
       )}
+
+      {/* A live automation is actively messaging real people; stopping that
+          deserves a deliberate answer rather than a toast you might not look
+          at. Drafts and paused automations skip straight to delete-with-undo. */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onOpenChange={open => { if (!open) setConfirmDelete(null); }}
+        title={confirmDelete ? `Delete “${confirmDelete.name}”?` : ''}
+        description="It's live — it will stop running and any scheduled follow-ups are cancelled."
+        confirmLabel="Delete"
+        onConfirm={() => { if (confirmDelete) performDelete(confirmDelete); }}
+      />
     </div>
   );
 }

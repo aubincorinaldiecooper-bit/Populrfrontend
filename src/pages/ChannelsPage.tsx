@@ -9,6 +9,7 @@ import { isCreatorSafe } from '../lib/voice';
 import { isOwnerView } from '../lib/access';
 import PageHeader from '../components/PageHeader';
 import ConnectAnotherModal from '../components/ConnectAnotherModal';
+import ConfirmDialog from '../components/app/ConfirmDialog';
 import type { ConnectAnotherInitialMode } from '../components/ConnectAnotherModal';
 import { isBackendConfigured, fetchCapabilities } from '../lib/api';
 import type { PlatformCapabilities, ConnectedAccount } from '../lib/api';
@@ -38,6 +39,8 @@ export default function ChannelsPage() {
   const [capabilities, setCapabilities] = useState<Record<string, PlatformCapabilities>>({});
   const [capabilitiesError, setCapabilitiesError] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  // The account queued for the disconnect question; null closed.
+  const [confirmDisconnect, setConfirmDisconnect] = useState<ConnectedAccount | null>(null);
   // "Connect another" modal — opened in 'confirm' mode from the button, or
   // in 'duplicate' mode when an OAuth return comes back classified as
   // account_result=existing (the provider reused the already-connected login).
@@ -158,10 +161,6 @@ export default function ChannelsPage() {
 
   const handleDisconnect = async (account: ConnectedAccount) => {
     const label = account.username ? `@${account.username}` : metaFor(account.platform).name;
-    if (!window.confirm(
-      `Disconnect ${label}? Automations using this account will stop running until you reconnect it.`
-    )) return;
-
     setDisconnecting(account.id);
     try {
       await disconnectAccount(account.id);
@@ -389,7 +388,7 @@ export default function ChannelsPage() {
                             </button>
                           ) : (
                             <button
-                              onClick={() => handleDisconnect(a)}
+                              onClick={() => setConfirmDisconnect(a)}
                               disabled={disconnecting === a.id}
                               className="pop-btn-tertiary text-[12px] py-1.5 px-3 disabled:opacity-50"
                             >
@@ -426,6 +425,19 @@ export default function ChannelsPage() {
           Create an automation <ArrowRight size={14} />
         </button>
       </div>
+
+      {/* Disconnecting stops real automations; it gets the deliberate
+          question window.confirm used to ask, in Populr's own dialog. */}
+      <ConfirmDialog
+        open={confirmDisconnect !== null}
+        onOpenChange={open => { if (!open) setConfirmDisconnect(null); }}
+        title={confirmDisconnect
+          ? `Disconnect ${confirmDisconnect.username ? `@${confirmDisconnect.username}` : metaFor(confirmDisconnect.platform).name}?`
+          : ''}
+        description="Automations using this account will stop running until you reconnect it."
+        confirmLabel="Disconnect"
+        onConfirm={() => { if (confirmDisconnect) void handleDisconnect(confirmDisconnect); }}
+      />
 
       {connectAnother && (
         <ConnectAnotherModal

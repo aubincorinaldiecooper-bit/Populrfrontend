@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Copy, Check, Loader2, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { getPlatformConnectUrl, ApiError } from '../lib/api';
 import { connectFailure, type ConnectFailure } from '../lib/connectErrors';
 import type { ConnectedAccount } from '../lib/api';
@@ -242,8 +243,8 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label={`Connect another ${platformName} account`}>
-      <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-6 relative">
+    <Dialog open onOpenChange={next => { if (!next) onClose(); }}>
+      <DialogContent className="relative" aria-label={`Connect another ${platformName} account`}>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-[#9B9B8F] hover:text-[#111111] hover:bg-[#FAFAF8] rounded-lg transition-all"
@@ -377,7 +378,7 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
             {linkError.kind === 'transient' && ' Copying will retry.'}
           </p>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

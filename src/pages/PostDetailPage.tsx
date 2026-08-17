@@ -10,6 +10,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useApp } from '../context/AppContext';
+import ConfirmDialog from '../components/app/ConfirmDialog';
 import { isCreatorSafe } from '../lib/voice';
 import { platformMeta } from '../lib/platformMeta';
 import { STATUS_LABEL, STATUS_STYLE } from '../lib/postStatus';
@@ -36,6 +37,9 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Which deliberate question is open, if any. Both actions here are
+  // consequential enough that window.confirm used to guard them.
+  const [confirming, setConfirming] = useState<'delete' | 'cancel' | null>(null);
 
   const load = useCallback(async () => {
     if (!postId) return;
@@ -60,7 +64,6 @@ export default function PostDetailPage() {
 
   const handleDelete = async () => {
     if (!post) return;
-    if (!window.confirm('Delete this draft? This cannot be undone.')) return;
     setBusy(true);
     try {
       await deleteDraftPost(post.post.id);
@@ -73,13 +76,6 @@ export default function PostDetailPage() {
 
   const handleCancel = async () => {
     if (!post) return;
-    // cancelScheduledPost only updates Populr's own record — there's no
-    // Zernio API to actually stop a scheduled publish, so if the
-    // scheduled time is close, the post may still go out. Say so before
-    // the user relies on "Cancelled" meaning it won't happen.
-    if (!window.confirm(
-      "Cancel this scheduled post? Populr will stop tracking it as scheduled, but if the publish time is very close, the platform may still publish it — cancellation isn't guaranteed to stop that."
-    )) return;
     setBusy(true);
     try {
       setPost(await cancelScheduledPost(post.post.id));
@@ -214,7 +210,7 @@ export default function PostDetailPage() {
             {status === 'draft' && (
               <>
                 <Button variant="primary" label="Edit" icon={<Pencil size={14} />} onClick={() => navigate('/create', { state: { editPostId: p.id } })} />
-                <Button variant="ghost" label="Delete" icon={<Trash2 size={14} className="text-[#DC2626]" />} isDisabled={busy} onClick={handleDelete} />
+                <Button variant="ghost" label="Delete" icon={<Trash2 size={14} className="text-[#DC2626]" />} isDisabled={busy} onClick={() => setConfirming('delete')} />
               </>
             )}
             {status === 'scheduled' && (
@@ -222,7 +218,7 @@ export default function PostDetailPage() {
               // control right now and always submits publishNow: true, so
               // reusing it would silently attempt an immediate publish
               // instead of editing the scheduled time.
-              <Button variant="ghost" label="Cancel" icon={<XCircle size={14} className="text-[#DC2626]" />} isLoading={busy} isDisabled={busy} onClick={handleCancel} />
+              <Button variant="ghost" label="Cancel" icon={<XCircle size={14} className="text-[#DC2626]" />} isLoading={busy} isDisabled={busy} onClick={() => setConfirming('cancel')} />
             )}
             {status === 'failed' && (
               <>
@@ -236,6 +232,27 @@ export default function PostDetailPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirming === 'delete'}
+        onOpenChange={open => { if (!open) setConfirming(null); }}
+        title="Delete this draft?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => void handleDelete()}
+      />
+      {/* cancelScheduledPost only updates Populr's own record — there's no
+          Zernio API to actually stop a scheduled publish, so if the scheduled
+          time is close, the post may still go out. Say so before the user
+          relies on "Cancelled" meaning it won't happen. */}
+      <ConfirmDialog
+        open={confirming === 'cancel'}
+        onOpenChange={open => { if (!open) setConfirming(null); }}
+        title="Cancel this scheduled post?"
+        description="Populr will stop tracking it as scheduled, but if the publish time is very close, the platform may still publish it — cancellation isn't guaranteed to stop that."
+        confirmLabel="Cancel the post"
+        onConfirm={() => void handleCancel()}
+      />
     </div>
   );
 }
