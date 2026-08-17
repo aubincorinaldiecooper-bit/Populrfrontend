@@ -1513,8 +1513,10 @@ export async function fetchNotifications(): Promise<{
 
 /** Mark one notification read, or everything when no id is given. */
 export async function markNotificationsRead(id?: string): Promise<{ marked: number }> {
+  // apiFetch serializes the body itself — hand it the object, or the wire
+  // carries a JSON string of JSON and the backend sees no usable id.
   return apiFetch(`/api/notifications/read`, {
     method: "POST",
-    body: JSON.stringify(id ? { id } : {}),
+    body: id ? { id } : {},
   });
 }

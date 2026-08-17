@@ -50,8 +50,19 @@ export default function NotificationsPage() {
   const openOne = (n: WorkspaceNotification) => {
     if (n.readAt !== null) return;
     void markNotificationsRead(n.id).then(() => {
-      setUnread(u => Math.max(0, u - 1));
-      reportNotificationsUnread(Math.max(0, unread - 1));
+      // The row itself turns read — a linkless notification stays on this
+      // page, and leaving readAt null would keep it clickable, each click
+      // spending another decrement the badge never owed.
+      setItems(prev =>
+        prev
+          ? prev.map(row => (row.id === n.id ? { ...row, readAt: new Date().toISOString() } : row))
+          : prev,
+      );
+      setUnread(u => {
+        const next = Math.max(0, u - 1);
+        reportNotificationsUnread(next);
+        return next;
+      });
     });
   };
 
