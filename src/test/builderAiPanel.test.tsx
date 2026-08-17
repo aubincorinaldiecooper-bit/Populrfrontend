@@ -186,8 +186,10 @@ describe('the conversation', () => {
       touchedNodeIds: ['wait-1'],
     });
 
-    expect(await screen.findByText('Add a follow-up after 2 days.')).toBeInTheDocument();
+    // Await the answer first: the prompt renders in the transient working
+    // article during compose, then remounts in the settled history article.
     expect(await screen.findByText('Added a 2-day wait and follow-up DM.')).toBeInTheDocument();
+    expect(screen.getByText('Add a follow-up after 2 days.')).toBeInTheDocument();
     expect(screen.queryByText(/create_node/)).not.toBeInTheDocument();
 
     // The next request continues the same conversation.

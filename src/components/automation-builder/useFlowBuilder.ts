@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  activateFlow, composeFlow, fetchFlow, fetchFlowValidation, pauseFlow, updateFlow,
+  activateFlow, composeFlow, fetchFlow, fetchFlowAiMessages, fetchFlowValidation, pauseFlow, updateFlow,
   FlowNotReadyError,
-  type AutomationFlow, type FlowProblem,
+  type AutomationFlow, type FlowAiMessage, type FlowProblem,
 } from '../../lib/api';
-import { emptyGraph, newNodeId, type FlowGraph, type FlowNode, type FlowNodeType } from '../../lib/flowSchema';
+import { NODE_LABEL, emptyGraph, newNodeId, type FlowGraph, type FlowNode, type FlowNodeType } from '../../lib/flowSchema';
 import { layoutGraph, needsLayout } from '../../lib/flowLayout';
 import { activityLines, parseOperations } from '../../lib/composerActivity';
 
@@ -34,14 +34,47 @@ export interface ChangeCard {
   /** The graph before the change, so Undo is a single assignment. */
   previousGraph: FlowGraph;
   previousName: string;
-  source: 'model' | 'fallback' | 'manual';
+  source: 'model' | 'fallback' | 'intent' | 'manual';
 }
 
 export interface HistoryEntry {
+  /** Empty when the prompt fell on an earlier, not-yet-loaded page. */
   prompt: string;
   summary: string;
   at: number;
-  source: 'model' | 'fallback' | 'manual';
+  source: 'model' | 'fallback' | 'intent' | 'manual';
+  /** Creator name of the step the exchange concerned ("Message"), if one. */
+  nodeLabel?: string | null;
+  /** What actually changed, from the server's permanent record. */
+  operationSummary?: string | null;
+}
+
+/**
+ * The server's conversation rows, paired into display entries: each user row
+ * with the answer that follows it. A page boundary can split a pair — the
+ * answer then stands alone with an empty prompt rather than being dropped.
+ */
+function entriesFromMessages(messages: FlowAiMessage[], graph: FlowGraph): HistoryEntry[] {
+  const label = (nodeId: string | null): string | null => {
+    if (!nodeId) return null;
+    const node = graph.nodes.find(n => n.id === nodeId);
+    return node ? NODE_LABEL[node.type] : null;
+  };
+  const entries: HistoryEntry[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    const answer = message.role === 'user' && messages[i + 1]?.role === 'assistant' ? messages[i + 1] : null;
+    entries.push({
+      prompt: message.role === 'user' ? message.content : '',
+      summary: message.role === 'user' ? (answer?.content ?? '') : message.content,
+      at: Date.parse(message.createdAt) || Date.now(),
+      source: (answer ?? message).source ?? 'manual',
+      nodeLabel: label((answer ?? message).nodeId ?? message.nodeId),
+      operationSummary: (answer ?? message).operationSummary,
+    });
+    if (answer) i++;
+  }
+  return entries;
 }
 
 const AUTOSAVE_DELAY_MS = 700;
@@ -90,6 +123,10 @@ export function useFlowBuilder(flowId: string | null) {
   const [activity, setActivity] = useState<string[]>([]);
   const [highlighted, setHighlighted] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  /** Whether the server holds pages of the conversation older than what's
+   *  loaded. The oldest loaded message id is the cursor for walking back. */
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const historyCursor = useRef<string | null>(null);
   const [problems, setProblems] = useState<FlowProblem[]>([]);
 
   // Undo stack of snapshots. Bounded — a builder session shouldn't grow
@@ -160,6 +197,17 @@ export function useFlowBuilder(flowId: string | null) {
         // So the bell is right the moment the builder opens, rather than
         // after the first edit.
         void refreshValidation();
+        // The automation's build conversation, from the server — this is what
+        // makes the composer remember across a refresh. Its absence must
+        // never block the builder: a fetch failure just opens an empty chat.
+        fetchFlowAiMessages(flowId)
+          .then(({ messages, hasMore }) => {
+            if (cancelled || !messages.length) return;
+            historyCursor.current = messages[0].id;
+            setHistoryHasMore(hasMore);
+            setHistory(entriesFromMessages(messages, loaded.graph));
+          })
+          .catch(() => {});
       })
       .catch(err => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load this automation.');
@@ -363,14 +411,31 @@ export function useFlowBuilder(flowId: string | null) {
   }, []);
 
 
+  /** Walk the conversation one page further into the past. */
+  const loadEarlierHistory = useCallback(async () => {
+    if (!flowId || !historyCursor.current) return;
+    try {
+      const { messages, hasMore } = await fetchFlowAiMessages(flowId, { before: historyCursor.current });
+      if (messages.length) {
+        historyCursor.current = messages[0].id;
+        setHistory(h => [...entriesFromMessages(messages, graph), ...h]);
+      }
+      setHistoryHasMore(hasMore);
+    } catch {
+      // The button stays; trying again can succeed.
+    }
+  }, [flowId, graph]);
+
   const compose = useCallback(async (prompt: string) => {
     if (!flowId || composing) return;
     setComposing(true);
     setActivity([]);
     const before = { graph, name };
+    const selected = selectedNodeId ? graph.nodes.find(n => n.id === selectedNodeId) ?? null : null;
+    const nodeLabel = selected ? NODE_LABEL[selected.type] : null;
     try {
       const result = await composeFlow(flowId, { prompt, selectedNodeId });
-      setHistory(h => [...h, { prompt, summary: result.summary, at: Date.now(), source: result.source }]);
+      setHistory(h => [...h, { prompt, summary: result.summary, at: Date.now(), source: result.source, nodeLabel }]);
 
       if (!result.applied || !result.flow) {
         // The composer understood nothing actionable. Say so plainly rather
@@ -416,7 +481,7 @@ export function useFlowBuilder(flowId: string | null) {
       // A failure is part of the conversation. The panel renders answers from
       // the history, so a request that died on the network must land there
       // too — a re-enabled input with no reply reads as being ignored.
-      setHistory(h => [...h, { prompt, summary, at: Date.now(), source: 'manual' }]);
+      setHistory(h => [...h, { prompt, summary, at: Date.now(), source: 'manual', nodeLabel }]);
       setChangeCard({
         summary,
         touchedNodeIds: [],
@@ -488,7 +553,7 @@ export function useFlowBuilder(flowId: string | null) {
     selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning,
     composing, changeCard, setChangeCard, editsSinceCard,
-    activity, highlighted, history,
+    activity, highlighted, history, historyHasMore, loadEarlierHistory,
     problems, refreshValidation,
     updateNodeConfig, moveNode, addNode, deleteNode, connectNodes, disconnect,
     rename, relayout, commitGraph,

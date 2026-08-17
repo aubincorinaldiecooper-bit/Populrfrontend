@@ -1038,14 +1038,39 @@ export interface FlowSimulationResult {
   awaitingReply: boolean;
 }
 
+/**
+ * One real stage of a compose, as the backend actually ran it.
+ *
+ * The composer's orchestration emits these AT each stage — understanding the
+ * request, planning ("Planning 1 new Message step"), validating, applying
+ * ("Adding a Message step after the Wait step"), saving — with labels derived
+ * from the intent and the plan, never written by a model. The panel can render
+ * the sequence as truthful build progress instead of inventing "Thinking…".
+ */
+export interface ComposerProgressEvent {
+  id: string;
+  stage: 'understanding' | 'planning' | 'validating' | 'applying' | 'saving' | 'complete' | 'error';
+  label: string;
+  /** The step the stage is about, when there is one. */
+  nodeId?: string;
+  /** The intent kind driving it (add_node, edit_node, delete_node). */
+  operation?: string;
+}
+
 export interface FlowComposeResult {
   applied: boolean;
   summary: string;
-  source: 'model' | 'fallback';
+  /** 'intent': an explicit structural instruction, planned deterministically —
+   *  no model chose any operation. */
+  source: 'model' | 'fallback' | 'intent';
+  /** The summary is a question — nothing changed, one detail is needed. */
+  clarification?: boolean;
   operations: unknown[];
   touchedNodeIds?: string[];
   previousGraph?: FlowGraph;
   flow: AutomationFlow | null;
+  /** The build sequence that actually ran, in order. */
+  progress?: ComposerProgressEvent[];
 }
 
 export async function fetchFlows(): Promise<AutomationFlow[]> {
@@ -1218,4 +1243,39 @@ export async function fetchFlowActivity(id: string): Promise<{ steps: FlowActivi
  *  tags (so tag fields suggest rather than invite near-duplicates). */
 export async function fetchFlowBuilderMeta(): Promise<{ aiConfigured: boolean; tags: string[] }> {
   return apiFetch('/api/flows/meta/status');
+}
+
+/**
+ * One message of an automation's persistent AI build conversation. The server
+ * is the source of truth — this is what makes the composer's history survive
+ * a refresh; local state only caches it for the session.
+ */
+export interface FlowAiMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  /** The step the message concerned, when it concerned one; null for
+   *  whole-automation requests. */
+  nodeId: string | null;
+  /** What actually changed, derived server-side from the operations that were
+   *  applied — never model prose. Null on user rows, questions and failures. */
+  operationSummary: string | null;
+  /** Who asked (user rows). Stored so a future collaborative builder can tell
+   *  authors apart; null on Populr's rows. */
+  authorId: string | null;
+  source: 'model' | 'fallback' | 'intent' | null;
+  createdAt: string;
+}
+
+/** A page of the conversation, oldest→newest within the page. `before` walks
+ *  backwards: pass the id of the oldest message already loaded. */
+export async function fetchFlowAiMessages(
+  id: string,
+  opts: { before?: string; limit?: number } = {},
+): Promise<{ messages: FlowAiMessage[]; hasMore: boolean }> {
+  const params = new URLSearchParams();
+  if (opts.before) params.set('before', opts.before);
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  return apiFetch(`/api/flows/${id}/ai-messages${qs ? `?${qs}` : ''}`);
 }
