@@ -99,13 +99,16 @@ function AppContent() {
 
   // A canvas invitee's whole surface is one automation — Home, Inbox and the
   // rest of the workspace aren't shared with them (the API refuses those
-  // reads), so the front door goes straight to their canvas.
-  if (
-    workspaceAccess?.role === 'canvas' &&
-    workspaceAccess.canvasAutomation &&
-    (location.pathname === '/' || location.pathname === '/dashboard')
-  ) {
-    return <Navigate to={`/automations/${workspaceAccess.canvasAutomation.id}`} replace />;
+  // reads), so every route outside their canvas, their own account settings,
+  // and invite links redirects there. A bookmarked /contacts must not render
+  // a page whose every request answers 403.
+  if (workspaceAccess?.role === 'canvas' && workspaceAccess.canvasAutomation) {
+    const canvasHome = `/automations/${workspaceAccess.canvasAutomation.id}`;
+    const allowed =
+      location.pathname === canvasHome ||
+      location.pathname.startsWith('/settings') ||
+      location.pathname.startsWith('/invite/');
+    if (!allowed) return <Navigate to={canvasHome} replace />;
   }
 
 

@@ -37,6 +37,8 @@ export interface FlowCanvasProps {
   onMove: (nodeId: string, position: { x: number; y: number }) => void;
   onConnect: (source: string, target: string, branch: 'next' | 'yes' | 'no') => void;
   onAddAfter: (nodeId: string, branch: 'next' | 'yes' | 'no') => void;
+  /** View-only members: no dragging, connecting, or add-step affordances. */
+  readOnly?: boolean;
   /** Bumped by the parent to request a re-fit (after AI generation, say). */
   fitSignal: number;
   /** A step to bring into view — a notification the creator just tapped. */
@@ -54,7 +56,7 @@ export interface FlowCanvasProps {
 
 function CanvasInner({
   graph, selectedNodeId, highlighted, problems, posts, activePath,
-  onSelect, onMove, onConnect, onAddAfter, fitSignal, focusNodeId = null, focusSignal = 0,
+  onSelect, onMove, onConnect, onAddAfter, readOnly = false, fitSignal, focusNodeId = null, focusSignal = 0,
   editorSlot = null,
 }: FlowCanvasProps) {
   const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
@@ -130,10 +132,11 @@ function CanvasInner({
           : null,
         onAddAfter,
         hasOutgoing,
+        readOnly,
       } satisfies FlowNodeData,
     })),
     [graph.nodes, selectedNodeId, highlighted, problemByNode, postById, onAddAfter, hasOutgoing,
-      nodeDelays],
+      readOnly, nodeDelays],
   );
 
   const edges: Edge[] = useMemo(
@@ -267,8 +270,8 @@ function CanvasInner({
       // panel is permanently open.
       onPaneClick={() => onSelect(null)}
       proOptions={{ hideAttribution: true }}
-      nodesDraggable
-      nodesConnectable
+      nodesDraggable={!readOnly}
+      nodesConnectable={!readOnly}
       elementsSelectable
       panOnScroll
       selectionOnDrag={false}

@@ -51,6 +51,8 @@ export interface FlowNodeData extends Record<string, unknown> {
   post: PostLibraryItem | null;
   onAddAfter: (nodeId: string, branch: 'next' | 'yes' | 'no') => void;
   hasOutgoing: (nodeId: string, branch: 'next' | 'yes' | 'no') => boolean;
+  /** View-only: the graph is theirs to read, not to grow. */
+  readOnly?: boolean;
 }
 
 /** The one-line description under the node's title. */
@@ -191,7 +193,7 @@ function AddButton({
 }
 
 function FlowNodeCardInner({ data }: NodeProps) {
-  const { node, selected, highlighted, problem, enterDelay, post, onAddAfter, hasOutgoing } =
+  const { node, selected, highlighted, problem, enterDelay, post, onAddAfter, hasOutgoing, readOnly } =
     data as unknown as FlowNodeData;
   const [hovered, setHovered] = useState(false);
   const showControls = hovered || selected;
@@ -280,7 +282,7 @@ function FlowNodeCardInner({ data }: NodeProps) {
         />
       ))}
 
-      {showControls && branches.map((branch, i) => (
+      {showControls && !readOnly && branches.map((branch, i) => (
         hasOutgoing(node.id, branch) ? null : (
           <AddButton
             key={branch}

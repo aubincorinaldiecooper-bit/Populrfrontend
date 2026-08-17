@@ -156,6 +156,9 @@ export default function AutomationsPage() {
   const { showToast, workspaceAccess } = useApp();
   const ownerView = isOwnerView(workspaceAccess);
   const mayCreate = canEditAutomations(workspaceAccess) && workspaceAccess?.role !== 'canvas';
+  // List mutations: rename/duplicate ride the edit grant (canvas users edit
+  // in the builder, not here); deleting stays with the owner.
+  const editGrant = workspaceAccess?.role === 'canvas' ? false : canEditAutomations(workspaceAccess);
   const [searchParams, setSearchParams] = useSearchParams();
   const backendConfigured = isBackendConfigured();
 
@@ -539,6 +542,8 @@ export default function AutomationsPage() {
               onOpen={() => navigate(`/automations/${flow.id}`)}
               onToggleStatus={() => toggleStatus(flow)}
               canToggle={ownerView}
+              canEdit={editGrant}
+              canDelete={ownerView}
               onRename={name => rename(flow, name)}
               onDuplicate={() => duplicate(flow)}
               onDelete={() => remove(flow)}
