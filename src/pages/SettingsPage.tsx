@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useNavigate, Link } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { isOwnerView } from '../lib/access';
@@ -152,7 +154,7 @@ export default function SettingsPage() {
               <div className="flex items-start gap-2">
                 <AlertCircle size={15} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
                 <p className="text-[12px] text-[#6B6B6B] flex-1">{loadError}</p>
-                <button onClick={loadPause} className="pop-btn-tertiary text-[12px] py-1 px-3 flex-shrink-0">
+                <button onClick={loadPause} className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-3 flex-shrink-0')}>
                   Retry
                 </button>
               </div>
@@ -167,7 +169,7 @@ export default function SettingsPage() {
                     onClick={togglePause}
                     disabled={pauseBusy}
                     aria-pressed={paused}
-                    className={`${paused ? 'pop-btn-primary' : 'pop-btn-tertiary'} text-[13px] disabled:opacity-50`}
+                    className={cn(buttonVariants({ variant: paused ? 'default' : 'outline' }), 'text-[13px] disabled:opacity-50')}
                   >
                     {pauseBusy
                       ? <><Loader2 size={14} className="animate-spin" />Saving…</>
@@ -224,7 +226,7 @@ export default function SettingsPage() {
           <button
             onClick={handleSignOut}
             disabled={signingOut}
-            className="pop-btn-secondary text-[13px] flex items-center gap-2 disabled:opacity-50"
+            className={cn(buttonVariants({ variant: 'secondary' }), 'text-[13px] flex items-center gap-2 disabled:opacity-50')}
           >
             <LogOut size={14} />{signingOut ? 'Signing out…' : 'Sign out'}
           </button>
