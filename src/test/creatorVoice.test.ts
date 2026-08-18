@@ -53,6 +53,27 @@ describe('isCreatorSafe', () => {
     expect(isCreatorSafe(undefined)).toBe(false);
     expect(isCreatorSafe('x'.repeat(300))).toBe(false);
   });
+
+  it('rejects SCREAMING_SNAKE identifiers, however polite the sentence around them', () => {
+    // The sentence that reached a creator's invite popover: human words
+    // wrapped around an env var. The words don't redeem the identifier.
+    for (const text of [
+      "Invites aren't configured on this server yet (POPULR_FRONTEND_URL).",
+      'Set DEMO_MODE=true to use this.',
+      'The send failed (RATE_LIMIT_EXCEEDED).',
+    ]) {
+      expect(isCreatorSafe(text), text).toBe(false);
+    }
+    // The near-misses that must stay Populr's to say: a single all-caps
+    // word is a word, and a lowercase template variable is a hint.
+    for (const text of [
+      'Reply sent on DM.',
+      'Use {first_name} to greet them by name.',
+      "Invites aren't set up on this server yet.",
+    ]) {
+      expect(isCreatorSafe(text), text).toBe(true);
+    }
+  });
 });
 
 describe('errorMessage', () => {

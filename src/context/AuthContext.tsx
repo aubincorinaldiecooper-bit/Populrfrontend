@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { endServerStateSession } from "../lib/queryClient";
 import { authClient, clearApiAuthToken } from "../lib/authClient";
 import { onUnauthorized } from "../lib/api";
 
@@ -94,14 +95,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // in on this browser must not see the previous one's workspace for as
   // long as it takes the first request to land. `undefined` is "still
   // asking", which is not the same as gone.
-  const hadSession = useRef(false);
+  //
+  // Identity, not truthiness: a refresh() can hand back a DIFFERENT user
+  // without ever passing through null (a session swapped in another tab,
+  // an account switch), and that is the same event as far as the cache is
+  // concerned. Ending the session also drops work still in flight, whose
+  // callbacks would otherwise write the departing person's answers into the
+  // cache we just emptied.
+  const lastUserId = useRef<string | null>(null);
   useEffect(() => {
-    if (session) {
-      hadSession.current = true;
-    } else if (session === null && hadSession.current) {
-      hadSession.current = false;
-      queryClient.clear();
-    }
+    if (session === undefined) return;
+    const next = session?.userId ?? null;
+    const previous = lastUserId.current;
+    lastUserId.current = next;
+    if (previous !== null && previous !== next) endServerStateSession(queryClient);
   }, [session, queryClient]);
 
   useEffect(() => {
