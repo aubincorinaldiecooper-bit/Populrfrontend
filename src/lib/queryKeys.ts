@@ -19,4 +19,6 @@ export const queryKeys = {
    */
   conversationLists: ['conversations'] as const,
   contact: (contactId: string) => ['contact', contactId] as const,
+  /** Every open conversation thread — what a new message could have landed in. */
+  contactThreads: ['contact'] as const,
 };

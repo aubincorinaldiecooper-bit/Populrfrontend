@@ -7,6 +7,7 @@ import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import EditorRail from './EditorRail';
 import ErrorBoundary from './ErrorBoundary';
 import { useBuilderNav } from '../lib/navPreference';
+import { useLiveFeed } from './app/useLiveFeed';
 
 /**
  * The authenticated shell: SidebarProvider → AppSidebar → SidebarInset →
@@ -26,6 +27,13 @@ function isEditorRoute(pathname: string): boolean {
 export default function Layout({ children }: { children?: ReactNode }) {
   const location = useLocation();
   const editor = isEditorRoute(location.pathname);
+
+  // One connection for the whole signed-in app. It belongs here rather than
+  // on the surfaces that consume it because those surfaces mount and unmount
+  // as the creator moves around, and the news doesn't stop while they're on
+  // another page — it lands in the cache, and the page it belongs to finds
+  // it already fresh when they arrive.
+  useLiveFeed();
 
   // The route proposes; the creator decides.
   //
