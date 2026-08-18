@@ -4,7 +4,7 @@ import { MessageCircle } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchConversations, type Conversation } from '../../lib/api';
-import { useInboxUnread } from '../inbox/useInboxUnread';
+import { useInboxWaiting } from '../inbox/conversations';
 import { headerIconButton } from './headerIconButton';
 
 /**
@@ -21,7 +21,7 @@ import { headerIconButton } from './headerIconButton';
  */
 
 export default function InboxMenu() {
-  const { count } = useInboxUnread();
+  const { count } = useInboxWaiting();
   // Controlled so the rows can stay REAL links (role=link, middle-click,
   // copy address all intact) and still close the menu when followed —
   // PopoverClose would have re-cast them as buttons.

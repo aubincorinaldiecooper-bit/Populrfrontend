@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import AppSidebar from '../components/app/AppSidebar';
@@ -7,8 +8,6 @@ import AppHeader from '../components/app/AppHeader';
 import PageHeader from '../components/PageHeader';
 import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
-import { resetInboxUnreadForTests } from '../components/inbox/useInboxUnread';
-import { resetNotificationsUnreadForTests } from '../components/app/useNotificationsUnread';
 import type { Conversation } from '../lib/api';
 
 /* The shell.
@@ -55,8 +54,6 @@ vi.mock('../context/AuthContext', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resetInboxUnreadForTests();
-  resetNotificationsUnreadForTests();
   fetchNotificationsMock.mockResolvedValue({ notifications: [], unread: 0 });
   markNotificationsReadMock.mockResolvedValue({ marked: 0 });
   mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [], workspaceAccess: null });

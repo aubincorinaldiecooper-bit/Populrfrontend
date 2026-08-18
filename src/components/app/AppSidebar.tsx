@@ -11,7 +11,7 @@ import {
 import AccountMenu from '../AccountMenu';
 import { navItems, isActivePath } from '../../lib/nav';
 import { useApp } from '../../context/AppContext';
-import { useInboxUnread } from '../inbox/useInboxUnread';
+import { useInboxWaiting } from '../inbox/conversations';
 import { useCreateAutomation } from '../../context/CreateAutomationContext';
 
 /**
@@ -39,7 +39,7 @@ export default function AppSidebar({
   const { setOpenMobile } = useSidebar();
   const { beginCreateAutomation } = useCreateAutomation();
   const { workspaceAccess } = useApp();
-  const { count: inboxCount } = useInboxUnread();
+  const { count: inboxCount } = useInboxWaiting();
 
   const closeMobile = () => setOpenMobile(false);
 
