@@ -173,7 +173,7 @@ export default function Select<T extends string>({
             shadow-[0_8px_28px_rgba(17,17,17,0.12)]
             origin-top motion-safe:animate-[pop-menu-in_140ms_cubic-bezier(0.23,1,0.32,1)]"
         >
-          <MenuHighlight listRef={listRef} activeIndex={activeIndex} />
+          <MenuHighlight activeIndex={activeIndex} />
           {options.length === 0 && (
             <p className="px-2.5 py-2 text-[12px] text-[#8A857E]">Nothing to choose from yet.</p>
           )}

@@ -167,6 +167,28 @@ describe('the tag picker', () => {
     expect(normalizeTag('  Warm Lead ')).toBe('warm_lead');
     expect(normalizeTag('VIP!!')).toBe('vip');
   });
+
+  it('takes the highlight away when the typing leaves no rows to highlight', () => {
+    // Filtering can empty the list without the active index moving: type
+    // something that matches, then punctuation that normalises to nothing —
+    // no matches, and nothing to create either. A highlight measured only
+    // when the index changes would still be sitting there, a lit row over
+    // the "no tags" message.
+    render(<TagCombobox value={null} tags={['warm_lead']} onChange={vi.fn()} />);
+    const input = screen.getByLabelText('Tag');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'warm' } });
+
+    const highlight = () =>
+      screen.getByRole('listbox').querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(highlight().style.opacity).toBe('1');
+
+    fireEvent.change(input, { target: { value: '...' } });
+
+    expect(screen.getByText(/No tags yet/)).toBeInTheDocument();
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(highlight().style.opacity).toBe('0');
+  });
 });
 
 describe('the dropdown', () => {

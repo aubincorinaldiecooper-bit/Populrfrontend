@@ -33,7 +33,6 @@ export default function TagCombobox({
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   const normalized = normalizeTag(query);
   const needle = query.trim().toLowerCase();
@@ -125,7 +124,6 @@ export default function TagCombobox({
 
       {open && (
         <div
-          ref={listRef}
           role="listbox"
           aria-label={ariaLabel}
           className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-64 overflow-y-auto
@@ -133,7 +131,7 @@ export default function TagCombobox({
             shadow-[0_8px_28px_rgba(17,17,17,0.12)]
             origin-top motion-safe:animate-[pop-menu-in_140ms_cubic-bezier(0.23,1,0.32,1)]"
         >
-          <MenuHighlight listRef={listRef} activeIndex={activeIndex} />
+          <MenuHighlight activeIndex={activeIndex} />
           {rows.length === 0 && (
             <p className="px-2.5 py-2 text-[12px] text-[#8A857E]">
               No tags yet — type one to create it.
