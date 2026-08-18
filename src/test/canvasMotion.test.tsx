@@ -89,7 +89,8 @@ const step: FlowNode = {
 function renderCard(over: Partial<FlowNodeData> = {}) {
   const data: FlowNodeData = {
     node: step, selected: false, highlighted: false, problem: null,
-    enterDelay: null, post: null, onAddAfter: () => {}, hasOutgoing: () => false,
+    enterDelay: null, post: null, onAddAfter: () => {}, onDeleteNode: () => {},
+    hasOutgoing: () => false,
     ...over,
   };
   return render(

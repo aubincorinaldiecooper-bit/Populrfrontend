@@ -9,6 +9,10 @@ import {
   type FlowNode, type FlowNodeType,
 } from '../../lib/flowSchema';
 import { platformMeta } from '../../lib/platformMeta';
+import {
+  ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
+  ContextMenuGroup, ContextMenuLabel, ContextMenuSeparator,
+} from '@/components/ui/context-menu';
 import type { PostLibraryItem } from '../../lib/api';
 
 /**
@@ -50,6 +54,8 @@ export interface FlowNodeData extends Record<string, unknown> {
   enterDelay: number | null;
   post: PostLibraryItem | null;
   onAddAfter: (nodeId: string, branch: 'next' | 'yes' | 'no') => void;
+  /** Remove this step — the right-click menu's destructive command. */
+  onDeleteNode: (nodeId: string) => void;
   hasOutgoing: (nodeId: string, branch: 'next' | 'yes' | 'no') => boolean;
   /** View-only: the graph is theirs to read, not to grow. */
   readOnly?: boolean;
@@ -193,15 +199,20 @@ function AddButton({
 }
 
 function FlowNodeCardInner({ data }: NodeProps) {
-  const { node, selected, highlighted, problem, enterDelay, post, onAddAfter, hasOutgoing, readOnly } =
-    data as unknown as FlowNodeData;
+  const { node, selected, highlighted, problem, enterDelay, post, onAddAfter, onDeleteNode,
+    hasOutgoing, readOnly } = data as unknown as FlowNodeData;
   const [hovered, setHovered] = useState(false);
   const showControls = hovered || selected;
   const branches = branchesFor(node.type);
   const platform = node.type === 'trigger' ? readTrigger(node).platform : null;
   const PlatformIcon = platform ? platformMeta(platform).icon : null;
 
-  return (
+  /* The same commands the hover controls offer, on the step itself.
+     Right-click is the fast path for people who already know the canvas;
+     long-press is the ONLY path on a phone, where there is no hover. A
+     view-only collaborator gets no menu at all rather than a menu of
+     things that would be refused. */
+  const card = (
     <div
       className={`relative ${enterDelay !== null
         ? 'motion-safe:animate-[pop-node-in_220ms_ease-out_both]' : ''}`}
@@ -295,6 +306,40 @@ function FlowNodeCardInner({ data }: NodeProps) {
         )
       ))}
     </div>
+  );
+
+  if (readOnly) return card;
+
+  const openBranches = branches.filter(branch => !hasOutgoing(node.id, branch));
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>{card}</ContextMenuTrigger>
+      <ContextMenuContent aria-label={`${NODE_LABEL[node.type]} step`}>
+        {openBranches.length > 0 && (
+          // The label names the group it heads, which is what makes it a
+          // heading to a screen reader rather than a stray line of text.
+          <ContextMenuGroup>
+            <ContextMenuLabel>Add a step</ContextMenuLabel>
+            {openBranches.map(branch => (
+              <ContextMenuItem key={branch} onClick={() => onAddAfter(node.id, branch)}>
+                {branch === 'next' ? 'After this step' : `On ${branch === 'yes' ? 'Yes' : 'No'}`}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuGroup>
+        )}
+        {/* The When step is the automation's reason to run — removing it
+            would leave a flow nothing could start. */}
+        {node.type !== 'trigger' && (
+          <>
+            {openBranches.length > 0 && <ContextMenuSeparator />}
+            <ContextMenuItem destructive onClick={() => onDeleteNode(node.id)}>
+              Remove this step
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
