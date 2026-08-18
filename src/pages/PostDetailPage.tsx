@@ -5,10 +5,10 @@ import {
   Pencil, Trash2, XCircle, RefreshCw, ExternalLink, Clock, Image as ImageIcon,
   Video as VideoIcon, GalleryHorizontal, Type as TypeIcon,
 } from 'lucide-react';
-import { Card } from '@astryxdesign/core/Card';
-import { Button } from '@astryxdesign/core/Button';
-import { Banner } from '@astryxdesign/core/Banner';
-import { Spinner } from '@astryxdesign/core/Spinner';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertTitle } from '@/components/ui/alert';
+import { Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ConfirmDialog from '../components/app/ConfirmDialog';
 import { isCreatorSafe } from '../lib/voice';
@@ -101,7 +101,7 @@ export default function PostDetailPage() {
   if (loading) {
     return (
       <div className="pop-page max-w-[720px] flex items-center justify-center py-24">
-        <Spinner size="lg" />
+        <Loader2 size={28} className="animate-spin text-muted-foreground" aria-label="Loading" />
       </div>
     );
   }
@@ -109,8 +109,13 @@ export default function PostDetailPage() {
   if (error || !post) {
     return (
       <div className="pop-page max-w-[720px]">
-        <Button variant="ghost" icon={<ArrowLeft size={16} />} label="Back to Content" className="mb-6" onClick={() => navigate('/content')} />
-        <Banner status="error" title="Couldn't load this post" description={error ?? 'This post could not be found.'} />
+        <Button variant="ghost" size="sm" className="mb-6 -ml-1.5" onClick={() => navigate('/content')}>
+        <ArrowLeft size={16} /> Back to Content
+      </Button>
+        <Alert variant="destructive">
+          <AlertTitle>Couldn&apos;t load this post</AlertTitle>
+          <p className="mt-0.5">{error ?? 'This post could not be found.'}</p>
+        </Alert>
       </div>
     );
   }
@@ -121,7 +126,9 @@ export default function PostDetailPage() {
 
   return (
     <div className="pop-page max-w-[820px]">
-      <Button variant="ghost" icon={<ArrowLeft size={16} />} label="Back to Content" className="mb-6" onClick={() => navigate('/content')} />
+      <Button variant="ghost" size="sm" className="mb-6 -ml-1.5" onClick={() => navigate('/content')}>
+        <ArrowLeft size={16} /> Back to Content
+      </Button>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* LEFT: media + caption */}
@@ -139,12 +146,12 @@ export default function PostDetailPage() {
               ))}
             </div>
           ) : (
-            <Card padding={8} className="flex flex-col items-center justify-center text-center">
+            <Card className="flex flex-col items-center justify-center p-8 text-center">
               {(() => { const Icon = MEDIA_TYPE_ICON[p.media_type ?? 'text']; return <Icon size={22} className="text-[#9B9B8F] mb-2" />; })()}
               <p className="pop-meta">Text-only post — no media attached.</p>
             </Card>
           )}
-          <Card padding={4}>
+          <Card className="p-4">
             <p className="pop-body whitespace-pre-wrap">{p.content?.trim() || <span className="text-[#9B9B8F]">No caption</span>}</p>
           </Card>
         </div>
@@ -161,7 +168,7 @@ export default function PostDetailPage() {
             <h1 className="pop-section-heading">Post details</h1>
           </div>
 
-          <Card padding={5} className="space-y-2.5">
+          <Card className="space-y-2.5 p-5">
             <div className="flex items-center gap-2 text-[12px] text-[#6B6B6B]">
               <Clock size={13} /> Created {fullDate(p.created_at)}
             </div>
@@ -177,7 +184,7 @@ export default function PostDetailPage() {
             )}
           </Card>
 
-          <Card padding={5}>
+          <Card className="p-5">
             <h2 className="pop-card-title mb-4">Destinations</h2>
             <div className="space-y-2.5">
               {targets.map(t => {
@@ -209,8 +216,12 @@ export default function PostDetailPage() {
           <div className="flex flex-wrap gap-2.5">
             {status === 'draft' && (
               <>
-                <Button variant="primary" label="Edit" icon={<Pencil size={14} />} onClick={() => navigate('/create', { state: { editPostId: p.id } })} />
-                <Button variant="ghost" label="Delete" icon={<Trash2 size={14} className="text-[#DC2626]" />} isDisabled={busy} onClick={() => setConfirming('delete')} />
+                <Button size="sm" onClick={() => navigate('/create', { state: { editPostId: p.id } })}>
+                  <Pencil size={14} /> Edit
+                </Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming('delete')}>
+                  <Trash2 size={14} className="text-destructive" /> Delete
+                </Button>
               </>
             )}
             {status === 'scheduled' && (
@@ -218,16 +229,24 @@ export default function PostDetailPage() {
               // control right now and always submits publishNow: true, so
               // reusing it would silently attempt an immediate publish
               // instead of editing the scheduled time.
-              <Button variant="ghost" label="Cancel" icon={<XCircle size={14} className="text-[#DC2626]" />} isLoading={busy} isDisabled={busy} onClick={() => setConfirming('cancel')} />
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming('cancel')}>
+                {busy ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} className="text-destructive" />} Cancel
+              </Button>
             )}
             {status === 'failed' && (
               <>
-                <Button variant="secondary" label="Edit" icon={<Pencil size={14} />} onClick={() => navigate('/create', { state: { editPostId: p.id } })} />
-                <Button variant="primary" label="Retry" icon={<RefreshCw size={14} />} isLoading={busy} isDisabled={busy} onClick={handleRetry} />
+                <Button variant="secondary" size="sm" onClick={() => navigate('/create', { state: { editPostId: p.id } })}>
+                  <Pencil size={14} /> Edit
+                </Button>
+                <Button size="sm" disabled={busy} onClick={handleRetry}>
+                  {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Retry
+                </Button>
               </>
             )}
             {status === 'partially_published' && anyFailed && (
-              <Button variant="primary" label="Retry failed destinations" icon={<RefreshCw size={14} />} isLoading={busy} isDisabled={busy} onClick={handleRetry} />
+              <Button size="sm" disabled={busy} onClick={handleRetry}>
+                {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Retry failed destinations
+              </Button>
             )}
           </div>
         </div>
