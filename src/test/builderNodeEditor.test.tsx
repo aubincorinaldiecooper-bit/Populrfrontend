@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import AutomationBuilderPage from '../pages/AutomationBuilderPage';
+import AppSidebar from '../components/app/AppSidebar';
+import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { AutomationFlow } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
 
@@ -117,6 +120,9 @@ vi.mock('../lib/api', async () => {
 
 const mockUseApp = vi.fn();
 vi.mock('../context/AppContext', () => ({ useApp: () => mockUseApp() }));
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { name: 'Creator', email: 'c@example.com' }, signOut: vi.fn() }),
+}));
 
 function mountBuilder() {
   return render(
@@ -126,6 +132,58 @@ function mountBuilder() {
       </Routes>
     </MemoryRouter>,
   );
+}
+
+/**
+ * The builder with the real navigation beside it, sharing the one provider —
+ * which is the app's arrangement, and the only way to collapse the sidebar
+ * from a test the way a creator does: by clicking the button that does it.
+ */
+function mountBuilderWithNavigation() {
+  return render(
+    <MemoryRouter initialEntries={['/automations/flow_1']}>
+      <CreateAutomationProvider>
+        <AppSidebar />
+        <Routes>
+          <Route path="/automations/:flowId" element={<AutomationBuilderPage />} />
+        </Routes>
+      </CreateAutomationProvider>
+    </MemoryRouter>,
+  );
+}
+
+/**
+ * Run a body at a given viewport, with media queries that actually answer
+ * for it. The setup polyfill's blanket `matches: false` hides every
+ * responsive path, and a stub that just says "max-width is true" can't tell
+ * 780px from 988px — which is precisely the distinction the editor's
+ * threshold turns on once the sidebar has two widths.
+ */
+async function atWindowWidth(px: number, body: () => Promise<void>): Promise<void> {
+  const realWidth = window.innerWidth;
+  const realMatchMedia = window.matchMedia;
+  Object.defineProperty(window, 'innerWidth', { value: px, configurable: true });
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true, configurable: true,
+    value: (query: string) => {
+      const max = /max-width:\s*(\d+)/.exec(query);
+      const min = /min-width:\s*(\d+)/.exec(query);
+      return {
+        matches: max ? px <= Number(max[1]) : min ? px >= Number(min[1]) : false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      };
+    },
+  });
+  try {
+    await body();
+  } finally {
+    Object.defineProperty(window, 'innerWidth', { value: realWidth, configurable: true });
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true, configurable: true, value: realMatchMedia,
+    });
+  }
 }
 
 /** Select a step, the way the canvas does. */
@@ -139,7 +197,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
   Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
 });
 
 describe('opening, switching, closing', () => {
@@ -361,25 +419,8 @@ describe('narrow screens', () => {
     // "Narrow" is about the CANVAS, not the window. From 768px up the 280px
     // sidebar is on screen, so a 900px tablet has a 620px content column —
     // anchoring a 320px card there would leave 300px of canvas. The
-    // breakpoint answers for the room the editor actually has: media
-    // queries here respond as a real 900px window would (max-width: 987px
-    // matches; the desktop min-widths do not).
-    Object.defineProperty(window, 'innerWidth', { value: 900, configurable: true });
-    const realMatchMedia = window.matchMedia;
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true, configurable: true,
-      value: (query: string) => ({
-        matches: /max-width:\s*(\d+)/.test(query)
-          ? 900 <= Number(/max-width:\s*(\d+)/.exec(query)![1])
-          : /min-width:\s*(\d+)/.test(query)
-            ? 900 >= Number(/min-width:\s*(\d+)/.exec(query)![1])
-            : false,
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      }),
-    });
-    try {
+    // breakpoint answers for the room the editor actually has.
+    await atWindowWidth(900, async () => {
       mountBuilder();
       await screen.findByText('Preview');
 
@@ -389,10 +430,57 @@ describe('narrow screens', () => {
       // The sheet, not the anchored card — same assertion as the phone case.
       expect(screen.getByTestId('canvas')).not.toContainElement(editor);
       expect(canvas.props?.editorSlot ?? null).toBeNull();
-    } finally {
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true, configurable: true, value: realMatchMedia,
-      });
-    }
+    });
+  });
+
+  it('…and collapsing the navigation is what makes it wide again', async () => {
+    // The same 900px tablet, with the creator's navigation at rail width.
+    // 208px came back to the content column, and the editor can be anchored
+    // at the step after all — which is the point of the threshold reading
+    // the width on screen rather than the widest one the sidebar can be.
+    //
+    // This is the pair to the test above: identical window, opposite
+    // outcome, and the ONLY difference is a choice made in the shell.
+    window.localStorage.setItem('populr.navCollapsed', '1');
+    await atWindowWidth(900, async () => {
+      mountBuilder();
+      await screen.findByText('Preview');
+
+      selectNode('send-plain');
+      const editor = await screen.findByLabelText('Message settings');
+
+      expect(screen.getByTestId('canvas')).toContainElement(editor);
+      expect(canvas.props?.editorSlot ?? null).not.toBeNull();
+    });
+  });
+
+  it('and it notices the moment they collapse it, without a reload', async () => {
+    // The same 900px tablet, one session, nothing remounted: the page comes
+    // up narrow and the creator collapses the navigation while looking at it.
+    //
+    // The threshold is a media-query SUBSCRIPTION, so this is the case a
+    // stale one fails: a page that subscribes once, at the width the sidebar
+    // happened to be, keeps watching a line that has since moved. The room
+    // is there and the editor never finds out.
+    const user = userEvent.setup();
+    await atWindowWidth(900, async () => {
+      mountBuilderWithNavigation();
+      await screen.findByText('Preview');
+
+      // Narrow to begin with — 900px behind a 280px column.
+      selectNode('send-plain');
+      await screen.findByLabelText('Message settings');
+      expect(canvas.props?.editorSlot ?? null).toBeNull();
+
+      // Clicking outside dismisses the sheet, which is the sheet doing its
+      // job; the selection is one click on the canvas to get back.
+      await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+      await waitFor(() => expect(document.querySelector('aside')!.style.width).toBe('72px'));
+
+      selectNode('send-plain');
+      const editor = await screen.findByLabelText('Message settings');
+      expect(screen.getByTestId('canvas')).toContainElement(editor);
+      expect(canvas.props?.editorSlot ?? null).not.toBeNull();
+    });
   });
 });

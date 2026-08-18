@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Plus, Zap, Settings } from 'lucide-react';
+import { Plus, Zap, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
@@ -7,7 +7,10 @@ import {
   SidebarFooter,
   sidebarMenuButtonClass,
   useSidebar,
+  useSidebarSurface,
 } from '@/components/ui/sidebar';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import AccountMenu from '../AccountMenu';
 import { navItems, isActivePath } from '../../lib/nav';
 import { useApp } from '../../context/AppContext';
@@ -20,19 +23,36 @@ import { useCreateAutomation } from '../../context/CreateAutomationContext';
  * the account identity — rendered once here and shown as the fixed desktop
  * column and the phone drawer alike.
  *
- * This is the whole navigation, everywhere. The automation builder used to
- * swap it for a 60px icon rail — a second component reading the same item
- * list, which is not the same thing as being the same navigation. The two
- * drifted exactly where you would expect: the rail kept raw hex and a
- * pre-token palette, an 18px icon against this one's 20px, a dark corner
- * dot where this has a lime pill, and its own focus ring. What a creator
- * saw was the product changing shape when they opened an automation.
+ * This is the whole navigation, everywhere, at either width. The automation
+ * builder once swapped it for a separate 60px rail component reading the
+ * same item list, which is not the same thing as being the same navigation:
+ * the two drifted in palette, icon size, badge treatment and focus ring
+ * until a creator opening an automation watched the product change shape.
  *
- * The content changes between pages. This does not.
+ * So the rail is a WIDTH here, not a component. Every difference between
+ * the two is stated in one place — a ternary, next to the thing it changes
+ * — which is what makes drift visible in review instead of discoverable in
+ * a screenshot six weeks later. Colours, the active pill, the badge, the
+ * icon metrics and the focus ring are shared outright.
+ *
+ * Collapsing is offered on every route and remembered (see the provider).
+ * The route never decides it: a shell that rearranges itself when you open
+ * an automation is the thing this replaced.
  */
 export default function AppSidebar() {
+  return (
+    <Sidebar>
+      <AppSidebarBody />
+    </Sidebar>
+  );
+}
+
+function AppSidebarBody() {
   const location = useLocation();
-  const { setOpenMobile } = useSidebar();
+  const { setOpenMobile, collapsed: preference, setCollapsed } = useSidebar();
+  // The preference is the DESKTOP column's; the phone drawer always renders
+  // full, so it answers `false` here whatever the creator last chose.
+  const { collapsed } = useSidebarSurface();
   const { beginCreateAutomation } = useCreateAutomation();
   const { workspaceAccess } = useApp();
   const { count: inboxCount } = useInboxWaiting();
@@ -56,79 +76,165 @@ export default function AppSidebar() {
     (workspaceAccess.role === 'member' && workspaceAccess.permissions.editAutomations);
 
   return (
-    <Sidebar>
-      <SidebarHeader>
-        {/* Brand */}
-        <div className="px-4">
-          <h1 className="font-display text-[26px] font-bold text-sidebar-foreground tracking-tight leading-none">
-            Populr
-          </h1>
-          <p className="font-label text-[11px] text-sidebar-muted-foreground uppercase tracking-widest mt-1.5">
-            Creator Suite
-          </p>
+    <TooltipProvider delay={150}>
+      <SidebarHeader className={collapsed ? 'items-center gap-3' : undefined}>
+        <div
+          className={cn(
+            collapsed ? 'flex flex-col items-center gap-3' : 'flex items-start justify-between px-4',
+          )}
+        >
+          {/* The mark at rail width: the word cannot fit, and the P is what
+              people already recognise on the tab. Not a link at either
+              width — Home is in the list directly below, and a brand that
+              silently navigates is a door nobody knows is there. */}
+          {collapsed ? (
+            <span className="font-display text-[20px] font-bold leading-none text-sidebar-foreground">
+              P
+            </span>
+          ) : (
+            <div>
+              <h1 className="font-display text-[26px] font-bold text-sidebar-foreground tracking-tight leading-none">
+                Populr
+              </h1>
+              <p className="font-label text-[11px] text-sidebar-muted-foreground uppercase tracking-widest mt-1.5">
+                Creator Suite
+              </p>
+            </div>
+          )}
+
+          {/* One control, one home: the top of the column, at both widths.
+              It moved ends between states in the version this replaced,
+              which made the same button feel like two.
+              `hidden md:flex` because this renders in the phone drawer too,
+              where a drawer closes rather than collapses. */}
+          <button
+            type="button"
+            onClick={() => setCollapsed(!preference)}
+            aria-label={preference ? 'Expand navigation' : 'Collapse navigation'}
+            aria-pressed={preference}
+            className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg
+              text-sidebar-muted-foreground transition-colors hover:bg-sidebar-muted
+              hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-sidebar-ring"
+          >
+            {preference ? (
+              <PanelLeftOpen size={17} strokeWidth={1.9} />
+            ) : (
+              <PanelLeftClose size={17} strokeWidth={1.9} />
+            )}
+          </button>
         </div>
 
         {/* Create CTA — the same action as Home's "Create an automation":
-            one creation experience, two entry points. */}
+            one creation experience, two entry points. It survives the rail
+            because collapsing is now something a creator does anywhere, not
+            a mode inside the builder where creating was beside the point. */}
         {offerCreate && (
-          <button
-            type="button"
-            onClick={() => {
-              closeMobile();
-              beginCreateAutomation();
-            }}
-            className="mx-1 flex items-center justify-center gap-2 rounded-full bg-sidebar-accent
-              px-6 py-3.5 font-semibold text-foreground transition-colors
-              hover:bg-secondary-fixed-dim"
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            Create
-          </button>
+          <Labelled collapsed={collapsed} label="Create">
+            <button
+              type="button"
+              onClick={() => {
+                closeMobile();
+                beginCreateAutomation();
+              }}
+              aria-label={collapsed ? 'Create' : undefined}
+              className={cn(
+                'flex items-center justify-center bg-sidebar-accent font-semibold text-foreground',
+                'transition-colors hover:bg-secondary-fixed-dim',
+                collapsed ? 'h-11 w-11 rounded-2xl' : 'mx-1 gap-2 rounded-full px-6 py-3.5',
+              )}
+            >
+              <Plus size={18} strokeWidth={2.5} />
+              {!collapsed && 'Create'}
+            </button>
+          </Labelled>
         )}
       </SidebarHeader>
 
-      <SidebarMenu>
+      <SidebarMenu className={collapsed ? 'items-center' : undefined}>
         {items.map(item => {
           const active = isActivePath(location.pathname, item.path);
           const Icon = item.icon;
           const waiting = item.path === '/inbox' ? inboxCount : 0;
           return (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={closeMobile}
-              // The real count belongs in the name even when the pill has to
-              // round it off: "9+" is a decision about width, not about how
-              // many people are waiting.
-              aria-label={waiting > 0 ? `${item.label}, ${waiting} conversations waiting` : undefined}
-              aria-current={active ? 'page' : undefined}
-              className={sidebarMenuButtonClass(active)}
-            >
-              <Icon
-                size={20}
-                strokeWidth={active ? 2.4 : 2}
-                className="transition-transform group-hover:scale-110"
-              />
-              <span className="text-[15px]">{item.label}</span>
-              {waiting > 0 && (
-                // The waiting count the retired drawer-launcher used to
-                // carry. aria-hidden because the link above already says it.
-                <span
-                  aria-hidden="true"
-                  className="ml-auto rounded-full bg-sidebar-primary px-1.5 text-[10.5px]
-                    font-semibold leading-[17px] text-sidebar-primary-foreground"
-                >
-                  {waiting > 9 ? '9+' : waiting}
-                </span>
-              )}
-            </Link>
+            <Labelled key={item.path} collapsed={collapsed} label={item.label}>
+              <Link
+                to={item.path}
+                onClick={closeMobile}
+                // The real count belongs in the name even when the pill has
+                // to round it off: "9+" is a decision about width, not about
+                // how many people are waiting. At rail width the label has
+                // to be in the name too — there is nothing else to read.
+                aria-label={
+                  waiting > 0
+                    ? `${item.label}, ${waiting} conversations waiting`
+                    : collapsed
+                      ? item.label
+                      : undefined
+                }
+                aria-current={active ? 'page' : undefined}
+                className={sidebarMenuButtonClass(active, collapsed)}
+              >
+                <Icon
+                  size={20}
+                  strokeWidth={active ? 2.4 : 2}
+                  className="transition-transform group-hover:scale-110"
+                />
+                {!collapsed && <span className="text-[15px]">{item.label}</span>}
+                {waiting > 0 && (
+                  // Same lime pill either way — only where it sits changes,
+                  // because at 44px there is no row to sit at the end of.
+                  // aria-hidden because the link above already says it.
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      `rounded-full bg-sidebar-primary px-1.5 text-[10.5px] font-semibold
+                       leading-[17px] text-sidebar-primary-foreground`,
+                      collapsed ? 'absolute -right-0.5 -top-0.5' : 'ml-auto',
+                    )}
+                  >
+                    {waiting > 9 ? '9+' : waiting}
+                  </span>
+                )}
+              </Link>
+            </Labelled>
           );
         })}
       </SidebarMenu>
 
-      <SidebarFooter>
-        <AccountMenu onNavigate={closeMobile} />
+      <SidebarFooter className={collapsed ? 'flex justify-center' : undefined}>
+        <AccountMenu onNavigate={closeMobile} compact={collapsed} />
       </SidebarFooter>
-    </Sidebar>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * A hover/focus label for a control that has lost its written one.
+ *
+ * Only at rail width, and only ever decoration: every control it wraps
+ * carries its own accessible name, so a screen reader hears the label once
+ * rather than twice.
+ */
+function Labelled({
+  collapsed,
+  label,
+  children,
+}: {
+  collapsed: boolean;
+  label: string;
+  // Base UI's `render` prop hands the trigger's own props to the element,
+  // so it must be one that accepts them — every caller here passes a plain
+  // button or Link.
+  children: React.ReactElement<Record<string, unknown>>;
+}) {
+  if (!collapsed) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side="right" aria-hidden>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }

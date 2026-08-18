@@ -18,6 +18,12 @@ import { navItems } from '../lib/nav';
  * gets the same sidebar and the same header, the builder included, and a
  * page that needs controls in the header puts them into the shell's slots
  * rather than growing a bar of its own.
+ *
+ * The sidebar collapses to a rail, and that is a width rather than a mode —
+ * so it is held to the same rule: offered on EVERY route, from the same
+ * control, and what a creator chooses on one page is what they get on the
+ * next. A collapse that existed only in the builder is what produced the
+ * second component in the first place.
  */
 
 vi.mock('../context/AuthContext', () => ({
@@ -74,11 +80,12 @@ describe('one shell on every route', () => {
       const { container } = mountAt(route.path);
 
       expectFullSidebar();
-      // No icon rail — the builder's old 60px navigation is gone for good.
+      // No separate icon-rail COMPONENT — the builder's old 60px navigation
+      // is gone for good. The rail that exists now is this same sidebar at
+      // its other width.
       expect(screen.queryByRole('navigation', { name: 'Populr' })).not.toBeInTheDocument();
-      // And no route-owned collapse lever either: width is not a mode.
-      expect(screen.queryByRole('button', { name: /collapse navigation/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /expand navigation/i })).not.toBeInTheDocument();
+      // And the collapse control is on every route, never just some of them.
+      expect(screen.getByRole('button', { name: 'Collapse navigation' })).toBeInTheDocument();
 
       // Exactly one header, whatever the page. Two stacked bars was the
       // builder's old phone experience.

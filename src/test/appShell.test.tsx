@@ -6,7 +6,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import AppSidebar from '../components/app/AppSidebar';
 import AppHeader from '../components/app/AppHeader';
 import PageHeader from '../components/PageHeader';
-import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { Conversation } from '../lib/api';
 
@@ -66,7 +65,7 @@ function renderShell(ui: React.ReactNode, url = '/') {
   return render(
     <MemoryRouter initialEntries={[url]}>
       <CreateAutomationProvider>
-        <SidebarProvider>{ui}</SidebarProvider>
+        {ui}
         <Routes>
           <Route path="/" element={<div>home stub</div>} />
           <Route path="/inbox" element={<div>inbox page stub</div>} />

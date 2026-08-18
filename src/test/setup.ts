@@ -1,5 +1,14 @@
 import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+
+// jsdom gives each test FILE a fresh window but not each test, so anything
+// written to localStorage outlives the test that wrote it. The app keeps
+// real preferences there — the navigation's collapsed width, the composer's
+// model — and a preference leaking forward makes the next test's shell a
+// different shape than it asked for.
+afterEach(() => {
+  window.localStorage.clear();
+});
 
 // Provide the client-visible env var authClient.ts requires. Any test
 // that needs a different value can override via vi.stubEnv().

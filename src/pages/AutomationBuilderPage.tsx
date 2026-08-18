@@ -31,6 +31,7 @@ import { HeaderLocal, HeaderActions } from '../components/app/headerSlots';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { SIDEBAR_WIDTH, SIDEBAR_RAIL_WIDTH, useSidebar } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
 /**
@@ -59,42 +60,45 @@ import { cn } from '@/lib/utils';
 type SidePanel = 'preview' | 'notifications' | 'history' | 'ai' | null;
 
 /**
- * The widths every layout decision below is arithmetic over. SIDEBAR_WIDTH
- * must match ui/sidebar.tsx — the builder shares the app shell now, and the
- * one time these numbers went stale (the 60px icon rail became this 280px
- * sidebar) every threshold that had the old chrome baked in silently
- * over-promised 220px of canvas.
+ * The widths every layout decision below is arithmetic over. The sidebar's
+ * two come from ui/sidebar.tsx rather than being copied here: the one time
+ * a copy went stale (a 60px icon rail became a 280px sidebar) every
+ * threshold with the old chrome baked in silently over-promised 220px of
+ * canvas, and nothing caught it.
  */
-const SIDEBAR_WIDTH = 280;
 const PANEL_WIDTH = 320;
 /** A canvas narrower than this cannot show a step and its next step at
  *  once, which is the least a flow editor can be. */
 const CANVAS_MIN_WIDTH = 480;
 
+/** What the anchored step editor needs of the content column before it
+ *  beats a bottom sheet — a card floating over less than this hides more
+ *  than it shows. */
+const ANCHORED_EDITOR_MIN_CONTENT = 708;
+
 /**
- * The width at which the checks feed and a step's settings can be open at
- * the same time.
+ * Both thresholds are arithmetic over the chrome actually on screen, and
+ * the sidebar's width is a creator's choice now — collapsing it hands the
+ * canvas 208px, which is most of a panel. Reading a constant instead would
+ * make the builder refuse a layout it has the room for, which is exactly
+ * the benefit someone collapses the navigation to get.
  *
- * This is arithmetic, not taste: the sidebar plus two real columns, plus
- * the least canvas worth having. It has to be this high because the panels
- * are columns, not overlays — they take their width from the canvas. Below
- * this the exception is off and it is one thing at a time, which is the
- * honest trade: both columns on a smaller screen would leave the creator
- * unable to see the step the feed just sent them to.
+ * TWO_COLUMN: the sidebar plus two real columns plus the least canvas worth
+ * having. The panels are columns, not overlays — they take their width from
+ * the canvas — so below this it is one thing at a time, which is the honest
+ * trade: both open on a smaller screen leaves the creator unable to see the
+ * step the feed just sent them to.
  */
-const TWO_COLUMN_MIN_WIDTH = SIDEBAR_WIDTH + PANEL_WIDTH * 2 + CANVAS_MIN_WIDTH; // 1400
+function twoColumnMinWidth(sidebar: number): number {
+  return sidebar + PANEL_WIDTH * 2 + CANVAS_MIN_WIDTH;
+}
 
-/**
- * The window width at which the step editor anchors to its node instead of
- * opening as a bottom sheet. The anchored card needs the content column —
- * the window minus the sidebar — to be about 708px, which is what a 768px
- * tablet offered back when the builder's chrome was a 60px rail. Same
- * canvas guarantee, restated against the real sidebar: 708 + 280 = 988.
- */
-const ANCHORED_EDITOR_MIN_WIDTH = 708 + SIDEBAR_WIDTH; // 988
+function anchoredEditorMinWidth(sidebar: number): number {
+  return ANCHORED_EDITOR_MIN_CONTENT + sidebar;
+}
 
-function roomForBothColumns(): boolean {
-  return window.innerWidth >= TWO_COLUMN_MIN_WIDTH;
+function roomForBothColumns(sidebar: number): boolean {
+  return window.innerWidth >= twoColumnMinWidth(sidebar);
 }
 
 export default function AutomationBuilderPage() {
@@ -105,6 +109,13 @@ export default function AutomationBuilderPage() {
   // View-only members can open and read everything; every write affordance
   // below is gated on this so nothing is offered that the API would refuse.
   const mayEdit = canEditAutomations(workspaceAccess);
+
+  // The chrome the canvas is actually competing with. Collapsing the
+  // navigation is a creator's choice on every route now, and it hands this
+  // page 208px — most of a panel — so every threshold below is measured
+  // against the width on screen rather than the widest one possible.
+  const { collapsed: navCollapsed } = useSidebar();
+  const sidebarWidth = navCollapsed ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH;
 
   const builder = useFlowBuilder(flowId);
   const {
@@ -216,21 +227,24 @@ export default function AutomationBuilderPage() {
    * from 768px up, so a 768px tablet has a 488px content column and an
    * anchored 320px card would leave it 168px of canvas. The anchored card
    * earns its place once the content column has the ~708px it always needed
-   * — see ANCHORED_EDITOR_MIN_WIDTH.
+   * — see anchoredEditorMinWidth().
    */
   const [narrowEditor, setNarrowEditor] = useState(false);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time environment fallback
-      setNarrowEditor(window.innerWidth < ANCHORED_EDITOR_MIN_WIDTH);
+      setNarrowEditor(window.innerWidth < anchoredEditorMinWidth(sidebarWidth));
       return;
     }
-    const query = window.matchMedia(`(max-width: ${ANCHORED_EDITOR_MIN_WIDTH - 1}px)`);
+    const query = window.matchMedia(`(max-width: ${anchoredEditorMinWidth(sidebarWidth) - 1}px)`);
     const sync = () => setNarrowEditor(query.matches);
     sync();
     query.addEventListener('change', sync);
     return () => query.removeEventListener('change', sync);
-  }, []);
+    // Re-subscribed when the navigation's width changes: the threshold IS
+    // the sidebar's width plus a constant, so a stale query would be
+    // watching a line that has moved.
+  }, [sidebarWidth]);
 
   /**
    * The question actually on screen.
@@ -278,13 +292,16 @@ export default function AutomationBuilderPage() {
   /**
    * Opening the feed: keep the step beside it, or drop the step.
    *
-   * "Beside" is a width claim — see TWO_COLUMN_MIN_WIDTH. Without the room,
+   * "Beside" is a width claim — see twoColumnMinWidth(). Without the room,
    * keeping both would leave the creator seeing neither the list nor the
    * step, which is the exact thing the exception exists to preserve.
    */
   const keepStepBesideFeed = useCallback(() => {
-    if (!roomForBothColumns()) setSelectedNodeId(null);
-  }, [setSelectedNodeId]);
+    if (!roomForBothColumns(sidebarWidth)) setSelectedNodeId(null);
+    // sidebarWidth belongs here now that the threshold reads it: a callback
+    // closed over the width the sidebar had when it was made would answer
+    // for a shell the creator has since changed.
+  }, [setSelectedNodeId, sidebarWidth]);
 
   /**
    * The window is not only measured when someone clicks.
@@ -306,13 +323,16 @@ export default function AutomationBuilderPage() {
    */
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
-    const query = window.matchMedia(`(min-width: ${TWO_COLUMN_MIN_WIDTH}px)`);
+    const query = window.matchMedia(`(min-width: ${twoColumnMinWidth(sidebarWidth)}px)`);
     const reconcile = () => {
       if (!query.matches) setSelectedNodeId(current => (panel ? null : current));
     };
     query.addEventListener('change', reconcile);
     return () => query.removeEventListener('change', reconcile);
-  }, [panel, setSelectedNodeId]);
+    // sidebarWidth is a dependency for the same reason as above: collapsing
+    // the navigation moves this threshold, and a listener left on the old
+    // one would reconcile against a line that is no longer there.
+  }, [panel, setSelectedNodeId, sidebarWidth]);
 
   const openNotifications = useCallback(async () => {
     setPanel('notifications');
@@ -393,8 +413,8 @@ export default function AutomationBuilderPage() {
     // index, and closing it would cost the creator their place in the list.
     // Otherwise the step wins: they clicked to go somewhere, and the place
     // they landed matters more than the list they left.
-    if (!roomForBothColumns()) setPanel(null);
-  }, [setSelectedNodeId]);
+    if (!roomForBothColumns(sidebarWidth)) setPanel(null);
+  }, [setSelectedNodeId, sidebarWidth]);
 
   useEffect(() => {
     if (!bellAttention) return;
@@ -740,7 +760,7 @@ export default function AutomationBuilderPage() {
             // both columns actually fit; narrower than that, the step the
             // creator just clicked wins the one slot.
             if (id && panel && panel !== 'notifications' && panel !== 'ai') setPanel(null);
-            if (id && (panel === 'notifications' || panel === 'ai') && !roomForBothColumns()) {
+            if (id && (panel === 'notifications' || panel === 'ai') && !roomForBothColumns(sidebarWidth)) {
               setPanel(null);
             }
           }}
