@@ -1,21 +1,13 @@
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Theme } from '@astryxdesign/core/theme'
-import { LayerProvider } from '@astryxdesign/core/Layer'
 import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import ErrorBoundary from './components/ErrorBoundary'
-import { populrTheme } from './design-system/theme'
 import { createQueryClient, listenForCreatorsReturn } from './lib/queryClient'
 import './index.css'
 import App from './App.tsx'
 
-// Theme and LayerProvider are mounted once here at the true app root —
-// never inside a page — so every route (migrated or not) shares the same
-// token/overlay context. mode is fixed to 'light' for now; Populr has no
-// dark mode yet, on either the legacy Tailwind UI or the Astryx side.
-//
 // QueryClientProvider holds everything the server has told us. It sits
 // above AuthProvider because signing out CLEARS it — cached answers belong
 // to the session that asked for them, and must not still be on screen when
@@ -38,18 +30,14 @@ listenForCreatorsReturn()
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    <Theme theme={populrTheme} mode="light">
-      <LayerProvider>
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <AuthProvider>
-              <AppProvider>
-                <App />
-              </AppProvider>
-            </AuthProvider>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </LayerProvider>
-    </Theme>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppProvider>
+            <App />
+          </AppProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   </ErrorBoundary>
 )

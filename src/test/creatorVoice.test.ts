@@ -171,3 +171,19 @@ describe('one font system', () => {
     expect(deps.filter(d => d.includes('fontsource'))).toEqual([]);
   });
 });
+
+describe('one design system', () => {
+  it('ships no second component framework', () => {
+    // Populr's look is its own: tokens in index.css, primitives in
+    // components/ui, all source-owned. A vendor framework used to sit
+    // beside them with its own reset, its own cascade layers, and a
+    // runtime-injected theme that had to be fought to keep headings
+    // inheriting their color. Nothing of it should come back by way of a
+    // convenient import.
+    const deps = {
+      ...(pkg as { dependencies?: Record<string, string> }).dependencies,
+      ...(pkg as { devDependencies?: Record<string, string> }).devDependencies,
+    };
+    expect(Object.keys(deps).filter(d => d.includes('astryx'))).toEqual([]);
+  });
+});

@@ -6,12 +6,11 @@ import {
   Upload, X as XIcon, GripVertical, AlertCircle,
   ChevronLeft, ChevronRight, Loader2, Check, ArrowRight, RefreshCw,
 } from 'lucide-react';
-import { Card } from '@astryxdesign/core/Card';
-import { SelectableCard } from '@astryxdesign/core/SelectableCard';
-import { Button } from '@astryxdesign/core/Button';
-import { Banner } from '@astryxdesign/core/Banner';
-import { Spinner } from '@astryxdesign/core/Spinner';
-import { TextArea } from '@astryxdesign/core/TextArea';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertTitle } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { useApp } from '../context/AppContext';
 import { isCreatorSafe } from '../lib/voice';
 import PageHeader from '../components/PageHeader';
@@ -317,11 +316,10 @@ export default function CreatePostPage() {
     return (
       <div className="pop-page max-w-[640px]">
         <PageHeader title="Create Post" />
-        <Banner
-          status="warning"
-          title="Populr isn't connected to its server yet"
-          description="Populr can't reach its server, so posts can't be created right now."
-        />
+        <Alert variant="warning">
+          <AlertTitle>Populr isn&apos;t connected to its server yet</AlertTitle>
+          <p className="mt-0.5">Populr can&apos;t reach its server, so posts can&apos;t be created right now.</p>
+        </Alert>
       </div>
     );
   }
@@ -329,7 +327,7 @@ export default function CreatePostPage() {
   if (loadingExisting) {
     return (
       <div className="pop-page max-w-[720px] flex items-center justify-center py-24">
-        <Spinner size="lg" />
+        <Loader2 size={28} className="animate-spin text-muted-foreground" aria-label="Loading" />
       </div>
     );
   }
@@ -376,7 +374,7 @@ export default function CreatePostPage() {
 
         <div className="space-y-2.5 mb-8">
           {post.targets.map(t => (
-            <Card key={t.id} padding={4} className="flex items-center gap-3">
+            <Card key={t.id} className="flex items-center gap-3 p-4">
               {(() => {
                 const P = platformMeta(t.platform);
                 const Icon = P.icon;
@@ -398,11 +396,15 @@ export default function CreatePostPage() {
 
         {allDone && (
           <div className="flex flex-col sm:flex-row gap-2.5">
-            <Button variant="secondary" label="View post" className="flex-1" onClick={() => navigate(`/content/${post.post.id}`)} />
-            <Button variant="secondary" label="Go to Content" className="flex-1" onClick={() => navigate('/content')} />
+            <Button variant="secondary" className="flex-1" onClick={() => navigate(`/content/${post.post.id}`)}>
+              View post
+            </Button>
+            <Button variant="secondary" className="flex-1" onClick={() => navigate('/content')}>
+              Go to Content
+            </Button>
             {anyFailed && (
               <Button
-                variant="secondary" label="Retry failed platforms" icon={<RefreshCw size={14} />} className="flex-1"
+                variant="secondary" className="flex-1"
                 onClick={async () => {
                   const { retryPostDestinations } = await import('../lib/api');
                   try {
@@ -412,9 +414,13 @@ export default function CreatePostPage() {
                     showToast(err instanceof Error ? err.message : 'Retry failed.', 'error');
                   }
                 }}
-              />
+              >
+                <RefreshCw size={14} /> Retry failed platforms
+              </Button>
             )}
-            <Button variant="primary" label={anySucceeded ? 'Return Home' : 'Back to Home'} className="flex-1" onClick={() => navigate('/')} />
+            <Button className="flex-1" onClick={() => navigate('/')}>
+              {anySucceeded ? 'Return Home' : 'Back to Home'}
+            </Button>
           </div>
         )}
       </div>
@@ -431,7 +437,9 @@ export default function CreatePostPage() {
   return (
     <div className="pop-page max-w-[720px]">
       <div className="flex items-center justify-between mb-6">
-        <Button variant="ghost" icon={<ChevronLeft size={16} />} label="Back" onClick={step === 1 ? () => navigate(-1) : goBack} />
+        <Button variant="ghost" size="sm" className="-ml-1.5" onClick={step === 1 ? () => navigate(-1) : goBack}>
+          <ChevronLeft size={16} /> Back
+        </Button>
         <div className="flex items-center gap-1.5">
           {[1, 2, 3].map(s => (
             <span key={s} className={`h-[3px] w-8 rounded-full ${s <= step ? 'bg-chartreuse' : 'bg-[#E8E4DF]'}`} />
@@ -451,21 +459,31 @@ export default function CreatePostPage() {
           // to a creator who actually has accounts (and blocking them) is the
           // bug this branch avoids.
           accountsLoading ? (
-            <Banner status="info" title="Checking your connected accounts…" description="One moment." />
+            <Alert>
+              <AlertTitle>Checking your connected accounts…</AlertTitle>
+              <p className="mt-0.5">One moment.</p>
+            </Alert>
           ) : accountsError ? (
-            <Banner
-              status="warning"
-              title="Couldn't check your connected accounts"
-              description="Populr couldn't load which accounts are connected. This doesn't change what you've connected — try again."
-              endContent={<Button label="Try again" variant="primary" size="sm" onClick={() => { void refreshAccounts(); }} />}
-            />
+            <Alert variant="warning">
+              <AlertTitle>Couldn&apos;t check your connected accounts</AlertTitle>
+              <p className="mt-0.5">
+                Populr couldn&apos;t load which accounts are connected. This doesn&apos;t change what
+                you&apos;ve connected — try again.
+              </p>
+              <Button size="sm" className="mt-2.5" onClick={() => { void refreshAccounts(); }}>
+                Try again
+              </Button>
+            </Alert>
           ) : (
-            <Banner
-              status="warning"
-              title="Connect an account first"
-              description="Populr needs at least one connected account to know what you can post and where."
-              endContent={<Button label="Go to Connections" variant="primary" size="sm" onClick={() => navigate('/connections')} />}
-            />
+            <Alert variant="warning">
+              <AlertTitle>Connect an account first</AlertTitle>
+              <p className="mt-0.5">
+                Populr needs at least one connected account to know what you can post and where.
+              </p>
+              <Button size="sm" className="mt-2.5" onClick={() => navigate('/connections')}>
+                Go to Connections
+              </Button>
+            </Alert>
           )
         ) : (
           <div>
@@ -477,13 +495,16 @@ export default function CreatePostPage() {
                   .map(a => a.platform);
                 const uniquePlatforms = [...new Set(supportedPlatforms)];
                 return (
-                  <SelectableCard
+                  <button
                     key={mt.id}
-                    label={mt.label}
-                    padding={5}
-                    isSelected={mediaType === mt.id}
-                    onChange={() => { setMediaType(mt.id); if (mt.id === 'text') setMediaItems([]); }}
+                    type="button"
+                    aria-pressed={mediaType === mt.id}
+                    aria-label={mt.label}
+                    onClick={() => { setMediaType(mt.id); if (mt.id === 'text') setMediaItems([]); }}
+                    className="rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2
+                      focus-visible:ring-chartreuse/50 focus-visible:ring-offset-2"
                   >
+                  <Card interactive selected={mediaType === mt.id} className="h-full p-5">
                     <Icon size={24} className="text-[#111111] mb-3" />
                     <p className="pop-card-title">{mt.label}</p>
                     <p className="pop-body mt-1">{mt.description}</p>
@@ -496,7 +517,8 @@ export default function CreatePostPage() {
                         })}
                       </div>
                     )}
-                  </SelectableCard>
+                  </Card>
+                  </button>
                 );
               })}
             </div>
@@ -588,14 +610,16 @@ export default function CreatePostPage() {
                 const selected = selectedAccountIds.includes(a.id);
                 const caps = capabilities[a.platform];
                 return (
-                  <SelectableCard
+                  <button
                     key={a.id}
-                    label={platformLabel(a.platform)}
-                    padding={4}
-                    className="w-full flex items-center gap-3"
-                    isSelected={selected}
-                    onChange={() => setSelectedAccountIds(prev => selected ? prev.filter(id => id !== a.id) : [...prev, a.id])}
+                    type="button"
+                    aria-pressed={selected}
+                    aria-label={platformLabel(a.platform)}
+                    onClick={() => setSelectedAccountIds(prev => selected ? prev.filter(id => id !== a.id) : [...prev, a.id])}
+                    className="w-full rounded-2xl text-left focus-visible:outline-none
+                      focus-visible:ring-2 focus-visible:ring-chartreuse/50 focus-visible:ring-offset-2"
                   >
+                  <Card interactive selected={selected} className="flex w-full items-center gap-3 p-4">
                     <Icon size={22} style={{ color: P?.color }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-[#111111]">{platformLabel(a.platform)}</p>
@@ -609,7 +633,8 @@ export default function CreatePostPage() {
                     ) : (
                       <span className="w-5 h-5 rounded-full border-2 border-[#E8E4DF] flex-shrink-0" />
                     )}
-                  </SelectableCard>
+                  </Card>
+                  </button>
                 );
               })}
           </div>
@@ -637,11 +662,16 @@ export default function CreatePostPage() {
           })()}
 
           <div className="mt-8">
-            <TextArea
-              label="Caption"
-              description="This caption will be used across your selected platforms. You can review how it appears on each platform before publishing."
+            <Label htmlFor="caption">Caption</Label>
+            <p id="caption-help" className="mb-1.5 mt-0.5 text-[12px] text-muted-foreground">
+              This caption will be used across your selected platforms. You can review how it
+              appears on each platform before publishing.
+            </p>
+            <Textarea
+              id="caption"
+              aria-describedby="caption-help"
               value={caption}
-              onChange={setCaption}
+              onChange={e => setCaption(e.target.value)}
               rows={6}
               placeholder="Write a caption…"
             />
@@ -723,10 +753,12 @@ export default function CreatePostPage() {
           )}
 
           <div className="mt-4 flex justify-center">
-            <Button variant="ghost" label="Edit caption & platforms" onClick={() => setStep(2)} />
+            <Button variant="ghost" size="sm" onClick={() => setStep(2)}>
+              Edit caption &amp; platforms
+            </Button>
           </div>
 
-          <Card padding={5} className="mt-6">
+          <Card className="mt-6 p-5">
             <div className="text-[12px] text-[#6B6B6B] space-y-0.5 mb-4 pb-4 border-b border-[#E8E4DF]">
               <p>Media: <span className="text-[#111111] font-medium capitalize">{mediaType}</span></p>
               <p>Destinations: <span className="text-[#111111] font-medium">{selectedAccountIds.length} platform{selectedAccountIds.length === 1 ? '' : 's'} ({selectedPlatforms.map(platformLabel).join(', ')})</span></p>
@@ -734,10 +766,10 @@ export default function CreatePostPage() {
               <p>Caption: <span className="text-[#111111] font-medium">{caption.trim() ? `${caption.length} characters` : 'Empty'}</span></p>
             </div>
 
-            <Button
-              variant="primary" width="100%" icon={<ArrowRight size={15} />} label={publishButtonLabel()}
-              isLoading={submitting} isDisabled={!canSubmit} onClick={handleSubmit}
-            />
+            <Button className="w-full" disabled={!canSubmit} onClick={handleSubmit}>
+              {submitting ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />}
+              {publishButtonLabel()}
+            </Button>
           </Card>
         </div>
       )}
@@ -745,7 +777,9 @@ export default function CreatePostPage() {
       {/* Footer nav for steps 1-2 */}
       {step < 3 && (
         <div className="flex justify-end mt-8">
-          <Button variant="primary" label="Continue" endContent={<ArrowRight size={15} />} isDisabled={!canContinueFrom(step)} onClick={goNext} />
+          <Button disabled={!canContinueFrom(step)} onClick={goNext}>
+            Continue <ArrowRight size={15} />
+          </Button>
         </div>
       )}
     </div>

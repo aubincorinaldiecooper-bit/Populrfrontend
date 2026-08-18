@@ -1,19 +1,10 @@
-/* ─── Astryx / Tailwind v3 cascade layer coexistence ───
- * Canonical layer order, declared once before any other rule (per the
- * CSS spec, @import must be a leading rule, so this — and the imports
- * below — come before the @font-face blocks that used to open this
- * file). Astryx's reset/base load below Tailwind's own preflight so
- * migrated components' resets are not clobbered by Tailwind's;
- * astryx-theme (component style overrides injected by <Theme>, see
- * src/design-system/theme.ts) is the highest layer so it wins over
- * both. Tailwind's own components/utilities stay unlayered so every
- * existing pop-* utility class keeps working exactly as before on
- * not-yet-migrated pages.
- * See @astryxdesign/cli's `astryx docs migration` for the full rationale. */
-@layer reset, tw-preflight, astryx-base, astryx-theme;
-
-@import '@astryxdesign/core/reset.css';
-@import '@astryxdesign/core/astryx.css';
+/* ─── Cascade layer order ───
+ * Declared once, before any other rule. What used to live here was a
+ * coexistence arrangement between two design systems: a vendor reset and
+ * a runtime-injected theme layer that had to outrank Tailwind's preflight
+ * without clobbering it. Only Populr's own system remains, so the order
+ * is just the two layers this file actually uses. */
+@layer reset, tw-preflight;
 
 @font-face {
   font-family: 'Geist';
@@ -307,44 +298,14 @@
   .pop-status-draft { @apply bg-[#F3F4F6] text-[#6B7280]; }
 }
 
-/* ─── Astryx prose-default override ───
- * <Theme> injects document-wide "prose" defaults for bare h1-h6/p (see
- * @astryxdesign/core's Theme.tsx / generateThemeRules.ts) into @layer
- * reset, explicitly setting `color` — scoped to the whole app, since
- * Theme mounts at the true root with no nested-theme boundary to stop
- * at. That's correct for pages actually built with Astryx, but it broke
- * this app's existing pattern of inheriting text color from an ancestor
- * (a wrapper sets `color` once and its headings/paragraphs inherit it) —
- * an explicit rule always wins over inheritance, regardless of how
- * low-priority its layer is.
- *
- * Placed in @layer tw-preflight (not unlayered): that wins over
- * @layer reset, restoring plain inheritance for not-yet-migrated pages,
- * while still losing to real Astryx components in later phases —
- * Heading/Text render as h1-h6/p too, styled via @layer astryx-base /
- * astryx-theme, which both outrank tw-preflight in the declared order
- * above and must keep winning once pages actually adopt them. */
-/* ─── ProgressBar/StatusDot "accent" variant color fix ───
- * theme-neutral (which populrTheme extends) hardcodes a fixed informational
- * blue for these two components' `variant="accent"` — `.astryx-progressbar
- * .accent { --color-accent: #0074e2 }` / `.astryx-statusdot.accent { ... }`
- * — rather than inheriting the theme's actual --color-accent token. Verified
- * via computed-style inspection: populrTheme's root-level --color-accent
- * (#C5FF3D, correct) is present everywhere except inside these two
- * component-variant selectors, which set their own value at equal
- * specificity within the same runtime-injected astryx-theme layer, so a
- * same-layer override can't reliably win (source order favors whichever
- * loads last, which is the runtime injection). Deliberately unlayered:
- * per the CSS cascade, any unlayered rule outranks every layered rule
- * regardless of specificity or order, so this wins without fighting layer
- * timing. Revisit if a future @astryxdesign/theme-neutral version fixes
- * this upstream (checked against 0.2.0).
+/* ─── Headings and paragraphs inherit their color ───
+ * A vendor theme used to inject document-wide "prose" defaults for bare
+ * h1-h6/p with an explicit `color`, which broke this app's pattern of a
+ * wrapper setting color once and its text inheriting it — an explicit
+ * rule always beats inheritance, however low its layer. That injection is
+ * gone with the framework, but the rule it forced us to write is the
+ * behaviour we want stated outright: inheritance, on purpose.
  */
-.astryx-progressbar.accent,
-.astryx-statusdot.accent {
-  --color-accent: #C5FF3D;
-}
-
 @layer tw-preflight {
   :where(h1, h2, h3, h4, h5, h6, p) {
     color: inherit;
