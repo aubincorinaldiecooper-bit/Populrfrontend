@@ -218,6 +218,41 @@ describe('the dropdown', () => {
     fireEvent.click(screen.getByText('Beta'));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('marks the active row with ONE sliding highlight, and tells ears the same story', () => {
+    // The tint used to be painted by whichever row was active — a light
+    // blinking on and off down the list. It is one element now, gliding
+    // between rows; what must hold is that there is exactly one, that it is
+    // invisible to assistive tech (the row itself still answers through
+    // aria-activedescendant), and that it shows only while a row is active.
+    render(
+      <Select
+        value=""
+        ariaLabel="Pick"
+        placeholder="Choose…"
+        options={[{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }]}
+        onChange={vi.fn()}
+      />,
+    );
+    const button = screen.getByLabelText('Pick');
+    fireEvent.click(button);
+
+    const listbox = screen.getByRole('listbox');
+    const highlight = listbox.querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(highlight).not.toBeNull();
+    // Nothing is active yet (the placeholder is showing), so nothing is lit.
+    expect(highlight.style.opacity).toBe('0');
+    // And no row carries its own tint — the highlight is the only marker.
+    expect(listbox.querySelectorAll('[role="option"].bg-\\[\\#F4F7EC\\]').length).toBe(0);
+
+    fireEvent.keyDown(button, { key: 'ArrowDown' });
+    expect(highlight.style.opacity).toBe('1');
+    // The row the highlight sits on is the row a screen reader hears.
+    expect(button).toHaveAttribute(
+      'aria-activedescendant',
+      listbox.querySelectorAll('[role="option"]')[0].id,
+    );
+  });
 });
 
 describe('the post picker', () => {

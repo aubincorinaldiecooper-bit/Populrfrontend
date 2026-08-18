@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import MenuHighlight from './MenuHighlight';
 
 /**
  * The builder's dropdown.
@@ -169,14 +170,15 @@ export default function Select<T extends string>({
           onKeyDown={onKeyDown}
           className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-72 overflow-y-auto
             rounded-xl border border-[#E8E4DF] bg-white p-1
-            shadow-[0_8px_28px_rgba(17,17,17,0.12)]"
+            shadow-[0_8px_28px_rgba(17,17,17,0.12)]
+            origin-top motion-safe:animate-[pop-menu-in_140ms_cubic-bezier(0.23,1,0.32,1)]"
         >
+          <MenuHighlight listRef={listRef} activeIndex={activeIndex} />
           {options.length === 0 && (
             <p className="px-2.5 py-2 text-[12px] text-[#8A857E]">Nothing to choose from yet.</p>
           )}
           {options.map((option, i) => {
             const isSelected = option.value === value;
-            const isActive = i === activeIndex;
             return (
               <div
                 key={option.value}
@@ -186,9 +188,11 @@ export default function Select<T extends string>({
                 aria-disabled={option.disabled}
                 onClick={() => commit(i)}
                 onMouseEnter={() => !option.disabled && setActiveIndex(i)}
-                className={`flex items-start gap-2 rounded-lg px-2.5 py-2 cursor-pointer
-                  ${option.disabled ? 'opacity-45 cursor-not-allowed' : ''}
-                  ${isActive && !option.disabled ? 'bg-[#F4F7EC]' : ''}`}
+                // `relative`, so rows paint above the sliding highlight —
+                // which is now the ONLY thing that marks the active row
+                // visually; per-row tinting on top of it would double up.
+                className={`relative flex items-start gap-2 rounded-lg px-2.5 py-2 cursor-pointer
+                  ${option.disabled ? 'opacity-45 cursor-not-allowed' : ''}`}
               >
                 <Check
                   size={14}

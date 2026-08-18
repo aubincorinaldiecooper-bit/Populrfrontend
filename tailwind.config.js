@@ -188,6 +188,13 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'fade-in': 'fade-in 0.2s ease-out',
       },
+      transitionTimingFunction: {
+        // The builder's easing: decisive start, long soft landing. Named so
+        // a node lift, an edge highlight and a menu highlight all settle
+        // with the same hand — three curves chosen separately would each be
+        // fine and together feel like three products.
+        'out-quint': 'cubic-bezier(0.23, 1, 0.32, 1)',
+      },
     },
   },
   plugins: [require('tailwindcss-animate')],

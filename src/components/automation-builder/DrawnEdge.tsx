@@ -47,6 +47,12 @@ export default function DrawnEdge({
         style={{
           stroke: active ? '#C5FF3D' : '#D8D3CC',
           strokeWidth: active ? 2.5 : 1.5,
+          // The Preview's path lights up along the connectors rather than
+          // snapping on: colour and weight ease with the builder's shared
+          // curve. Collapsed wholesale by the reduced-motion rule in
+          // index.css, like every other transition in the product.
+          transition:
+            'stroke 200ms cubic-bezier(0.23, 1, 0.32, 1), stroke-width 200ms cubic-bezier(0.23, 1, 0.32, 1)',
           ...(drawing
             ? {
                 strokeDasharray: 1,
