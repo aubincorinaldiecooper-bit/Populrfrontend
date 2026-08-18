@@ -7,7 +7,7 @@ import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import { populrTheme } from './design-system/theme'
-import { createQueryClient } from './lib/queryClient'
+import { createQueryClient, listenForCreatorsReturn } from './lib/queryClient'
 import './index.css'
 import App from './App.tsx'
 
@@ -34,6 +34,7 @@ import App from './App.tsx'
 // of them is the thing that crashed. Layout has its own, route-scoped
 // boundary for the common in-content case.
 const queryClient = createQueryClient()
+listenForCreatorsReturn()
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
