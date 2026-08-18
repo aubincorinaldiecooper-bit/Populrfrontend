@@ -1,3 +1,4 @@
+import { cardVariants } from '@/components/ui/card';
 import { useCallback, useEffect, useState } from 'react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -117,7 +118,7 @@ export default function SettingsPage() {
       <PageHeader title="Settings" subtitle="Your Populr account." />
 
       <div className="space-y-4">
-        <section className="pop-card p-6">
+        <section className={cn(cardVariants(), "p-6")}>
           <h2 className="font-geist font-semibold text-sm text-[#111111] mb-5">Account</h2>
           <div className="flex items-center gap-4">
             {identity.avatarUrl ? (
@@ -143,7 +144,7 @@ export default function SettingsPage() {
             it is never reported here, because it isn't the creator's to see
             or act on. */}
         {backendConfigured && ownerView && (
-          <section className="pop-card p-6">
+          <section className={cn(cardVariants(), "p-6")}>
             <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Automations</h2>
             <p className="text-[12px] text-[#6B6B6B] mb-4">
               Pause every automation in this workspace without editing them one by one.
@@ -205,7 +206,7 @@ export default function SettingsPage() {
         {/* Connected social accounts are managed on Channels — pointing there
             keeps one home for that rather than a second, drifting copy of the
             same connection UI here. */}
-        <Link to="/channels" className="pop-card p-5 pop-card-hover flex items-center gap-3">
+        <Link to="/channels" className={cn(cardVariants({ interactive: true }), "flex items-center gap-3 p-5")}>
           <div className="w-9 h-9 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
             <Waypoints size={16} className="text-[#6B6B6B]" />
           </div>
@@ -216,7 +217,7 @@ export default function SettingsPage() {
           <ArrowRight size={16} className="text-[#9B9B8F] flex-shrink-0" />
         </Link>
 
-        <section className="pop-card p-6">
+        <section className={cn(cardVariants(), "p-6")}>
           <h2 className="font-geist font-semibold text-sm text-[#111111] mb-1">Session</h2>
           <p className="text-[12px] text-[#6B6B6B] mb-4">
             {identity.email

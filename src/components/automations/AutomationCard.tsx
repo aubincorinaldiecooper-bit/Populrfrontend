@@ -1,3 +1,4 @@
+import { cardVariants } from '@/components/ui/card';
 import { useEffect, useRef, useState } from 'react';
 import {
   Zap, GitBranch, Pause, Play, MoreHorizontal, Pencil, Copy, Trash2, Loader2, AlertTriangle,
@@ -126,7 +127,7 @@ export default function AutomationCard({
         if (renaming) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
-      className={`pop-card p-4 pop-card-lift cursor-pointer outline-none
+      className={`${cardVariants({ interactive: true })} p-4 cursor-pointer outline-none
         focus-visible:ring-2 focus-visible:ring-chartreuse focus-visible:ring-offset-2
         focus-visible:ring-offset-cream
         ${live ? 'shadow-[0_1px_3px_rgba(17,17,17,0.05)]' : ''}`}

@@ -1,3 +1,4 @@
+import { Card } from '@/components/ui/card';
 /**
  * Loading placeholders shaped like the content that's arriving.
  *
@@ -25,7 +26,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
  */
 function ListRow({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="pop-card p-4">
+    <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <Skeleton className="w-10 h-10 rounded-xl flex-shrink-0" />
@@ -42,7 +43,7 @@ function ListRow({ compact = false }: { compact?: boolean }) {
         </div>
         <Skeleton className="w-8 h-8 rounded-lg flex-shrink-0" />
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -92,13 +93,13 @@ export function PostGridSkeleton({ count = 6, label = 'Loading your posts' }: {
       aria-label={label}
     >
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="pop-card overflow-hidden">
+        <Card key={i} className="overflow-hidden">
           <Skeleton className="w-full aspect-square rounded-none" />
           <div className="p-2.5 space-y-1.5">
             <Skeleton className="h-3 rounded w-[80%]" />
             <Skeleton className="h-2.5 rounded w-[45%]" />
           </div>
-        </div>
+        </Card>
       ))}
       <span className="sr-only">{label}</span>
     </div>
@@ -117,10 +118,10 @@ export function StatGridSkeleton({ count = 4, label = 'Loading your numbers' }: 
       aria-label={label}
     >
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="pop-card p-4 space-y-2.5">
+        <Card key={i} className="p-4 space-y-2.5">
           <Skeleton className="h-3 rounded w-[55%]" />
           <Skeleton className="h-6 rounded w-[35%]" />
-        </div>
+        </Card>
       ))}
       <span className="sr-only">{label}</span>
     </div>

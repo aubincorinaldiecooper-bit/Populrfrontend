@@ -1,3 +1,5 @@
+import { Card, cardVariants } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -60,9 +62,9 @@ function Tile({ icon, value, label, sub, to }: {
     </>
   );
   return to ? (
-    <Link to={to} className="pop-card pop-card-hover p-4 block">{body}</Link>
+    <Link to={to} className={cn(cardVariants({ interactive: true }), "block p-4")}>{body}</Link>
   ) : (
-    <div className="pop-card p-4">{body}</div>
+    <Card className="p-4">{body}</Card>
   );
 }
 
@@ -155,9 +157,9 @@ export default function HomePage() {
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page max-w-[900px]">
+      <Page className="max-w-[900px]">
         <PageHeader title="Home" subtitle="Your automations are working while you're not." />
-        <div className="pop-card p-6 flex items-start gap-3">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
@@ -165,8 +167,8 @@ export default function HomePage() {
               Populr can&apos;t reach its server, so your dashboard can&apos;t be loaded right now.
             </p>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     );
   }
 
@@ -176,7 +178,7 @@ export default function HomePage() {
   const gettingStarted = !!data && totals!.activeAutomations === 0 && totals!.contacts === 0;
 
   return (
-    <div className="pop-page max-w-[900px]">
+    <Page className="max-w-[900px]">
       <PageHeader
         title="Home"
         subtitle="Your automations are working while you're not."
@@ -195,7 +197,7 @@ export default function HomePage() {
       )}
 
       {!loading && error && (
-        <div className="pop-card p-4 flex items-center gap-3">
+        <Card className="p-4 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <div className="flex-1">
             <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t load your dashboard</p>
@@ -204,7 +206,7 @@ export default function HomePage() {
           <Button variant="outline" onClick={load} className="text-[12px] py-1.5 px-3 flex-shrink-0">
             <RefreshCw size={13} />Retry
           </Button>
-        </div>
+        </Card>
       )}
 
       {!loading && !error && data && (
@@ -214,7 +216,7 @@ export default function HomePage() {
               operator stop isn't the creator's to undo, so it doesn't route
               to Settings (which would show "Running" and contradict this). */}
           {data.globallyPaused && (
-            <div className="pop-card p-4 flex items-center gap-3 border-l-4 border-[#D97706]">
+            <Card className="p-4 flex items-center gap-3 border-l-4 border-[#D97706]">
               <Pause size={16} className="text-[#D97706] flex-shrink-0" />
               <p className="text-[13px] text-[#111111] flex-1">
                 {data.pauseScope === 'platform'
@@ -229,7 +231,7 @@ export default function HomePage() {
                   Go to Settings
                 </Link>
               )}
-            </div>
+            </Card>
           )}
 
           {/* ATTENTION — the one place this count appears. Opens Inbox
@@ -237,7 +239,7 @@ export default function HomePage() {
           {totals!.needsReply > 0 && (
             <button
               onClick={() => navigate('/inbox?f=needs-you')}
-              className="pop-card pop-card-hover p-4 w-full flex items-center gap-3 text-left ring-2 ring-chartreuse"
+              className={cn(cardVariants({ interactive: true }), "flex w-full items-center gap-3 p-4 text-left ring-2 ring-chartreuse")}
             >
               <div className="w-9 h-9 rounded-xl bg-chartreuse flex items-center justify-center flex-shrink-0">
                 <InboxIcon size={16} className="text-[#111111]" />
@@ -256,7 +258,7 @@ export default function HomePage() {
 
           {gettingStarted ? (
             /* First-run: one honest path forward instead of empty analytics. */
-            <div className="pop-card p-8 text-center">
+            <Card className="p-8 text-center">
               <div className="w-12 h-12 rounded-2xl bg-chartreuse flex items-center justify-center mx-auto mb-4">
                 <Zap size={22} className="text-[#111111]" />
               </div>
@@ -274,7 +276,7 @@ export default function HomePage() {
                   <Link to="/channels" className="underline underline-offset-2 hover:text-[#111111]">do it now</Link>.
                 </p>
               )}
-            </div>
+            </Card>
           ) : (
             <>
               {/* PERFORMANCE — four marketer tiles. Tiles whose metric can't
@@ -314,7 +316,7 @@ export default function HomePage() {
               {/* AUTOMATION PERFORMANCE — per automation, from the account
                   it actually runs on. */}
               {data.automationPerformance.length > 0 && (
-                <section className="pop-card p-5">
+                <section className={cn(cardVariants(), "p-5")}>
                   <h2 className="type-section-title mb-1">Automation performance</h2>
                   <p className="text-[12px] text-[#6B6B6B] mb-3">
                     Only what each channel can really measure — nothing padded with zeros.
@@ -334,7 +336,7 @@ export default function HomePage() {
 
               {/* RECENT — a few meaningful things, quietly. */}
               {data.recentActivity.length > 0 && (
-                <section className="pop-card p-5">
+                <section className={cn(cardVariants(), "p-5")}>
                   <h2 className="type-section-title mb-3">Recent</h2>
                   <div className="space-y-2.5">
                     {data.recentActivity.map((event, i) => (
@@ -353,6 +355,6 @@ export default function HomePage() {
           )}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

@@ -1,3 +1,5 @@
+import { Card } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { useCallback, useEffect, useState } from 'react';
@@ -53,9 +55,9 @@ export default function InboxPage() {
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page">
+      <Page>
         <PageHeader title="Inbox" subtitle="The people talking to you." />
-        <div className="pop-card p-6 flex items-start gap-3">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">
@@ -65,8 +67,8 @@ export default function InboxPage() {
               Populr can&apos;t reach its server, so your conversations can&apos;t be loaded.
             </p>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     );
   }
 
@@ -114,15 +116,15 @@ export default function InboxPage() {
       )}
 
       {error && (
-        <div className="pop-card p-4 mb-4 flex items-center gap-3">
+        <Card className="p-4 mb-4 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
           <button onClick={refresh} className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-1.5 px-3")}>Retry</button>
-        </div>
+        </Card>
       )}
 
       {!error && (
-        <div className="flex-1 min-h-0 pop-card overflow-hidden flex">
+        <Card className="flex-1 min-h-0 overflow-hidden flex">
           {/* --------------------------------------------------- conversations */}
           <div
             className={`w-full md:w-[300px] md:shrink-0 md:border-r border-[#EFECE6] min-h-0
@@ -177,7 +179,7 @@ export default function InboxPage() {
             )}
           </div>
 
-        </div>
+        </Card>
       )}
     </div>
   );

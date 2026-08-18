@@ -1,3 +1,5 @@
+import { Card } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { useCallback, useEffect, useState } from 'react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -199,14 +201,14 @@ export default function ChannelsPage() {
   const connectedCount = visibleAccounts.filter(a => a.status === 'connected').length;
 
   return (
-    <div className="pop-page max-w-[720px]">
+    <Page className="max-w-[720px]">
       <PageHeader
         title="Channels"
         subtitle="Connect the accounts your automations run on. One is enough to get started."
       />
 
       {!backendConfigured && (
-        <div className="pop-card p-6 mb-6 flex items-start gap-3">
+        <Card className="p-6 mb-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
@@ -214,16 +216,16 @@ export default function ChannelsPage() {
               Populr can&apos;t reach its server, so accounts can&apos;t be connected right now.
             </p>
           </div>
-        </div>
+        </Card>
       )}
 
       {capabilitiesError && (
-        <div className="pop-card p-4 mb-4 flex items-start gap-3">
+        <Card className="p-4 mb-4 flex items-start gap-3">
           <AlertCircle size={16} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <p className="text-[12px] text-[#6B6B6B]">
             We couldn&apos;t check what each platform supports right now, so some limitations may not be shown below.
           </p>
-        </div>
+        </Card>
       )}
 
       <div className="space-y-3 mb-6">
@@ -242,7 +244,7 @@ export default function ChannelsPage() {
           const connectBusy = platformStatus === 'connecting' || platformStatus === 'syncing';
           const Icon = p.icon;
           return (
-            <div key={p.id} className="pop-card p-4">
+            <Card key={p.id} className="p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#FAFAF8] flex items-center justify-center flex-shrink-0">
                   <Icon size={20} style={{ color: p.color }} />
@@ -405,7 +407,7 @@ export default function ChannelsPage() {
                   })}
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>
@@ -449,6 +451,6 @@ export default function ChannelsPage() {
           onClose={() => setConnectAnother(null)}
         />
       )}
-    </div>
+    </Page>
   );
 }

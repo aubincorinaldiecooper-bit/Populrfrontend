@@ -1,3 +1,5 @@
+import { Card } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { SearchInput } from '@/components/ui/search-input';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -453,9 +455,9 @@ export default function AutomationsPage() {
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page">
+      <Page>
         <PageHeader title="Automations" subtitle="Turn creator engagement into autopilot conversations." />
-        <div className="pop-card p-6 flex items-start gap-3">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
@@ -463,13 +465,13 @@ export default function AutomationsPage() {
               Populr can&apos;t reach its server, so your automations can&apos;t be loaded right now.
             </p>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     );
   }
 
   return (
-    <div className="pop-page">
+    <Page>
       <PageHeader
         title="Automations"
         subtitle={loading ? 'Loading…' : `${live.length} live · ${flows.length} total`}
@@ -494,11 +496,11 @@ export default function AutomationsPage() {
       />
 
       {error && (
-        <div className="pop-card p-4 mb-5 flex items-center gap-3">
+        <Card className="p-4 mb-5 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
           <Button variant="outline" onClick={load} className="text-[12px] py-1.5 px-3">Retry</Button>
-        </div>
+        </Card>
       )}
 
       {!error && (
@@ -572,6 +574,6 @@ export default function AutomationsPage() {
         confirmLabel="Delete"
         onConfirm={() => { if (confirmDelete) performDelete(confirmDelete); }}
       />
-    </div>
+    </Page>
   );
 }

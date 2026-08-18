@@ -1,3 +1,5 @@
+import { Card } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { SearchInput } from '@/components/ui/search-input';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -142,9 +144,9 @@ export default function ContactsPage() {
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page">
+      <Page>
         <PageHeader title="Contacts" subtitle="Your people, your community, your next big collab." />
-        <div className="pop-card p-6 flex items-start gap-3">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
@@ -152,8 +154,8 @@ export default function ContactsPage() {
               Populr can&apos;t reach its server, so your contacts can&apos;t be loaded right now.
             </p>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     );
   }
 
@@ -165,7 +167,7 @@ export default function ContactsPage() {
   }
 
   return (
-    <div className="pop-page">
+    <Page>
       <PageHeader
         title="Contacts"
         subtitle="Your people, your community, your next big collab."
@@ -255,14 +257,14 @@ export default function ContactsPage() {
       </div>
 
       {error && (
-        <div className="pop-card p-4 mb-5 flex items-center gap-3">
+        <Card className="p-4 mb-5 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
           <Button variant="outline" onClick={load} className="text-[12px] py-1.5 px-3">Retry</Button>
-        </div>
+        </Card>
       )}
 
-      <div className="pop-card overflow-hidden">
+      <Card className="overflow-hidden">
         {loading ? (
           <TableSkeleton count={6} label="Loading contacts" />
         ) : !error && contacts.length === 0 ? (
@@ -346,7 +348,7 @@ export default function ContactsPage() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {!loading && !error && total > PAGE_SIZE && (
         <div className="flex items-center justify-between mt-4">
@@ -358,7 +360,7 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -386,7 +388,7 @@ function ContactConversationRoute({
       </button>
 
       {loading && !detail && (
-        <div className="pop-card flex-1 min-h-0 p-5" role="status" aria-busy="true" aria-label="Opening the conversation">
+        <Card className="flex-1 min-h-0 p-5" role="status" aria-busy="true" aria-label="Opening the conversation">
           <div className="flex items-center gap-3 mb-6">
             <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
             <div className="space-y-2">
@@ -400,22 +402,22 @@ function ContactConversationRoute({
             <Skeleton className="h-9 rounded-2xl w-[48%]" />
           </div>
           <span className="sr-only">Opening the conversation</span>
-        </div>
+        </Card>
       )}
 
       {!loading && error && (
-        <div className="pop-card p-6 flex items-start gap-3">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t open this conversation</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
             <button onClick={reload} className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-1.5 px-3 mt-3")}>Try again</button>
           </div>
-        </div>
+        </Card>
       )}
 
       {detail && (
-        <div className="pop-card flex-1 min-h-0 overflow-hidden flex">
+        <Card className="flex-1 min-h-0 overflow-hidden flex">
           <ContactConversationView
             key={detail.contact.id}
             detail={detail}
@@ -425,7 +427,7 @@ function ContactConversationRoute({
             onSend={send}
             onDetailChanged={updateDetail}
           />
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { Card } from '@/components/ui/card';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
@@ -88,8 +89,8 @@ export function CreateAutomationProvider({ children }: { children: React.ReactNo
           onClick={() => !creating && setPickerOpen(false)}
           onKeyDown={e => { if (e.key === 'Escape' && !creating) setPickerOpen(false); }}
         >
-          <div
-            className="pop-card w-full max-w-sm bg-white p-5"
+          <Card
+            className="w-full max-w-sm bg-white p-5"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
@@ -131,7 +132,7 @@ export function CreateAutomationProvider({ children }: { children: React.ReactNo
             <p className="mt-3 text-[11px] text-[#9B9B8F]">
               You can change this later in the automation&apos;s first step.
             </p>
-          </div>
+          </Card>
         </div>
       )}
     </CreateAutomationContext.Provider>

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 /**
@@ -14,24 +15,40 @@ import { cn } from '@/lib/utils';
  * it announces itself. Only the three properties that change are
  * transitioned, and the movement is motion-safe.
  */
+/**
+ * The surface as a class string, for the elements that can't be a div: a
+ * <section> that means a section, a <Link> that means a link. Same rule as
+ * buttonVariants — one definition, worn by whatever element the meaning
+ * requires.
+ */
+const cardVariants = cva('rounded-2xl border bg-card', {
+  variants: {
+    interactive: {
+      true: `transition-[transform,box-shadow,border-color] duration-200 ease-out
+             hover:shadow-card motion-safe:hover:-translate-y-px
+             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/50`,
+      false: '',
+    },
+    selected: {
+      true: 'border-chartreuse ring-2 ring-chartreuse/25',
+      false: 'border-border',
+    },
+  },
+  compoundVariants: [
+    { interactive: true, selected: false, class: 'hover:border-border-strong' },
+  ],
+  defaultVariants: { interactive: false, selected: false },
+});
+
 const Card = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { interactive?: boolean; selected?: boolean }
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof cardVariants>
 >(function Card({ interactive = false, selected = false, className, ...props }, ref) {
   return (
     <div
       ref={ref}
       data-selected={selected || undefined}
-      className={cn(
-        'rounded-2xl border bg-card',
-        selected ? 'border-chartreuse ring-2 ring-chartreuse/25' : 'border-border',
-        interactive &&
-          `transition-[transform,box-shadow,border-color] duration-200 ease-out
-           hover:shadow-card motion-safe:hover:-translate-y-px
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/50`,
-        interactive && !selected && 'hover:border-border-strong',
-        className,
-      )}
+      className={cn(cardVariants({ interactive, selected }), className)}
       {...props}
     />
   );
@@ -70,4 +87,4 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   },
 );
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };
+export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, cardVariants };
