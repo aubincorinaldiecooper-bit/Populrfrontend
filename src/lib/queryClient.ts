@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, focusManager } from '@tanstack/react-query';
 
 /**
  * One cache for everything the server knows, and one place where the rules
@@ -52,6 +52,32 @@ export function endServerStateSession(queryClient: QueryClient): void {
   // again; clear then drops what nobody is watching.
   void queryClient.resetQueries();
   queryClient.clear();
+}
+
+/**
+ * What counts as the creator coming back.
+ *
+ * The cache's own answer is `visibilitychange` alone, which fires for tab
+ * switches and for a minimised window — but NOT for clicking back into an
+ * already-visible window from another application. The store this replaced
+ * listened to window focus as well, and that is the common desktop case:
+ * the browser was on screen the whole time, the creator was in Instagram,
+ * and what they want on return is a badge that tells the truth.
+ *
+ * Installed once, before any query mounts, because the manager only runs a
+ * setup function when its first subscriber arrives.
+ */
+export function listenForCreatorsReturn(): void {
+  focusManager.setEventListener(onFocus => {
+    if (typeof window === 'undefined' || !window.addEventListener) return;
+    const listener = () => onFocus();
+    window.addEventListener('visibilitychange', listener, false);
+    window.addEventListener('focus', listener, false);
+    return () => {
+      window.removeEventListener('visibilitychange', listener);
+      window.removeEventListener('focus', listener);
+    };
+  });
 }
 
 export function createQueryClient(): QueryClient {

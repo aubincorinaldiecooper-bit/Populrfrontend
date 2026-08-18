@@ -7,6 +7,8 @@ import AppSidebar from '../components/app/AppSidebar';
 import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import EditorRail from '../components/EditorRail';
+import InboxPage from '../pages/InboxPage';
+import { useInboxWaiting } from '../components/inbox/conversations';
 import type { Conversation } from '../lib/api';
 
 /* One inbox.
@@ -143,5 +145,59 @@ describe("the builder's rail", () => {
 
     await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalled());
     expect(screen.getByRole('link', { name: 'Inbox' })).toBeInTheDocument();
+  });
+});
+
+/** The nav badge, rendered beside the page so the two can be compared. */
+function WaitingBadge() {
+  const { count } = useInboxWaiting();
+  return <span data-testid="waiting">{count}</span>;
+}
+
+describe('the badge and the page it links to', () => {
+  it('is fed by the page\u2019s own fetch, without asking for the list again', async () => {
+    // The page and the badge share a key: the page writes what it just
+    // learned into it, and the badge reads it. To prove the badge is being
+    // FED rather than fetching for itself, its own request never answers —
+    // only the page's does. (The two still make one request each until the
+    // page's hook joins the cache too; what this pins is the hand-off that
+    // replaced a number passed between two stores.)
+    fetchConversationsMock.mockImplementation((args: { search?: string }) =>
+      args && 'search' in args
+        ? Promise.resolve({
+            conversations: [conversation('c1', 'Jordan', 1), conversation('c2', 'Maya', 1)],
+          })
+        : new Promise(() => {}),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <WaitingBadge />
+        <Routes><Route path="/inbox" element={<InboxPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('waiting')).toHaveTextContent('2'));
+  });
+
+  it('a search that finds nobody is a filter, not news that nobody is waiting', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <WaitingBadge />
+        <Routes><Route path="/inbox" element={<InboxPage />} /></Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByTestId('waiting')).toHaveTextContent('2'));
+
+    // The filtered fetch returns nothing at all.
+    fetchConversationsMock.mockResolvedValue({ conversations: [] });
+    await user.type(screen.getByRole('searchbox'), 'nobody');
+
+    await waitFor(() =>
+      expect(fetchConversationsMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'nobody' })),
+    );
+    // Two people are still waiting; the creator just isn't looking at them.
+    expect(screen.getByTestId('waiting')).toHaveTextContent('2');
   });
 });

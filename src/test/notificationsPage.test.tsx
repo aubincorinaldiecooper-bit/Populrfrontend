@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import NotificationsPage from '../pages/NotificationsPage';
 import { useNotifications, applyRead, applyAllRead } from '../components/app/useNotifications';
+import { focusManager } from '@tanstack/react-query';
+import { listenForCreatorsReturn } from '../lib/queryClient';
 import { queryKeys } from '../lib/queryKeys';
 import type { WorkspaceNotification } from '../lib/api';
 
@@ -203,6 +205,66 @@ describe('reading a notification', () => {
     expect(screen.queryByRole('button', { name: /Comment catcher.*unread/ })).not.toBeInTheDocument();
   });
 
+  it('clears the dot the moment Mark all read is pressed, not when the server agrees', async () => {
+    // The whole optimistic update for marking everything read was removable
+    // without a test noticing: the old assertion only checked the request
+    // went out. What the creator is promised is the dot going away NOW.
+    let release: (value: { marked: number }) => void = () => {};
+    markNotificationsReadMock.mockReturnValue(
+      new Promise<{ marked: number }>(resolve => { release = resolve; }),
+    );
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Badge />
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
+
+    await user.click(screen.getByRole('button', { name: 'Mark all read' }));
+
+    // Still in flight — and already read, everywhere.
+    expect(screen.getByTestId('badge')).toHaveTextContent('0');
+    expect(screen.queryByRole('button', { name: /unread/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark all read' })).not.toBeInTheDocument();
+
+    release({ marked: 2 });
+    await waitFor(() => expect(markNotificationsReadMock).toHaveBeenCalledWith());
+  });
+
+  it('a refetch already in flight cannot undo the read it predates', async () => {
+    // cancelQueries in the optimistic helper is what stops a fetch that left
+    // BEFORE the click from landing after it with an answer that knows
+    // nothing about it.
+    const user = userEvent.setup();
+    const { queryClient } = renderPage();
+    await screen.findByRole('button', { name: /Welcome DM.*unread/ });
+
+    // A refetch leaves and hangs — the 60s poll, or a window regaining focus.
+    let answerStaleFetch: (value: unknown) => void = () => {};
+    fetchNotificationsMock.mockReturnValue(
+      new Promise(resolve => { answerStaleFetch = resolve; }),
+    );
+    void queryClient.refetchQueries({ queryKey: queryKeys.notifications });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(1));
+
+    // Now the row is read, while that fetch is still out.
+    markNotificationsReadMock.mockReturnValue(new Promise(() => {}));
+    await user.click(screen.getByRole('button', { name: /Welcome DM.*unread/ }));
+    expect(screen.queryByRole('button', { name: /Welcome DM.*unread/ })).not.toBeInTheDocument();
+
+    // The stale answer arrives, still describing the row as unread.
+    answerStaleFetch({
+      notifications: [notification('1', 'Welcome DM'), notification('2', 'Comment catcher')],
+      unread: 2,
+    });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    // It must not resurrect what it never knew was read.
+    expect(screen.queryByRole('button', { name: /Welcome DM.*unread/ })).not.toBeInTheDocument();
+  });
+
   it('keeps the last real answer when a refresh cannot reach the server', async () => {
     const { queryClient } = render(<Badge />);
     await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
@@ -215,5 +277,23 @@ describe('reading a notification', () => {
     expect(fetchNotificationsMock.mock.calls.length).toBeGreaterThan(1);
     // Not zero: nothing was read, we simply couldn't ask.
     expect(screen.getByTestId('badge')).toHaveTextContent('2');
+  });
+});
+
+describe('coming back to the app', () => {
+  it('counts a window regaining focus, not only a tab becoming visible', () => {
+    // The cache's own answer is visibilitychange alone, which never fires
+    // when the browser was on screen the whole time and the creator was in
+    // another application — the ordinary desktop case, and the one the
+    // deleted store covered by listening for window focus too.
+    const seen: boolean[] = [];
+    const unsubscribe = focusManager.subscribe(focused => seen.push(focused));
+    listenForCreatorsReturn();
+    try {
+      window.dispatchEvent(new Event('focus'));
+      expect(seen.length).toBeGreaterThan(0);
+    } finally {
+      unsubscribe();
+    }
   });
 });
