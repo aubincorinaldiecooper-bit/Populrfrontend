@@ -40,11 +40,11 @@ export default function NotificationsPanel({
   return (
     <aside
       className="flex h-full w-full flex-col bg-white"
-      aria-label="Notifications"
+      aria-label="Automation checks"
     >
       <header className="flex items-center justify-between px-4 py-3 border-b border-[#F0EDE8]">
         <div className="flex items-center gap-2">
-          <h2 className="text-[15px] font-semibold text-[#111111]">Notifications</h2>
+          <h2 className="text-[15px] font-semibold text-[#111111]">Checks</h2>
           {checking && <Loader2 size={13} className="animate-spin text-[#B0AAA2]" />}
         </div>
         <button
@@ -52,7 +52,7 @@ export default function NotificationsPanel({
           onClick={onClose}
           className="p-1.5 -mr-1.5 rounded-lg text-[#6B6B6B] hover:bg-[#F7F5F2] hover:text-[#111111]
             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
-          aria-label="Close notifications"
+          aria-label="Close checks"
         >
           <X size={16} />
         </button>

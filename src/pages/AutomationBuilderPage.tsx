@@ -27,6 +27,7 @@ import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
 import { derivedNotifications, type BuilderNotification } from '../lib/builderNotifications';
 import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
+import { HeaderLocal, HeaderActions } from '../components/app/headerSlots';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -543,20 +544,24 @@ export default function AutomationBuilderPage() {
   const isEmpty = graph.nodes.length === 0;
 
   return (
-    <div className="flex flex-col h-[100dvh] md:h-screen bg-[#F7F5F2]">
-      {/* ------------------------------------------------------------ header */}
-      <header className="shrink-0 flex items-center gap-3 px-4 md:px-5 py-2.5 bg-white border-b border-[#E8E4DF]">
+    // The shell's header sits above this — the same one every page gets —
+    // so the page takes what the viewport has left, exactly like the Inbox.
+    // The builder's own controls live in that header's slots below, not in
+    // a second bar of its own.
+    <div className="flex flex-col bg-[#F7F5F2]
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-[calc(100vh-3.5rem)]">
+      {/* ------------------------------------------- header slot: where am I */}
+      <HeaderLocal>
+        <div className="flex items-center gap-1.5 min-w-0">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => navigate('/automations')}
-          className="-ml-1.5 h-8 w-8 rounded-lg"
+          className="-ml-1.5 h-8 w-8 rounded-lg shrink-0"
           aria-label="Back to Automations"
         >
           <ArrowLeft size={17} />
         </Button>
-
-        <div className="flex items-center gap-1.5 min-w-0">
           <button
             type="button"
             onClick={() => navigate('/automations')}
@@ -602,8 +607,10 @@ export default function AutomationBuilderPage() {
             </Badge>
           )}
         </div>
+      </HeaderLocal>
 
-        <div className="ml-auto flex items-center gap-2">
+      {/* ------------------------------------- header slot: what can I do */}
+      <HeaderActions>
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
           {/* Canvas-scoped invites: owner-only, like every other way of
@@ -662,8 +669,7 @@ export default function AutomationBuilderPage() {
               Activate
             </Button>
           )}
-        </div>
-      </header>
+      </HeaderActions>
 
       {/* The automation's live behaviour and this canvas have come apart.
           Sits directly under the header, above the canvas, because it

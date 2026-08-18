@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Plus, Zap, Settings, PanelLeftClose } from 'lucide-react';
+import { Plus, Zap, Settings } from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
@@ -17,24 +17,20 @@ import { useCreateAutomation } from '../../context/CreateAutomationContext';
 /**
  * Populr's navigation on the shell's Sidebar bones: the brand block, the
  * Create CTA, the primary nav from lib/nav, the Inbox waiting badge, and
- * the account identity — the same column it has always been, rendered once
- * here and shown as the fixed desktop column and the phone drawer alike.
+ * the account identity — rendered once here and shown as the fixed desktop
+ * column and the phone drawer alike.
  *
- * `desktop={false}` is the builder's mode: the EditorRail owns the desktop
- * edge there, and this keeps serving the phone drawer only.
+ * This is the whole navigation, everywhere. The automation builder used to
+ * swap it for a 60px icon rail — a second component reading the same item
+ * list, which is not the same thing as being the same navigation. The two
+ * drifted exactly where you would expect: the rail kept raw hex and a
+ * pre-token palette, an 18px icon against this one's 20px, a dark corner
+ * dot where this has a lime pill, and its own focus ring. What a creator
+ * saw was the product changing shape when they opened an automation.
  *
- * `onCollapse` is offered only inside the builder, where a narrower
- * navigation buys the canvas something. Absent everywhere else — there is
- * nothing to gain by collapsing the nav on Contacts, so the control would
- * just be a lever that makes the app worse.
+ * The content changes between pages. This does not.
  */
-export default function AppSidebar({
-  desktop = true,
-  onCollapse,
-}: {
-  desktop?: boolean;
-  onCollapse?: () => void;
-}) {
+export default function AppSidebar() {
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
   const { beginCreateAutomation } = useCreateAutomation();
@@ -60,24 +56,7 @@ export default function AppSidebar({
     (workspaceAccess.role === 'member' && workspaceAccess.permissions.editAutomations);
 
   return (
-    <Sidebar desktop={desktop}>
-      {/* `hidden md:flex` because this renders in the phone drawer too, where
-          an absolutely-positioned collapse control has no business — the
-          drawer closes, it doesn't collapse. */}
-      {onCollapse && (
-        <button
-          type="button"
-          onClick={onCollapse}
-          aria-label="Collapse navigation"
-          title="Collapse navigation"
-          className="absolute right-3 top-6 hidden md:flex rounded-lg p-1.5
-            text-sidebar-muted-foreground transition-colors hover:bg-sidebar-muted
-            hover:text-sidebar-foreground focus-visible:outline-none
-            focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-        >
-          <PanelLeftClose size={17} strokeWidth={1.9} />
-        </button>
-      )}
+    <Sidebar>
       <SidebarHeader>
         {/* Brand */}
         <div className="px-4">
@@ -108,18 +87,21 @@ export default function AppSidebar({
         )}
       </SidebarHeader>
 
-      {/* Deliberately unlabeled: "Populr" is the EditorRail's accessible
-          name, and tests (and screen-reader users) tell the two navigation
-          surfaces apart by it. */}
       <SidebarMenu>
         {items.map(item => {
           const active = isActivePath(location.pathname, item.path);
           const Icon = item.icon;
+          const waiting = item.path === '/inbox' ? inboxCount : 0;
           return (
             <Link
               key={item.path}
               to={item.path}
               onClick={closeMobile}
+              // The real count belongs in the name even when the pill has to
+              // round it off: "9+" is a decision about width, not about how
+              // many people are waiting.
+              aria-label={waiting > 0 ? `${item.label}, ${waiting} conversations waiting` : undefined}
+              aria-current={active ? 'page' : undefined}
               className={sidebarMenuButtonClass(active)}
             >
               <Icon
@@ -128,15 +110,15 @@ export default function AppSidebar({
                 className="transition-transform group-hover:scale-110"
               />
               <span className="text-[15px]">{item.label}</span>
-              {item.path === '/inbox' && inboxCount > 0 && (
+              {waiting > 0 && (
                 // The waiting count the retired drawer-launcher used to
-                // carry. The number is in the pill; the words are for ears.
+                // carry. aria-hidden because the link above already says it.
                 <span
+                  aria-hidden="true"
                   className="ml-auto rounded-full bg-sidebar-primary px-1.5 text-[10.5px]
                     font-semibold leading-[17px] text-sidebar-primary-foreground"
                 >
-                  {inboxCount > 9 ? '9+' : inboxCount}
-                  <span className="sr-only"> conversations waiting</span>
+                  {waiting > 9 ? '9+' : waiting}
                 </span>
               )}
             </Link>

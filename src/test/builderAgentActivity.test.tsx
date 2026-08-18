@@ -286,9 +286,9 @@ describe('one context at a time', () => {
     selectNode('trigger');
     await screen.findByText('When');
 
-    await user.click(screen.getByLabelText(/^Notifications,/));
+    await user.click(screen.getByLabelText(/^Automation checks,/));
 
-    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     expect(screen.getByText('When')).toBeInTheDocument();
   });
 
@@ -309,9 +309,9 @@ describe('one context at a time', () => {
     selectNode('trigger');
     await screen.findByText('When');
 
-    await user.click(screen.getByLabelText(/^Notifications,/));
+    await user.click(screen.getByLabelText(/^Automation checks,/));
 
-    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
   });
 
@@ -345,8 +345,8 @@ describe('one context at a time', () => {
       await screen.findByText('Preview');
       selectNode('trigger');
       await screen.findByText('When');
-      await user.click(screen.getByLabelText(/^Notifications,/));
-      expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      await user.click(screen.getByLabelText(/^Automation checks,/));
+      expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
       expect(screen.getByText('When')).toBeInTheDocument();
 
       // The viewport crosses below the threshold.
@@ -355,7 +355,7 @@ describe('one context at a time', () => {
 
       // The step yields; the panel the creator deliberately opened stays.
       await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
-      expect(screen.getByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      expect(screen.getByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     } finally {
       Object.defineProperty(window, 'matchMedia', {
         writable: true, configurable: true, value: realMatchMedia,
@@ -404,9 +404,9 @@ describe('one context at a time', () => {
     selectNode('trigger');
     await screen.findByText('When');
 
-    await user.click(screen.getByLabelText(/^Notifications,/));
+    await user.click(screen.getByLabelText(/^Automation checks,/));
 
-    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     expect(screen.getByText('When')).toBeInTheDocument();
   });
 });

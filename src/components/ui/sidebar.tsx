@@ -10,9 +10,14 @@ import { cn } from '@/lib/utils';
  * once inside a Sheet for phones, so there is a single source for what the
  * navigation contains. SidebarInset is the page column beside it.
  *
- * Deliberately NOT carried over from stock shadcn: collapse-to-icons (the
- * builder's EditorRail is Populr's own answer to that), cookie persistence,
- * and the keyboard shortcut — none of them are product behavior here.
+ * Deliberately NOT carried over from stock shadcn: collapse-to-icons,
+ * cookie persistence, and the keyboard shortcut — none of them are product
+ * behavior here. Populr briefly had its own collapse, offered only inside
+ * the automation builder, and the second implementation it needed drifted
+ * from this one in palette, icon size, badge treatment and focus ring until
+ * the two navigations no longer looked like the same product. The shell is
+ * one shape on every page now; if a collapse comes back it comes back here,
+ * as a second width of this component, available everywhere.
  *
  * Layout mechanics are the ones the app has always used — a fixed column
  * and a matching content margin — so adopting the structure moves no
@@ -39,33 +44,24 @@ function SidebarProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The navigation surface. `desktop={false}` is the builder's mode: the
- * fixed column yields to the EditorRail, but the mobile drawer stays —
- * without it a phone inside the builder has no navigation at all.
+ * The navigation surface: one fixed column on desktop, the same children in
+ * a drawer on phones. No per-route modes — every authenticated page gets
+ * this, at this width, so the navigation is never something the app
+ * rearranges underneath you.
  */
-function Sidebar({
-  desktop = true,
-  className,
-  children,
-}: {
-  desktop?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
+function Sidebar({ className, children }: { className?: string; children: React.ReactNode }) {
   const { openMobile, setOpenMobile } = useSidebar();
   return (
     <>
-      {desktop && (
-        <aside
-          className={cn(
-            `hidden md:flex fixed left-0 top-0 z-50 h-screen w-[280px] flex-col gap-7
-             border-r border-sidebar-border bg-transparent p-6`,
-            className,
-          )}
-        >
-          {children}
-        </aside>
-      )}
+      <aside
+        className={cn(
+          `hidden md:flex fixed left-0 top-0 z-50 h-screen w-[280px] flex-col gap-7
+           border-r border-sidebar-border bg-transparent p-6`,
+          className,
+        )}
+      >
+        {children}
+      </aside>
       <Sheet open={openMobile} onOpenChange={setOpenMobile}>
         <SheetContent
           side="left"
@@ -109,8 +105,8 @@ const SidebarTrigger = React.forwardRef<HTMLButtonElement, React.ComponentPropsW
 /**
  * The page column. Top padding clears the fixed mobile header (its height
  * expression must stay identical to AppHeader's — safe-area included); the
- * left margin clears whichever navigation column is showing, so the builder
- * overrides it to the rail's 60px.
+ * left margin clears the navigation column, which is one width on every
+ * route and therefore not something a page gets to override.
  */
 function SidebarInset({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
