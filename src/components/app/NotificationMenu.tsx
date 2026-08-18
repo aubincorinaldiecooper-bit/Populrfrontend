@@ -1,86 +1,40 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { Bell } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  fetchNotifications,
-  markNotificationsRead,
-  type WorkspaceNotification,
-} from '../../lib/api';
+import { isBackendConfigured, type WorkspaceNotification } from '../../lib/api';
 import { headerIconButton } from './headerIconButton';
-import {
-  useNotificationsUnread,
-  reportNotificationsUnread,
-  refreshNotificationsUnread,
-  adjustNotificationsUnread,
-} from './useNotificationsUnread';
+import { useNotifications, useMarkRead, useMarkAllRead } from './useNotifications';
 import NotificationRow from './NotificationRow';
 
 /**
  * The header's bell, fed by the workspace notification feed: automations
  * going live, teammates joining, accounts needing reconnection. Each row
  * deep-links to the place in the app to act on it and is marked read as
- * it's followed; the dot runs on the shared unread store, so however many
- * bells render there is one count and one poll.
+ * it's followed.
  *
- * Fetched when the menu opens, not polled: the dot carries the ambient
- * signal, and the list is asked for at the moment the creator looks.
+ * The list and the dot are the same cached fact, so opening this can't
+ * disagree with the badge that invited the creator to open it — and
+ * following a row updates both at once, whether or not this menu (or the
+ * page it links to) is still mounted when the server answers.
  */
 export default function NotificationMenu() {
-  const { count } = useNotificationsUnread();
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<WorkspaceNotification[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  // Close-and-reopen before a fetch settles leaves two requests in flight;
-  // only the newest opening may write. Same rule as the Inbox glance.
-  const generation = useRef(0);
+  const { data, isPending, isError } = useNotifications();
+  const markRead = useMarkRead();
+  const markAll = useMarkAllRead();
 
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) return;
-    const mine = ++generation.current;
-    setFailed(false);
-    setItems(null);
-    fetchNotifications()
-      .then(res => {
-        if (generation.current !== mine) return;
-        setItems(res.notifications);
-        reportNotificationsUnread(res.unread);
-      })
-      .catch(() => {
-        if (generation.current !== mine) return;
-        setFailed(true);
-      });
-  };
+  const count = data?.unread ?? 0;
+  const items = data?.notifications ?? null;
 
   const openOne = (n: WorkspaceNotification) => {
     setOpen(false);
-    if (n.readAt === null) {
-      // The dot drops immediately — the creator is already on their way to
-      // the thing. If the read never lands, the count goes back where it
-      // was first, then we ask the server for the truth: a refresh that
-      // fails for the same reason leaves the restored count standing
-      // instead of claiming everything is read.
-      adjustNotificationsUnread(-1);
-      void markNotificationsRead(n.id).catch(() => {
-        adjustNotificationsUnread(1);
-        refreshNotificationsUnread();
-      });
-    }
-  };
-
-  const markAll = () => {
-    void markNotificationsRead().then(() => {
-      reportNotificationsUnread(0);
-      setItems(prev =>
-        prev ? prev.map(n => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })) : prev,
-      );
-    });
+    if (n.readAt === null) markRead.mutate(n.id);
   };
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
           <button
@@ -108,7 +62,7 @@ export default function NotificationMenu() {
           {count > 0 && (
             <button
               type="button"
-              onClick={markAll}
+              onClick={() => markAll.mutate()}
               className="text-[12px] font-medium text-muted-foreground underline underline-offset-2
                 transition-colors hover:text-foreground"
             >
@@ -117,11 +71,11 @@ export default function NotificationMenu() {
           )}
         </div>
 
-        {failed ? (
+        {(isError || !isBackendConfigured()) && !items ? (
           <p className="px-4 py-3 text-[13px] text-muted-foreground">
             Populr can&rsquo;t reach its server right now, so this can&rsquo;t be loaded.
           </p>
-        ) : items === null ? (
+        ) : isPending || items === null ? (
           <div className="space-y-2 px-4 py-3" aria-label="Loading notifications">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />

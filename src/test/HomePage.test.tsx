@@ -39,8 +39,8 @@ vi.mock('../context/AppContext', () => ({
   useApp: () => appState,
 }));
 
-vi.mock('../components/inbox/useInboxUnread', () => ({
-  useInboxUnread: () => 0,
+vi.mock('../components/inbox/conversations', () => ({
+  useInboxWaiting: () => ({ count: 0, refresh: () => {} }),
 }));
 
 // The sidebar's account menu needs the auth session; this suite is about

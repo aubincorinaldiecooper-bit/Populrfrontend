@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { fetchContact, sendInboxReply, ApiError } from '../../lib/api';
-import { refreshInboxUnread } from './useInboxUnread';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../lib/queryKeys';
 import type { ContactDetail } from '../../lib/api';
 
 /**
@@ -32,6 +33,7 @@ export interface ContactConversationState {
 
 export function useContactConversation(contactId: string | null): ContactConversationState {
   const { showToast } = useApp();
+  const queryClient = useQueryClient();
   const [detail, setDetail] = useState<ContactDetail | null>(null);
   const [loading, setLoading] = useState(Boolean(contactId));
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function useContactConversation(contactId: string | null): ContactConvers
       showToast(`Reply sent on ${result.channel === 'dm' ? 'DM' : 'the comment thread'}.`, 'success');
       if (sentFor && sentFor === contactId) load();
       // This reply may have answered the thing the nav badge was counting.
-      refreshInboxUnread();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.conversations('') });
       return true;
     } catch (err) {
       const message = err instanceof ApiError && err.code === 'not_supported_on_platform'
@@ -98,7 +100,7 @@ export function useContactConversation(contactId: string | null): ContactConvers
     } finally {
       setSending(false);
     }
-  }, [detail, contactId, load, showToast]);
+  }, [detail, contactId, load, showToast, queryClient]);
 
   const updateDetail = useCallback(
     (update: (current: ContactDetail) => ContactDetail) =>

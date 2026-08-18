@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router';
 import { PanelLeftOpen } from 'lucide-react';
 import AccountMenu from './AccountMenu';
 import { navItems, isActivePath } from '../lib/nav';
-import { useInboxUnread } from './inbox/useInboxUnread';
+import { useInboxWaiting } from './inbox/conversations';
 
 /**
  * The application's navigation, compressed to the width of an icon.
@@ -23,7 +23,7 @@ import { useInboxUnread } from './inbox/useInboxUnread';
 
 export default function EditorRail({ onExpand }: { onExpand?: () => void }) {
   const { pathname } = useLocation();
-  const { count: inboxCount } = useInboxUnread();
+  const { count: inboxCount } = useInboxWaiting();
 
   return (
     <nav

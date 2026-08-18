@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import AppSidebar from '../components/app/AppSidebar';
 import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import EditorRail from '../components/EditorRail';
-import { resetInboxUnreadForTests } from '../components/inbox/useInboxUnread';
 import type { Conversation } from '../lib/api';
 
 /* One inbox.
@@ -52,7 +52,6 @@ vi.mock('../context/AuthContext', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resetInboxUnreadForTests();
   mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
   fetchConversationsMock.mockResolvedValue({
     conversations: [

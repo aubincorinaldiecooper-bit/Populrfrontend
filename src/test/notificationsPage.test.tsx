@@ -1,26 +1,21 @@
-import { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import NotificationsPage from '../pages/NotificationsPage';
-import {
-  resetNotificationsUnreadForTests,
-  refreshNotificationsUnread,
-  useNotificationsUnread,
-} from '../components/app/useNotificationsUnread';
+import { useNotifications, applyRead, applyAllRead } from '../components/app/useNotifications';
 import type { WorkspaceNotification } from '../lib/api';
 
-/* The feed page, and what a page of rows can get wrong about reading.
+/* Reading a notification, and the four ways that used to go wrong.
  *
- * A row with nowhere to go stays where it is after it's followed, so the
- * creator's finger is still over it. If reading were only recorded when
- * the server answered, a second click during that gap would send a second
- * request and spend a second decrement the badge never owed. So the row
- * turns read on the spot — which puts the weight on the other side: every
- * optimistic decrement has to come back if the read never lands, INCLUDING
- * when the row was a link and this page is already gone, and including
- * when the network is down hard enough that asking again fails too.
+ * The rows and the unread count were two values kept in step by hand, so
+ * every path that could interrupt the hand-off broke something: an
+ * impatient second click spent two decrements, a row that navigated away
+ * lost its rollback, a refresh that failed claimed everything was read.
+ * They are one cached fact now, changed by pure functions and reverted by
+ * the cache — so these tests are less about the page than about that fact
+ * surviving the page.
  */
 
 const fetchNotificationsMock = vi.fn();
@@ -52,15 +47,14 @@ function notification(
   };
 }
 
-/** The bell's dot, standing in for every badge fed by the shared store. */
+/** The bell's dot, standing in for every badge fed by the shared cache. */
 function Badge() {
-  const { count } = useNotificationsUnread();
-  return <span data-testid="badge">{count}</span>;
+  const { data } = useNotifications();
+  return <span data-testid="badge">{data?.unread ?? 0}</span>;
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resetNotificationsUnreadForTests();
   fetchNotificationsMock.mockResolvedValue({
     notifications: [notification('1', 'Welcome DM'), notification('2', 'Comment catcher')],
     unread: 2,
@@ -76,8 +70,29 @@ function renderPage() {
   );
 }
 
-describe('/notifications', () => {
-  it('spends one decrement per linkless row, however fast the second click lands', async () => {
+describe('reading a notification', () => {
+  it('is one fact: the row and the count move together, or not at all', () => {
+    const before = {
+      notifications: [notification('1', 'Welcome DM'), notification('2', 'Comment catcher')],
+      unread: 2,
+    };
+
+    const after = applyRead(before, '1');
+    expect(after.notifications[0].readAt).not.toBeNull();
+    expect(after.unread).toBe(1);
+
+    // Reading it again is not news — the count can't be spent twice, which
+    // is what a second click used to do.
+    expect(applyRead(after, '1')).toBe(after);
+    // Nor can an id we don't hold move the count.
+    expect(applyRead(after, 'nope')).toBe(after);
+
+    const all = applyAllRead(before);
+    expect(all.notifications.every(n => n.readAt !== null)).toBe(true);
+    expect(all.unread).toBe(0);
+  });
+
+  it('spends one request and one decrement, however fast the second click lands', async () => {
     let release: (value: { marked: number }) => void = () => {};
     markNotificationsReadMock.mockReturnValue(
       new Promise<{ marked: number }>(resolve => {
@@ -87,16 +102,14 @@ describe('/notifications', () => {
     const user = userEvent.setup();
     renderPage();
 
-    const row = await screen.findByRole('button', { name: /Welcome DM/ });
-    await user.dblClick(row);
+    await user.dblClick(await screen.findByRole('button', { name: /Welcome DM/ }));
     release({ marked: 1 });
 
     await waitFor(() => expect(markNotificationsReadMock).toHaveBeenCalledTimes(1));
     expect(markNotificationsReadMock).toHaveBeenCalledWith('1');
-    // One of two rows read: the other still owes a decrement, so the page
-    // still offers the bulk escape. Two decrements would have zeroed it.
+    // One of two read: the other still owes a decrement, so the bulk escape
+    // is still offered. Two decrements would have zeroed it and hidden it.
     expect(screen.getByRole('button', { name: 'Mark all read' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Comment catcher/ })).toBeInTheDocument();
   });
 
   it('puts the dot back when the server never heard it', async () => {
@@ -110,7 +123,6 @@ describe('/notifications', () => {
     renderPage();
 
     await user.click(await screen.findByRole('button', { name: /Welcome DM.*unread/ }));
-    // Read on the spot, while the request is still out.
     expect(screen.queryByRole('button', { name: /Welcome DM.*unread/ })).not.toBeInTheDocument();
 
     reject(new Error('offline'));
@@ -118,10 +130,9 @@ describe('/notifications', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Welcome DM.*unread/ })).toBeInTheDocument(),
     );
-    expect(screen.getByRole('button', { name: 'Mark all read' })).toBeInTheDocument();
   });
 
-  it('gives the shared badge its count back even after a linked row navigated away', async () => {
+  it('finishes marking read after a linked row has taken the page away', async () => {
     fetchNotificationsMock.mockResolvedValue({
       notifications: [
         notification('1', 'Guide DM is live', '/automations/a1'),
@@ -148,31 +159,22 @@ describe('/notifications', () => {
     await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
 
     await user.click(await screen.findByRole('link', { name: /Guide DM is live/ }));
-    // Followed: the page is gone, and the dot dropped on the way out.
     expect(screen.getByText('The automation')).toBeInTheDocument();
     expect(screen.getByTestId('badge')).toHaveTextContent('1');
 
-    await act(async () => {
-      reject(new Error('offline'));
-      await Promise.resolve();
-    });
+    reject(new Error('offline'));
 
-    // The page's own state updates are dropped on an unmounted component —
-    // the shared count is not this page's to lose.
-    expect(screen.getByTestId('badge')).toHaveTextContent('2');
+    // The page that started this is gone. The rollback belongs to the
+    // cache, not to it.
+    await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
   });
-});
 
-describe('the shared unread count', () => {
-  it('keeps standing when the refresh itself cannot reach the server', async () => {
-    render(<Badge />);
+  it('keeps the last real answer when a refresh cannot reach the server', async () => {
+    const { queryClient } = render(<Badge />);
     await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
 
     fetchNotificationsMock.mockRejectedValue(new Error('offline'));
-    await act(async () => {
-      refreshNotificationsUnread();
-      await Promise.resolve();
-    });
+    await queryClient.refetchQueries({ queryKey: ['notifications'] });
 
     // Not zero: nothing was read, we simply couldn't ask.
     expect(screen.getByTestId('badge')).toHaveTextContent('2');

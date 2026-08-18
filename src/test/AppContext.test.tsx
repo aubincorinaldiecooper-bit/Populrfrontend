@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render } from './render';
 import { authClientMock, resetAuthClientMock } from './authClient.mock';
 import { AppProvider, useApp } from '../context/AppContext';
 import { AuthProvider } from '../context/AuthContext';

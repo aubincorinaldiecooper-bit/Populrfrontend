@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { authClient, clearApiAuthToken } from "../lib/authClient";
 import { onUnauthorized } from "../lib/api";
 
@@ -41,6 +42,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthSession | null | undefined>(undefined);
   const [user, setUser] = useState<AuthUser | null>(null);
 
@@ -84,6 +86,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setUser(null);
   }, []);
+
+  // Everything cached was an answer to "what does THIS person's workspace
+  // look like", so none of it survives them leaving. This watches the
+  // SESSION rather than the sign-out button, because a session also ends by
+  // expiring and by the backend refusing it — and the next person to sign
+  // in on this browser must not see the previous one's workspace for as
+  // long as it takes the first request to land. `undefined` is "still
+  // asking", which is not the same as gone.
+  const hadSession = useRef(false);
+  useEffect(() => {
+    if (session) {
+      hadSession.current = true;
+    } else if (session === null && hadSession.current) {
+      hadSession.current = false;
+      queryClient.clear();
+    }
+  }, [session, queryClient]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
