@@ -1,9 +1,9 @@
+import { SearchInput } from '@/components/ui/search-input';
+import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useSearchParams } from 'react-router';
-import {
-  Search, ArrowLeft, AlertCircle, X, Reply, Clock, Tag, Zap,
-} from 'lucide-react';
+import {ArrowLeft, AlertCircle, X, Reply, Clock, Tag, Zap } from 'lucide-react';
 import PlatformDot from '../components/PlatformDot';
 import ProfileImage from '../components/ProfileImage';
 import PageHeader from '../components/PageHeader';
@@ -175,10 +175,13 @@ export default function ContactsPage() {
           // only behavior was a toast explaining it does nothing was a dead
           // affordance — the empty state below carries that explanation.
           <>
-            <div className="relative hidden sm:block">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts by name, username..."
-                className="pop-search w-56" />
+            <div className="hidden sm:block">
+              <SearchInput
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search contacts by name, username…"
+                className="w-56"
+              />
             </div>
           </>
         }
@@ -186,10 +189,12 @@ export default function ContactsPage() {
 
       {/* On mobile the header search is hidden — without this, phones had no
           way to search contacts at all. */}
-      <div className="relative sm:hidden mb-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts..."
-          className="pop-search w-full" />
+      <div className="mb-4 sm:hidden">
+        <SearchInput
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search contacts…"
+        />
       </div>
 
       {/* The audience one automation built. It sits above the ordinary
@@ -347,9 +352,9 @@ export default function ContactsPage() {
         <div className="flex items-center justify-between mt-4">
           <p className="text-[12px] text-[#6B6B6B]">Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, total)} of {total}</p>
           <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="pop-btn-tertiary text-[12px] py-1.5 px-3 disabled:opacity-40">Previous</button>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-1.5 px-3 disabled:opacity-40")}>Previous</button>
             <span className="text-[12px] text-[#6B6B6B]">{page + 1} / {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="pop-btn-tertiary text-[12px] py-1.5 px-3 disabled:opacity-40">Next</button>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-1.5 px-3 disabled:opacity-40")}>Next</button>
           </div>
         </div>
       )}
@@ -375,7 +380,7 @@ function ContactConversationRoute({
       h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-[calc(100vh-3.5rem)]">
       <button
         onClick={onBack}
-        className="pop-btn-ghost mb-4 self-start"
+        className={cn(buttonVariants({ variant: 'ghost' }), "mb-4 self-start")}
       >
         <ArrowLeft size={16} />Contacts
       </button>
@@ -404,7 +409,7 @@ function ContactConversationRoute({
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Couldn&apos;t open this conversation</p>
             <p className="text-[12px] text-[#6B6B6B] mt-1">{error}</p>
-            <button onClick={reload} className="pop-btn-tertiary text-[12px] py-1.5 px-3 mt-3">Try again</button>
+            <button onClick={reload} className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-1.5 px-3 mt-3")}>Try again</button>
           </div>
         </div>
       )}

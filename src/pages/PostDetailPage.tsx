@@ -148,11 +148,11 @@ export default function PostDetailPage() {
           ) : (
             <Card className="flex flex-col items-center justify-center p-8 text-center">
               {(() => { const Icon = MEDIA_TYPE_ICON[p.media_type ?? 'text']; return <Icon size={22} className="text-[#9B9B8F] mb-2" />; })()}
-              <p className="pop-meta">Text-only post — no media attached.</p>
+              <p className="type-caption">Text-only post — no media attached.</p>
             </Card>
           )}
           <Card className="p-4">
-            <p className="pop-body whitespace-pre-wrap">{p.content?.trim() || <span className="text-[#9B9B8F]">No caption</span>}</p>
+            <p className="type-body whitespace-pre-wrap">{p.content?.trim() || <span className="text-[#9B9B8F]">No caption</span>}</p>
           </Card>
         </div>
 
@@ -165,7 +165,7 @@ export default function PostDetailPage() {
               </span>
               <span className="text-[12px] text-[#9B9B8F] capitalize">{p.media_type ?? 'text'} post</span>
             </div>
-            <h1 className="pop-section-heading">Post details</h1>
+            <h1 className="type-section-title">Post details</h1>
           </div>
 
           <Card className="space-y-2.5 p-5">
@@ -185,7 +185,7 @@ export default function PostDetailPage() {
           </Card>
 
           <Card className="p-5">
-            <h2 className="pop-card-title mb-4">Destinations</h2>
+            <h2 className="type-section-title mb-4">Destinations</h2>
             <div className="space-y-2.5">
               {targets.map(t => {
                 const meta = platformMeta(t.platform);

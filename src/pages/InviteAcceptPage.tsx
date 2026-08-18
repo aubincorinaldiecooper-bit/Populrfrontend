@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { AlertCircle, Check, Loader2, RefreshCw, Users } from 'lucide-react';
@@ -119,7 +121,7 @@ export default function InviteAcceptPage() {
               You sent this invite — there&apos;s nothing to accept. Whoever you sent it to
               can still use their copy of the link.
             </p>
-            <Link to="/" className="pop-btn-primary mt-5 inline-flex">Go to Populr</Link>
+            <Link to="/" className={cn(buttonVariants(), "mt-5 inline-flex")}>Go to Populr</Link>
           </>
         )}
 
@@ -139,11 +141,11 @@ export default function InviteAcceptPage() {
                   : 'You’ve joined the workspace — it’s what Populr opens for you now.'}
             </p>
             {outcome.automation ? (
-              <Link to={`/automations/${outcome.automation.id}`} className="pop-btn-primary mt-5 inline-flex">
+              <Link to={`/automations/${outcome.automation.id}`} className={cn(buttonVariants(), "mt-5 inline-flex")}>
                 Open the automation
               </Link>
             ) : (
-              <Link to="/" className="pop-btn-primary mt-5 inline-flex">Go to Populr</Link>
+              <Link to="/" className={cn(buttonVariants(), "mt-5 inline-flex")}>Go to Populr</Link>
             )}
           </>
         )}
@@ -157,11 +159,11 @@ export default function InviteAcceptPage() {
             <p className="text-[13px] text-[#6B6B6B] mt-2 leading-relaxed">{outcome.detail}</p>
             <div className="mt-5 flex items-center justify-center gap-2">
               {outcome.retryable && (
-                <button type="button" onClick={accept} className="pop-btn-secondary text-[13px]">
+                <button type="button" onClick={accept} className={cn(buttonVariants({ variant: 'secondary' }), "text-[13px]")}>
                   <RefreshCw size={14} />Try again
                 </button>
               )}
-              <Link to="/" className="pop-btn-tertiary text-[13px]">Go to Populr</Link>
+              <Link to="/" className={cn(buttonVariants({ variant: 'outline' }), "text-[13px]")}>Go to Populr</Link>
             </div>
           </>
         )}

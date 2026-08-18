@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Copy, Check, Loader2, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -271,13 +273,13 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
             <div className="space-y-2">
               <button
                 onClick={continueHere}
-                className="pop-btn-primary w-full justify-center text-[13px] py-2.5"
+                className={cn(buttonVariants(), "w-full justify-center text-[13px] py-2.5")}
               >
                 Continue here <ArrowRight size={14} />
               </button>
               <button
                 onClick={() => { void copyLink(); }}
-                className="pop-btn-secondary w-full justify-center text-[13px] py-2.5"
+                className={cn(buttonVariants({ variant: 'secondary' }), "w-full justify-center text-[13px] py-2.5")}
               >
                 <Copy size={14} /> Copy connection link
               </button>
@@ -299,13 +301,13 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
             <div className="space-y-2">
               <button
                 onClick={() => { void copyLink(); }}
-                className="pop-btn-primary w-full justify-center text-[13px] py-2.5"
+                className={cn(buttonVariants(), "w-full justify-center text-[13px] py-2.5")}
               >
                 <Copy size={14} /> Copy a fresh connection link
               </button>
               <button
                 onClick={continueHere}
-                className="pop-btn-secondary w-full justify-center text-[13px] py-2.5"
+                className={cn(buttonVariants({ variant: 'secondary' }), "w-full justify-center text-[13px] py-2.5")}
               >
                 <RefreshCw size={14} /> Try again
               </button>
@@ -356,7 +358,7 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
               <button
                 onClick={() => { void checkNow(); }}
                 disabled={checking}
-                className="pop-btn-primary w-full justify-center text-[13px] py-2.5 disabled:opacity-60"
+                className={cn(buttonVariants(), "w-full justify-center text-[13px] py-2.5 disabled:opacity-60")}
               >
                 {checking
                   ? <><Loader2 size={14} className="animate-spin" /> Checking…</>
@@ -364,7 +366,7 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
               </button>
               <button
                 onClick={() => { void copyLink(); }}
-                className="pop-btn-secondary w-full justify-center text-[13px] py-2.5"
+                className={cn(buttonVariants({ variant: 'secondary' }), "w-full justify-center text-[13px] py-2.5")}
               >
                 <Copy size={14} /> Copy a fresh link
               </button>

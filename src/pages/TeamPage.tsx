@@ -237,7 +237,7 @@ export default function TeamPage() {
                   placeholder="teammate@example.com"
                   autoFocus
                   disabled={sending}
-                  className="pop-search w-full"
+                  className="w-full"
                 />
 
                 <p className="mt-4 mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9B9B8F]">

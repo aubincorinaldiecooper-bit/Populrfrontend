@@ -1,9 +1,10 @@
+import { SearchInput } from '@/components/ui/search-input';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { isOwnerView, canEditAutomations } from '../lib/access';
 import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
-import { Search, Plus, AlertCircle, Loader2 } from 'lucide-react';
+import {Plus, AlertCircle, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
 import { ListSkeleton } from '../components/Skeleton';
@@ -474,13 +475,12 @@ export default function AutomationsPage() {
         subtitle={loading ? 'Loading…' : `${live.length} live · ${flows.length} total`}
         action={
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-            <div className="relative w-full sm:w-auto">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F]" />
-              <input
-                type="text" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search automations..." className="pop-search w-full sm:w-56"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search automations…"
+              className="w-full sm:w-56"
+            />
             {mayCreate && <Button
               onClick={startNew}
               disabled={creatingAutomation}

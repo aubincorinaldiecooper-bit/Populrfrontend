@@ -1,3 +1,4 @@
+import { buttonVariants } from '@/components/ui/button';
 import { Link } from 'react-router';
 import { ArrowRight } from 'lucide-react';
 import PageHeader from './PageHeader';
@@ -32,7 +33,7 @@ export default function NotAvailableYet({
         title={`${title} isn't available yet`}
         description={description}
         action={
-          <Link to="/automations" className="pop-btn-primary">
+          <Link to="/automations" className={buttonVariants()}>
             Go to Automations <ArrowRight size={14} />
           </Link>
         }

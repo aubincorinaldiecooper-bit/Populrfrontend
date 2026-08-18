@@ -366,8 +366,8 @@ export default function CreatePostPage() {
     return (
       <div className="pop-page max-w-[560px]">
         <div className="text-center mb-8">
-          <h1 className="pop-title">{!allDone ? 'Publishing your post' : heading}</h1>
-          <p className="pop-body mt-2">
+          <h1 className="type-page-title">{!allDone ? 'Publishing your post' : heading}</h1>
+          <p className="type-body mt-2">
             {!allDone ? "We're sending your content to each selected platform." : ' '}
           </p>
         </div>
@@ -506,8 +506,8 @@ export default function CreatePostPage() {
                   >
                   <Card interactive selected={mediaType === mt.id} className="h-full p-5">
                     <Icon size={24} className="text-[#111111] mb-3" />
-                    <p className="pop-card-title">{mt.label}</p>
-                    <p className="pop-body mt-1">{mt.description}</p>
+                    <p className="type-section-title">{mt.label}</p>
+                    <p className="type-body mt-1">{mt.description}</p>
                     {uniquePlatforms.length > 0 && (
                       <div className="flex items-center gap-1.5 mt-3">
                         {uniquePlatforms.map(p => {
@@ -526,7 +526,7 @@ export default function CreatePostPage() {
             {mediaType && (
               <div className="mt-6">
                 {mediaType === 'text' ? (
-                  <p className="pop-body">Text posts skip straight to your caption — continue when you&apos;re ready.</p>
+                  <p className="type-body">Text posts skip straight to your caption — continue when you&apos;re ready.</p>
                 ) : (
                   <>
                     <div
@@ -543,7 +543,7 @@ export default function CreatePostPage() {
                       />
                       <Upload size={28} className="mx-auto text-[#9B9B8F] mb-3" />
                       <p className="text-[13px] font-medium text-[#111111]">Drag and drop or click to upload</p>
-                      <p className="pop-meta mt-1">
+                      <p className="type-caption mt-1">
                         {mediaType === 'video' ? 'MP4, MOV, or WEBM' : 'JPEG, PNG, WEBP, or GIF'}
                         {mediaType === 'carousel' && ' — add multiple images'}
                       </p>
@@ -579,15 +579,15 @@ export default function CreatePostPage() {
                               </div>
                             )}
                             <div className="p-2 flex items-center justify-between">
-                              <span className="pop-meta">{m.fileSizeBytes ? formatBytes(m.fileSizeBytes) : ''}</span>
-                              {m.durationSeconds && <span className="pop-meta">{formatDuration(m.durationSeconds)}</span>}
+                              <span className="type-caption">{m.fileSizeBytes ? formatBytes(m.fileSizeBytes) : ''}</span>
+                              {m.durationSeconds && <span className="type-caption">{formatDuration(m.durationSeconds)}</span>}
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
                     {mediaType === 'carousel' && mediaItems.length > 0 && (
-                      <p className="pop-meta mt-2">{mediaItems.length} item{mediaItems.length === 1 ? '' : 's'}</p>
+                      <p className="type-caption mt-2">{mediaItems.length} item{mediaItems.length === 1 ? '' : 's'}</p>
                     )}
                   </>
                 )}
@@ -623,7 +623,7 @@ export default function CreatePostPage() {
                     <Icon size={22} style={{ color: P?.color }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-[#111111]">{platformLabel(a.platform)}</p>
-                      <p className="pop-meta">{a.username ? `@${a.username}` : a.display_name ?? 'Connected'}</p>
+                      <p className="type-caption">{a.username ? `@${a.username}` : a.display_name ?? 'Connected'}</p>
                       {caps && (!caps.supportsComments || !caps.supportsDMs) && (
                         <p className="text-[11px] text-[#3B82F6] mt-0.5">{caps.caveat}</p>
                       )}
@@ -644,7 +644,7 @@ export default function CreatePostPage() {
             if (unavailable.length === 0) return null;
             return (
               <div className="mt-5">
-                <p className="pop-meta mb-2">Not available for this post type</p>
+                <p className="type-caption mb-2">Not available for this post type</p>
                 <div className="space-y-2 opacity-60">
                   {unavailable.map(a => {
                     const P = platformMeta(a.platform);
@@ -676,7 +676,7 @@ export default function CreatePostPage() {
               placeholder="Write a caption…"
             />
             <div className="flex items-center justify-between mt-1.5">
-              <span className="pop-meta">{caption.length} characters</span>
+              <span className="type-caption">{caption.length} characters</span>
               {(() => {
                 const strictest = selectedPlatforms
                   .map(p => capabilities[p]?.maxCaptionLength)
@@ -684,7 +684,7 @@ export default function CreatePostPage() {
                   .sort((a, b) => a - b)[0];
                 if (!strictest) return null;
                 const over = caption.length > strictest;
-                return <span className={`pop-meta ${over ? 'text-[#DC2626]' : ''}`}>Limit: {strictest}</span>;
+                return <span className={`type-caption ${over ? 'text-[#DC2626]' : ''}`}>Limit: {strictest}</span>;
               })()}
             </div>
 
@@ -748,7 +748,7 @@ export default function CreatePostPage() {
                   <button key={p} onClick={() => emblaApi?.scrollTo(i)} className={`h-1.5 rounded-full transition-all ${i === previewIndex ? 'w-5 bg-chartreuse' : 'w-1.5 bg-[#E8E4DF]'}`} />
                 ))}
               </div>
-              <span className="pop-meta ml-2">{previewIndex + 1} of {selectedPlatforms.length} — {platformLabel(selectedPlatforms[previewIndex])}</span>
+              <span className="type-caption ml-2">{previewIndex + 1} of {selectedPlatforms.length} — {platformLabel(selectedPlatforms[previewIndex])}</span>
             </div>
           )}
 

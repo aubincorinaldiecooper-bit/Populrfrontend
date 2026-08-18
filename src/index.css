@@ -164,58 +164,25 @@
   }
 
   /* Inputs */
-  .pop-input {
-    @apply bg-card border border-border rounded-xl px-4 py-2.5 text-sm placeholder:text-foreground-subtle focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
-  }
 
   /* Search input (shared across all pages) */
-  .pop-search {
-    @apply w-full bg-card border border-border rounded-xl pl-9 pr-3 py-2 text-sm placeholder:text-foreground-subtle focus:border-chartreuse focus:ring-2 focus:ring-chartreuse/20 transition-all;
-  }
 
   /* ─── CTA Hierarchy ─── */
 
   /* Primary: Acid lime */
-  .pop-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-chartreuse-hover transition-all;
-  }
 
   /* Secondary: Black */
-  .pop-btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-[#333] transition-all;
-  }
 
   /* Tertiary: Outline */
-  .pop-btn-tertiary {
-    @apply inline-flex items-center justify-center gap-2 border border-border text-foreground rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-muted transition-all;
-  }
 
   /* Ghost: Text only */
-  .pop-btn-ghost {
-    @apply inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors;
-  }
 
   /* ─── Typography ─── */
 
-  .pop-title {
-    @apply font-geist font-bold text-2xl lg:text-[32px] text-foreground tracking-tight leading-tight;
-  }
 
-  .pop-section-heading {
-    @apply font-geist font-bold text-xl lg:text-2xl text-foreground;
-  }
 
-  .pop-card-title {
-    @apply font-geist font-semibold text-base text-foreground;
-  }
 
-  .pop-body {
-    @apply text-sm text-muted-foreground leading-relaxed;
-  }
 
-  .pop-meta {
-    @apply text-xs text-foreground-subtle;
-  }
 
   /* ─── Typography roles ───
    * The six-role hierarchy every migrated surface uses instead of ad-hoc
