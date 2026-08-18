@@ -60,7 +60,14 @@ export default function AppHeader() {
           slot being empty rather than off a route test, so any page that
           starts filling this slot gets the behaviour for free. On desktop
           the wordmark lives in the sidebar and only the slot renders. */}
-      <HeaderSlotTarget slot="local" className="peer min-w-0 flex-1 empty:hidden md:empty:block" />
+      {/* overflow-hidden is the overlap guard: this is the one flexible
+          region between two clusters that refuse to shrink, so on a narrow
+          screen its content must truncate inside it — never spill under the
+          Activate button beside it. */}
+      <HeaderSlotTarget
+        slot="local"
+        className="peer min-w-0 flex-1 overflow-hidden empty:hidden md:empty:block"
+      />
       <span
         className="mr-auto font-display text-[22px] font-bold text-sidebar-foreground
           peer-[:not(:empty)]:hidden md:hidden"

@@ -59,22 +59,39 @@ import { cn } from '@/lib/utils';
 type SidePanel = 'preview' | 'notifications' | 'history' | 'ai' | null;
 
 /**
- * The width at which the notifications feed and a step's settings can be open
- * at the same time.
- *
- * This is arithmetic, not taste. The rail is 60 and each column is 320, so
- * two of them cost 700px of chrome; a canvas narrower than about 480 cannot
- * show a step and its next step at once, which is the least a flow editor can
- * be. 60 + 320 + 320 + 480 = 1180.
- *
- * It has to be this high because the panels are real columns now. As overlays
- * they floated over the canvas and cost it nothing, so two could be open on a
- * small laptop harmlessly; as columns they take the width away. Below this,
- * the exception is off and it is one thing at a time — which is the honest
- * trade, because two columns on a 900px screen leaves 200px of canvas and the
- * creator can no longer see the step the feed just sent them to.
+ * The widths every layout decision below is arithmetic over. SIDEBAR_WIDTH
+ * must match ui/sidebar.tsx — the builder shares the app shell now, and the
+ * one time these numbers went stale (the 60px icon rail became this 280px
+ * sidebar) every threshold that had the old chrome baked in silently
+ * over-promised 220px of canvas.
  */
-const TWO_COLUMN_MIN_WIDTH = 1180;
+const SIDEBAR_WIDTH = 280;
+const PANEL_WIDTH = 320;
+/** A canvas narrower than this cannot show a step and its next step at
+ *  once, which is the least a flow editor can be. */
+const CANVAS_MIN_WIDTH = 480;
+
+/**
+ * The width at which the checks feed and a step's settings can be open at
+ * the same time.
+ *
+ * This is arithmetic, not taste: the sidebar plus two real columns, plus
+ * the least canvas worth having. It has to be this high because the panels
+ * are columns, not overlays — they take their width from the canvas. Below
+ * this the exception is off and it is one thing at a time, which is the
+ * honest trade: both columns on a smaller screen would leave the creator
+ * unable to see the step the feed just sent them to.
+ */
+const TWO_COLUMN_MIN_WIDTH = SIDEBAR_WIDTH + PANEL_WIDTH * 2 + CANVAS_MIN_WIDTH; // 1400
+
+/**
+ * The window width at which the step editor anchors to its node instead of
+ * opening as a bottom sheet. The anchored card needs the content column —
+ * the window minus the sidebar — to be about 708px, which is what a 768px
+ * tablet offered back when the builder's chrome was a 60px rail. Same
+ * canvas guarantee, restated against the real sidebar: 708 + 280 = 988.
+ */
+const ANCHORED_EDITOR_MIN_WIDTH = 708 + SIDEBAR_WIDTH; // 988
 
 function roomForBothColumns(): boolean {
   return window.innerWidth >= TWO_COLUMN_MIN_WIDTH;
@@ -192,18 +209,23 @@ export default function AutomationBuilderPage() {
 
   /**
    * Where the step editor renders. Wide screens anchor it to the node —
-   * proximity is the point — but below tablet width a card floating over a
-   * small canvas obscures more than it helps, so it becomes a bottom sheet.
-   * Falls back to the window width where matchMedia doesn't exist.
+   * proximity is the point — but on a small canvas a floating card obscures
+   * more than it helps, so it becomes a bottom sheet.
+   *
+   * "Small" is about the CANVAS, not the window: the 280px sidebar shows
+   * from 768px up, so a 768px tablet has a 488px content column and an
+   * anchored 320px card would leave it 168px of canvas. The anchored card
+   * earns its place once the content column has the ~708px it always needed
+   * — see ANCHORED_EDITOR_MIN_WIDTH.
    */
   const [narrowEditor, setNarrowEditor] = useState(false);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time environment fallback
-      setNarrowEditor(window.innerWidth < 768);
+      setNarrowEditor(window.innerWidth < ANCHORED_EDITOR_MIN_WIDTH);
       return;
     }
-    const query = window.matchMedia('(max-width: 767px)');
+    const query = window.matchMedia(`(max-width: ${ANCHORED_EDITOR_MIN_WIDTH - 1}px)`);
     const sync = () => setNarrowEditor(query.matches);
     sync();
     query.addEventListener('change', sync);
@@ -614,8 +636,17 @@ export default function AutomationBuilderPage() {
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
           {/* Canvas-scoped invites: owner-only, like every other way of
-              granting access. flowId is null only before the flow exists. */}
-          {flowId && <InviteToAutomationButton flowId={flowId} flowName={name} />}
+              granting access. flowId is null only before the flow exists.
+              Desktop-only: the shared header carries the hamburger and the
+              global cluster on phones, and Invite is the one control here
+              whose job — granting a collaborator access — nobody does from
+              a 390px screen. Dropping it is what keeps the name readable
+              beside Activate. */}
+          {flowId && (
+            <span className="hidden md:inline-flex">
+              <InviteToAutomationButton flowId={flowId} flowName={name} />
+            </span>
+          )}
 
           {/* Three different jobs, three different weights. Preview is a
               secondary action and looks like one; the bell is chrome that
