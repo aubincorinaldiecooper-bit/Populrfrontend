@@ -27,6 +27,10 @@ import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
 import { derivedNotifications, type BuilderNotification } from '../lib/builderNotifications';
 import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 
 /**
  * The automation builder.
@@ -470,20 +474,28 @@ export default function AutomationBuilderPage() {
     setSelectedNodeId(id);
   }, [addNode, accounts, setSelectedNodeId]);
 
-  /** Remove the selected step, restorable from the toast. The snapshot is
-   *  captured HERE and restored verbatim — the generic undo would pop
-   *  whatever is newest on the shared stack, which one later edit would make
-   *  the wrong thing. */
-  const deleteSelected = useCallback(() => {
-    if (!selectedNode) return;
-    const label = NODE_LABEL[selectedNode.type];
+  /** Remove a step, restorable from the toast. The snapshot is captured HERE
+   *  and restored verbatim — the generic undo would pop whatever is newest on
+   *  the shared stack, which one later edit would make the wrong thing.
+   *
+   *  Takes an id rather than reading the selection, because the canvas's
+   *  right-click menu removes the step the pointer is on, which is not
+   *  necessarily the selected one. */
+  const deleteStep = useCallback((nodeId: string) => {
+    const target = nodeById(graph, nodeId);
+    if (!target || target.type === 'trigger') return;
+    const label = NODE_LABEL[target.type];
     const restored = graph;
     const restoredName = name;
-    deleteNode(selectedNode.id);
+    deleteNode(nodeId);
     showToast(`${label} step removed`, 'success', {
       action: { label: 'Undo', onClick: () => commitGraph(restored, { nextName: restoredName }) },
     });
-  }, [selectedNode, graph, name, deleteNode, showToast, commitGraph]);
+  }, [graph, name, deleteNode, showToast, commitGraph]);
+
+  const deleteSelected = useCallback(() => {
+    if (selectedNode) deleteStep(selectedNode.id);
+  }, [selectedNode, deleteStep]);
 
   /** The same editor content wherever it mounts — anchored card or sheet. */
   const editorFor = (variant: 'anchored' | 'sheet') =>
@@ -534,15 +546,15 @@ export default function AutomationBuilderPage() {
     <div className="flex flex-col h-[100dvh] md:h-screen bg-[#F7F5F2]">
       {/* ------------------------------------------------------------ header */}
       <header className="shrink-0 flex items-center gap-3 px-4 md:px-5 py-2.5 bg-white border-b border-[#E8E4DF]">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => navigate('/automations')}
-          className="p-1.5 -ml-1.5 rounded-lg text-[#6B6B6B] hover:bg-[#F7F5F2] hover:text-[#111111]
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
+          className="-ml-1.5 h-8 w-8 rounded-lg"
           aria-label="Back to Automations"
         >
           <ArrowLeft size={17} />
-        </button>
+        </Button>
 
         <div className="flex items-center gap-1.5 min-w-0">
           <button
@@ -580,20 +592,14 @@ export default function AutomationBuilderPage() {
             </button>
           )}
 
-          {live && (
-            <span className="ml-1 shrink-0 rounded-full bg-[#F0F7DC] px-2 py-0.5 text-[10.5px]
-              font-semibold uppercase tracking-wide text-[#3F6212]">
-              Live
-            </span>
-          )}
+          {live && <Badge variant="success" className="ml-1 shrink-0">Live</Badge>}
           {!mayEdit && (
-            <span
-              className="ml-1 shrink-0 rounded-full bg-[#F4F1EC] px-2 py-0.5 text-[10.5px]
-                font-semibold uppercase tracking-wide text-[#8A857E]"
+            <Badge
+              className="ml-1 shrink-0"
               title="Editing automations wasn't shared with you — you can read everything here."
             >
               View only
-            </span>
+            </Badge>
           )}
         </div>
 
@@ -608,19 +614,22 @@ export default function AutomationBuilderPage() {
               secondary action and looks like one; the bell is chrome that
               reports rather than acts, so it carries no border at all;
               Activate is the only thing here wearing lime. */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => togglePanel('preview')}
             disabled={isEmpty}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 md:px-3 py-1.5
-              text-[13px] font-medium text-[#111111] transition-colors disabled:opacity-40
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]
-              ${panel === 'preview'
-                ? 'border-[#111111] bg-[#F7F5F2]'
-                : 'border-[#E8E4DF] bg-white hover:border-[#D8D3CC]'}`}
+            aria-pressed={panel === 'preview'}
+            className={cn(
+              'gap-1.5 rounded-lg px-2.5 md:px-3',
+              // Pressed reads as pressed: the border darkens to the ink the
+              // label is written in, which is how every other toggle in the
+              // app says "this one is open".
+              panel === 'preview' && 'border-foreground bg-muted',
+            )}
           >
             <Eye size={14} /> <span className="hidden md:inline">Preview</span>
-          </button>
+          </Button>
 
           <div className="flex items-center gap-0.5 pl-1">
             <NotificationBell
@@ -632,15 +641,9 @@ export default function AutomationBuilderPage() {
           </div>
 
           {live && ownerView ? (
-            <button
-              type="button"
-              onClick={onPause}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8E4DF] bg-white
-                px-3 py-1.5 text-[13px] font-medium text-[#111111] hover:border-[#D8D3CC]
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
-            >
+            <Button variant="outline" size="sm" onClick={onPause} className="gap-1.5 rounded-lg">
               <Pause size={14} /> Pause
-            </button>
+            </Button>
           ) : !ownerView ? (
             // Members and canvas collaborators build; switching on stays with
             // the owner. Absence would read as a bug — say it instead.
@@ -648,19 +651,16 @@ export default function AutomationBuilderPage() {
               {live ? 'Live — the owner runs it' : 'The owner turns it on'}
             </span>
           ) : (
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={onActivate}
               disabled={isEmpty || activating}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#C5FF3D] px-3.5 md:px-4 py-1.5
-                text-[13px] font-semibold text-[#111111] shadow-[0_1px_2px_rgba(17,17,17,0.10)]
-                transition-all hover:bg-[#B9F52E] hover:shadow-[0_2px_6px_rgba(17,17,17,0.12)]
-                disabled:opacity-40 disabled:shadow-none focus-visible:outline-none
-                focus-visible:ring-2 focus-visible:ring-[#111111] focus-visible:ring-offset-1"
+              className="gap-1.5 rounded-lg px-3.5 md:px-4 shadow-[0_1px_2px_rgba(17,17,17,0.10)]
+                hover:shadow-[0_2px_6px_rgba(17,17,17,0.12)] disabled:shadow-none"
             >
               {activating ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
               Activate
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -710,6 +710,7 @@ export default function AutomationBuilderPage() {
           onMove={mayEdit ? moveNode : () => {}}
           onConnect={mayEdit ? connectNodes : () => {}}
           onAddAfter={mayEdit ? onAddAfter : () => {}}
+          onDeleteNode={mayEdit ? deleteStep : () => {}}
           readOnly={!mayEdit}
           fitSignal={fitSignal}
           focusNodeId={focus.nodeId || null}
@@ -721,16 +722,26 @@ export default function AutomationBuilderPage() {
             of floating at a node the small canvas can barely show. The canvas
             stays live behind it — tapping another step swaps the sheet,
             tapping empty canvas closes it. */}
-        {narrowEditor && selectedNode && (
-          <div
-            className="absolute inset-x-0 bottom-0 z-40 rounded-t-2xl border-t border-[#E8E4DF]
-              bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_28px_rgba(17,17,17,0.14)]
-              motion-safe:animate-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-200"
+        <Sheet
+          // Not modal, and no scrim: the canvas behind stays live, which is
+          // the behaviour this sheet has always had — tapping another step
+          // swaps the sheet, tapping empty canvas closes it. Base UI still
+          // gives it Escape, focus return, and a real dialog role.
+          modal={false}
+          open={narrowEditor && selectedNode !== null}
+          onOpenChange={next => { if (!next) setSelectedNodeId(null); }}
+        >
+          <SheetContent
+            side="bottom"
+            backdrop={false}
+            aria-label={selectedNode ? `${NODE_LABEL[selectedNode.type]} settings` : 'Step settings'}
+            className="z-40 rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]
+              shadow-[0_-8px_28px_rgba(17,17,17,0.14)]"
           >
             <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
             {editorFor('sheet')}
-          </div>
-        )}
+          </SheetContent>
+        </Sheet>
 
         {isEmpty && !composing && mayEdit && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
@@ -752,11 +763,13 @@ export default function AutomationBuilderPage() {
             {/* Click-away closes the menu without selecting anything. */}
             <div className="absolute inset-0 z-30" onClick={() => setAddMenu(null)} />
             <div
-              className="absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 w-56
-                rounded-xl border border-[#E8E4DF] bg-white p-1.5 shadow-[0_8px_28px_rgba(17,17,17,0.12)]"
+              className="absolute left-1/2 top-1/2 z-40 w-56 -translate-x-1/2 -translate-y-1/2
+                overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg"
               role="menu"
+              aria-label="Add a step"
             >
-              <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8A857E]">
+              <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide
+                text-muted-foreground">
                 Add a step
               </p>
               {STEP_OPTIONS.map(option => (
@@ -764,12 +777,12 @@ export default function AutomationBuilderPage() {
                   key={option.type}
                   type="button"
                   onClick={() => chooseStep(option.type)}
-                  className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#F7F5F2]
-                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
+                  className="w-full px-3 py-2 text-left transition-colors hover:bg-muted
+                    focus-visible:outline-none focus-visible:bg-muted"
                   role="menuitem"
                 >
-                  <span className="block text-[13px] font-medium text-[#111111]">{option.label}</span>
-                  <span className="block text-[11px] text-[#8A857E]">{option.hint}</span>
+                  <span className="block text-[13px] font-medium text-foreground">{option.label}</span>
+                  <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
                 </button>
               ))}
             </div>

@@ -327,7 +327,12 @@ describe('one context at a time', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true, configurable: true,
       value: (query: string) => ({
-        get matches() { return media.matches; },
+        // Answer per query, not blanket-true: this test is about the
+        // TWO-COLUMN threshold at 1440px, where the phone breakpoint is
+        // emphatically not matched. A stub that says yes to everything also
+        // claims a 1440px window is 767px wide, which would put the step
+        // editor in its bottom sheet and quietly test a different layout.
+        get matches() { return query.includes('min-width') ? media.matches : false; },
         media: query,
         addEventListener: (_e: string, fn: () => void) => { listeners.push(fn); },
         removeEventListener: () => {},

@@ -30,14 +30,27 @@ const sides = {
 
 const SheetContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseDialog.Popup> & { side?: keyof typeof sides }
->(function SheetContent({ side = 'left', className, children, ...props }, ref) {
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Popup> & {
+    side?: keyof typeof sides;
+    /**
+     * The scrim behind the panel. On by default, because a sheet usually IS
+     * the task. Turn it off for a sheet that edits something the creator
+     * must keep interacting with behind it — the builder's step editor sits
+     * over a live canvas, where a scrim would block the next step they mean
+     * to tap. Pair it with `modal={false}` on the Sheet root, or the dialog
+     * will still make the page inert.
+     */
+    backdrop?: boolean;
+  }
+>(function SheetContent({ side = 'left', backdrop = true, className, children, ...props }, ref) {
   return (
     <BaseDialog.Portal>
-      <BaseDialog.Backdrop
-        className="fixed inset-0 z-[45] bg-black/30 transition-opacity duration-200
-          data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
-      />
+      {backdrop && (
+        <BaseDialog.Backdrop
+          className="fixed inset-0 z-[45] bg-black/30 transition-opacity duration-200
+            data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
+        />
+      )}
       <BaseDialog.Popup
         ref={ref}
         className={cn(

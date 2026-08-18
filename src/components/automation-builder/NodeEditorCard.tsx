@@ -196,7 +196,10 @@ export default function NodeEditorCard({
   return (
     <aside
       ref={cardRef}
-      aria-label={`${NODE_LABEL[node.type]} settings`}
+      // Anchored, this card is its own named region. As a sheet it sits
+      // inside a dialog that already carries the name — repeating it would
+      // announce the same panel twice.
+      aria-label={variant === 'anchored' ? `${NODE_LABEL[node.type]} settings` : undefined}
       onKeyDown={e => {
         if (e.key !== 'Escape') return;
         // An open dropdown owns its own Escape — closing the whole card out
