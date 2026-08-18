@@ -18,6 +18,42 @@ import { QueryClient } from '@tanstack/react-query';
  * alongside it. Zero is an answer, and we only ever show it if the server
  * said it.
  */
+/**
+ * Which session's answers the cache currently holds.
+ *
+ * A mutation that was in flight when a session ended still runs its
+ * callbacks — that is the property the optimistic rollback depends on, and
+ * it does not stop being true because the creator signed out. Without a way
+ * to tell "before" from "after", a read that failed on the way out would
+ * write the previous person's notifications back into the cache their
+ * sign-out had just cleared.
+ *
+ * So work started under one session carries that session's number, and a
+ * write is refused if the number has moved on. Module-level rather than
+ * React state because the code that has to check it — a mutation callback —
+ * has no component left to read state from.
+ */
+let epoch = 0;
+
+export function serverStateEpoch(): number {
+  return epoch;
+}
+
+/** Everything cached and everything in flight now belongs to nobody. */
+export function endServerStateSession(queryClient: QueryClient): void {
+  epoch += 1;
+  // Pending mutations go first: their callbacks are what would otherwise
+  // write into the cache we are about to empty.
+  queryClient.getMutationCache().clear();
+  // Reset before clearing. Emptying the store does not tell a mounted
+  // observer anything — it keeps rendering the last result it was given,
+  // which on an account switch is the previous person's numbers still on
+  // screen. resetQueries puts live queries back to "nothing yet" and asks
+  // again; clear then drops what nobody is watching.
+  void queryClient.resetQueries();
+  queryClient.clear();
+}
+
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

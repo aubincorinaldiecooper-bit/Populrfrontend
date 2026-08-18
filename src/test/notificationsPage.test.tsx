@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import NotificationsPage from '../pages/NotificationsPage';
 import { useNotifications, applyRead, applyAllRead } from '../components/app/useNotifications';
+import { queryKeys } from '../lib/queryKeys';
 import type { WorkspaceNotification } from '../lib/api';
 
 /* Reading a notification, and the four ways that used to go wrong.
@@ -125,6 +126,10 @@ describe('reading a notification', () => {
     await user.click(await screen.findByRole('button', { name: /Welcome DM.*unread/ }));
     expect(screen.queryByRole('button', { name: /Welcome DM.*unread/ })).not.toBeInTheDocument();
 
+    // The settling refetch must fail too, or IT would restore the row and
+    // this test would pass with the rollback deleted — which is exactly how
+    // the first version of it passed.
+    fetchNotificationsMock.mockRejectedValue(new Error('offline'));
     reject(new Error('offline'));
 
     await waitFor(() =>
@@ -162,6 +167,9 @@ describe('reading a notification', () => {
     expect(screen.getByText('The automation')).toBeInTheDocument();
     expect(screen.getByTestId('badge')).toHaveTextContent('1');
 
+    // Same reason as above: with the refetch alive, the count would come
+    // back whether or not anything rolled it back.
+    fetchNotificationsMock.mockRejectedValue(new Error('offline'));
     reject(new Error('offline'));
 
     // The page that started this is gone. The rollback belongs to the
@@ -169,13 +177,42 @@ describe('reading a notification', () => {
     await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
   });
 
+  it('does not let one failed read un-read the row another click just read', async () => {
+    // Reading is not one-at-a-time: two rows get clicked inside one request.
+    // A rollback that restores the whole snapshot would take the second row
+    // back to unread, undoing something the creator watched happen.
+    const settlers: { reject: (e: Error) => void; resolve: (v: { marked: number }) => void }[] = [];
+    markNotificationsReadMock.mockImplementation(
+      () => new Promise<{ marked: number }>((resolve, reject) => { settlers.push({ resolve, reject }); }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Welcome DM.*unread/ }));
+    await user.click(await screen.findByRole('button', { name: /Comment catcher.*unread/ }));
+    await waitFor(() => expect(settlers.length).toBe(2));
+
+    // The first read fails while the second is still out. Nothing may come
+    // back for it — the refetch would tell us, but it hasn't happened yet.
+    fetchNotificationsMock.mockReturnValue(new Promise(() => {}));
+    settlers[0].reject(new Error('offline'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Welcome DM.*unread/ })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: /Comment catcher.*unread/ })).not.toBeInTheDocument();
+  });
+
   it('keeps the last real answer when a refresh cannot reach the server', async () => {
     const { queryClient } = render(<Badge />);
     await waitFor(() => expect(screen.getByTestId('badge')).toHaveTextContent('2'));
 
     fetchNotificationsMock.mockRejectedValue(new Error('offline'));
-    await queryClient.refetchQueries({ queryKey: ['notifications'] });
+    await queryClient.refetchQueries({ queryKey: queryKeys.notifications });
 
+    // The refetch really happened — a key typo that made this a no-op would
+    // otherwise leave the assertion below passing for nothing.
+    expect(fetchNotificationsMock.mock.calls.length).toBeGreaterThan(1);
     // Not zero: nothing was read, we simply couldn't ask.
     expect(screen.getByTestId('badge')).toHaveTextContent('2');
   });

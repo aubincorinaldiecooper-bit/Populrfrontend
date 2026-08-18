@@ -6,6 +6,7 @@ import {
   type WorkspaceNotification,
 } from '../../lib/api';
 import { queryKeys } from '../../lib/queryKeys';
+import { serverStateEpoch } from '../../lib/queryClient';
 
 /**
  * The workspace's notifications: the rows and the unread count, as ONE
@@ -40,6 +41,21 @@ export function applyRead(data: NotificationsData, id: string): NotificationsDat
       n.id === id ? { ...n, readAt: new Date().toISOString() } : n,
     ),
     unread: Math.max(0, data.unread - 1),
+  };
+}
+
+/**
+ * One notification, un-read — the exact inverse of applyRead, for a read the
+ * server refused. Surgical on purpose: restoring a whole snapshot would also
+ * take back a DIFFERENT row that a second click read while this request was
+ * out, undoing something the creator watched happen.
+ */
+export function applyUnread(data: NotificationsData, id: string): NotificationsData {
+  const target = data.notifications.find(n => n.id === id);
+  if (!target || target.readAt === null) return data;
+  return {
+    notifications: data.notifications.map(n => (n.id === id ? { ...n, readAt: null } : n)),
+    unread: data.unread + 1,
   };
 }
 
@@ -81,32 +97,42 @@ export function useNotificationsUnread(): { count: number } {
  * navigating away — the common case here, since most notifications are
  * links to the thing that happened.
  */
+/**
+ * Both mutations share one key so each can see the other in flight. Reading
+ * is not a one-at-a-time act — two rows get clicked in the time one request
+ * takes — and a rollback or a refetch that ignores its sibling undoes work
+ * the creator watched land.
+ */
+const MARK_READ_KEY = ['notifications', 'mark-read'] as const;
+
 export function useMarkRead() {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: MARK_READ_KEY,
     mutationFn: (id: string) => markNotificationsRead(id),
     onMutate: async (id: string) => optimistically(queryClient, prev => applyRead(prev, id)),
-    onError: (_error, _id, context) => revert(queryClient, context),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
-    },
+    // Un-read exactly this row. Its siblings keep what they earned.
+    onError: (_error, id, context) =>
+      revert(queryClient, context, prev => applyUnread(prev, id)),
+    onSettled: () => settle(queryClient),
   });
 }
 
 export function useMarkAllRead() {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: MARK_READ_KEY,
     mutationFn: () => markNotificationsRead(),
     onMutate: async () => optimistically(queryClient, applyAllRead),
     onError: (_error, _vars, context) => revert(queryClient, context),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
-    },
+    onSettled: () => settle(queryClient),
   });
 }
 
 interface Rollback {
   previous: NotificationsData | undefined;
+  /** Which session this work belongs to — see serverStateEpoch. */
+  epoch: number;
 }
 
 async function optimistically(
@@ -118,9 +144,47 @@ async function optimistically(
   await queryClient.cancelQueries({ queryKey: queryKeys.notifications });
   const previous = queryClient.getQueryData<NotificationsData>(queryKeys.notifications);
   if (previous) queryClient.setQueryData(queryKeys.notifications, change(previous));
-  return { previous };
+  return { previous, epoch: serverStateEpoch() };
 }
 
-function revert(queryClient: QueryClient, context: Rollback | undefined): void {
-  if (context?.previous) queryClient.setQueryData(queryKeys.notifications, context.previous);
+/**
+ * Put back what a failed request had already shown as done.
+ *
+ * `undo` is the change's own inverse where the operation has one — that is
+ * the only kind of rollback that can run while a sibling mutation is still
+ * in flight without trampling it. Without an inverse (marking everything
+ * read), the pre-change snapshot is all we have, so that path waits until
+ * it is the last one standing and otherwise leaves the truth to the
+ * settling refetch.
+ */
+function revert(
+  queryClient: QueryClient,
+  context: Rollback | undefined,
+  undo?: (data: NotificationsData) => NotificationsData,
+): void {
+  if (!context) return;
+  // The session that asked this question has ended. Its answer is not ours
+  // to put back — writing it here would hand the next person to sign in on
+  // this browser the previous one's notifications.
+  if (context.epoch !== serverStateEpoch()) return;
+
+  if (undo) {
+    const current = queryClient.getQueryData<NotificationsData>(queryKeys.notifications);
+    if (current) queryClient.setQueryData(queryKeys.notifications, undo(current));
+    return;
+  }
+
+  if (!context.previous) return;
+  if (queryClient.isMutating({ mutationKey: MARK_READ_KEY }) > 1) return;
+  queryClient.setQueryData(queryKeys.notifications, context.previous);
+}
+
+/**
+ * Ask the server again — but only once everyone is done. A refetch fired
+ * while a sibling is still in flight returns a truth that predates it, and
+ * lands on top of that sibling's optimistic read.
+ */
+function settle(queryClient: QueryClient): void {
+  if (queryClient.isMutating({ mutationKey: MARK_READ_KEY }) > 1) return;
+  void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
 }
