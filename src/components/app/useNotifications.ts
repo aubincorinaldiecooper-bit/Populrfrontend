@@ -7,6 +7,8 @@ import {
 } from '../../lib/api';
 import { queryKeys } from '../../lib/queryKeys';
 import { serverStateEpoch } from '../../lib/queryClient';
+import { useFeedIsLive } from './useLiveFeed';
+import { pollRate } from '../../lib/pollRates';
 
 /**
  * The workspace's notifications: the rows and the unread count, as ONE
@@ -69,15 +71,18 @@ export function applyAllRead(data: NotificationsData): NotificationsData {
 }
 
 /**
- * The feed. Polled while something is watching it — the interval pauses on
- * a hidden tab, and coming back asks straight away.
+ * The feed. The live stream tells it when something arrived; the interval
+ * behind that is the fallback, slow while the stream is connected and back
+ * at its old rate when it isn't. Either way it pauses on a hidden tab, and
+ * coming back asks straight away.
  */
 export function useNotifications() {
+  const live = useFeedIsLive();
   return useQuery({
     queryKey: queryKeys.notifications,
     queryFn: fetchNotifications,
     enabled: isBackendConfigured(),
-    refetchInterval: 60_000,
+    refetchInterval: pollRate(live),
   });
 }
 

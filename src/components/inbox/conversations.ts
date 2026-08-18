@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isBackendConfigured, fetchConversations, type Conversation } from '../../lib/api';
 import { queryKeys } from '../../lib/queryKeys';
+import { useFeedIsLive } from '../app/useLiveFeed';
+import { pollRate } from '../../lib/pollRates';
 
 /**
  * The conversations, cached under one key per search.
@@ -8,7 +10,7 @@ import { queryKeys } from '../../lib/queryKeys';
  * The nav badge and the Inbox page used to ask this question separately —
  * two requests for the same list, two answers that could differ, and a
  * hand-written bridge between them so the page could tell the badge what it
- * had just learned. They share the key now: whoever asks first fetches,
+ * had just learned. Both run this hook now: whoever asks first fetches,
  * whoever asks second joins that request, and an answer arriving anywhere
  * updates everywhere.
  */
@@ -30,6 +32,7 @@ export function countWaiting(conversations: Conversation[]): number {
 /** The unfiltered list is the one the badge counts; a search is a filter. */
 export function useConversationsQuery(search = '') {
   const term = search.trim();
+  const live = useFeedIsLive();
   return useQuery({
     queryKey: queryKeys.conversations(term),
     queryFn: () => fetchConversations(term ? { search: term } : {}),
@@ -37,7 +40,14 @@ export function useConversationsQuery(search = '') {
     // Polled only for the unfiltered list, and paused on a hidden tab: a
     // laptop left open overnight costs nothing, and the creator coming back
     // to the tab is itself a refresh.
-    refetchInterval: term ? false : 60_000,
+    //
+    // While the live feed is connected this is a safety net rather than the
+    // mechanism — a new message announces itself in well under a second, and
+    // the slow tick is there for the one case the feed can't cover: the
+    // server's hub is per-instance, so an event can land on an instance this
+    // tab isn't connected to. When the feed is down it goes back to being
+    // the mechanism, at the rate it always ran at.
+    refetchInterval: term ? false : pollRate(live),
   });
 }
 

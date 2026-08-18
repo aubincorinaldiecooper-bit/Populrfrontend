@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Page } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { AlertCircle, ArrowLeft, MessagesSquare } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
@@ -34,17 +34,16 @@ export default function InboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
 
+  // The URL is the source of truth for which conversation is open — a reload,
+  // a link, or arriving from a contact all land in the same place — and it is
+  // handed straight to the hook. There used to be a copy of it in hook state
+  // and an effect holding the two in step; the copy was the only thing that
+  // could ever be wrong.
   const selected = searchParams.get('c');
   const {
-    conversations, loading, error, thread, threadLoading, selectedId, sending,
-    replyTarget, select, refresh, send, updateThread,
-  } = useConversations(search);
-
-  // The URL is the source of truth for which conversation is open, so a
-  // reload, a link, or arriving from a contact all land in the same place.
-  useEffect(() => {
-    if (selected !== selectedId) select(selected);
-  }, [selected, selectedId, select]);
+    conversations, loading, error, thread, threadLoading, threadError, sending,
+    replyTarget, refresh, reloadThread, send, updateThread,
+  } = useConversations(search, selected);
 
   const open = useCallback((contactId: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -171,10 +170,29 @@ export default function InboxPage() {
               />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
-                <MessagesSquare size={22} className="text-[#D8D3CC]" />
-                <p className="text-[13px] text-[#8A857E]">
-                  {threadLoading ? 'Opening…' : 'Pick a conversation'}
-                </p>
+                {threadError ? (
+                  // A conversation that wouldn't open used to say so in a toast
+                  // and then leave an empty pane reading "Pick a conversation" —
+                  // as if nothing had been picked. The pane it happened in is
+                  // where it belongs, and it stays until something changes.
+                  <>
+                    <AlertCircle size={18} className="text-[#DC2626]" />
+                    <p className="text-[13px] text-[#111111]">{threadError}</p>
+                    <button
+                      onClick={reloadThread}
+                      className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1.5 px-3 mt-1')}
+                    >
+                      Try again
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <MessagesSquare size={22} className="text-[#D8D3CC]" />
+                    <p className="text-[13px] text-[#8A857E]">
+                      {threadLoading ? 'Opening…' : 'Pick a conversation'}
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
