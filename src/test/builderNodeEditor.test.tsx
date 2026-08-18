@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { render } from './render';
+import { setViewportWidth } from './viewport';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import AutomationBuilderPage from '../pages/AutomationBuilderPage';
@@ -160,30 +161,8 @@ function mountBuilderWithNavigation() {
  * threshold turns on once the sidebar has two widths.
  */
 async function atWindowWidth(px: number, body: () => Promise<void>): Promise<void> {
-  const realWidth = window.innerWidth;
-  const realMatchMedia = window.matchMedia;
-  Object.defineProperty(window, 'innerWidth', { value: px, configurable: true });
-  Object.defineProperty(window, 'matchMedia', {
-    writable: true, configurable: true,
-    value: (query: string) => {
-      const max = /max-width:\s*(\d+)/.exec(query);
-      const min = /min-width:\s*(\d+)/.exec(query);
-      return {
-        matches: max ? px <= Number(max[1]) : min ? px >= Number(min[1]) : false,
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      };
-    },
-  });
-  try {
-    await body();
-  } finally {
-    Object.defineProperty(window, 'innerWidth', { value: realWidth, configurable: true });
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true, configurable: true, value: realMatchMedia,
-    });
-  }
+  setViewportWidth(px);
+  await body();
 }
 
 /** Select a step, the way the canvas does. */
@@ -196,7 +175,7 @@ function selectNode(id: string | null) {
 beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
-  Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  setViewportWidth(1440);
   mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
 });
 
@@ -481,6 +460,42 @@ describe('narrow screens', () => {
       const editor = await screen.findByLabelText('Message settings');
       expect(screen.getByTestId('canvas')).toContainElement(editor);
       expect(canvas.props?.editorSlot ?? null).not.toBeNull();
+    });
+  });
+});
+
+describe('two columns, and the line that decides whether they fit', () => {
+  it('expanding the navigation takes the step back when both no longer fit', async () => {
+    // 1250px is the window that only the rail can afford: the AI panel and
+    // the step editor need 640px of columns plus 480px of canvas, so they
+    // coexist behind a 72px navigation (1192) and cannot behind a 280px one
+    // (1400). The creator opens both while collapsed, then expands.
+    //
+    // Nothing about the WINDOW changed — the threshold moved. matchMedia
+    // reports crossings and a new MediaQueryList is not one, so a page that
+    // only listens leaves both 320px columns open over 170px of canvas: the
+    // exact layout this threshold exists to prevent, reached by the one
+    // route it wasn't watching.
+    //
+    // The step yields, not the panel: a panel was opened deliberately, and a
+    // selection is one click on the canvas to get back.
+    const user = userEvent.setup();
+    window.localStorage.setItem('populr.navCollapsed', '1');
+    await atWindowWidth(1250, async () => {
+      mountBuilderWithNavigation();
+      await screen.findByText('Preview');
+
+      await user.click(screen.getByRole('button', { name: 'Ask Populr' }));
+      await screen.findByRole('complementary', { name: 'Ask Populr' });
+      selectNode('send-plain');
+      await screen.findByLabelText('Message settings');
+
+      await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
+
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Message settings')).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole('complementary', { name: 'Ask Populr' })).toBeInTheDocument();
     });
   });
 });

@@ -327,6 +327,14 @@ export default function AutomationBuilderPage() {
     const reconcile = () => {
       if (!query.matches) setSelectedNodeId(current => (panel ? null : current));
     };
+    // Answered once on subscribing, not only on the next crossing. The
+    // threshold itself moves now — expanding the navigation raises it by
+    // 208px — and a viewport that was wide enough a moment ago can be on the
+    // wrong side of the new line without having changed at all. matchMedia
+    // reports crossings, and constructing a MediaQueryList is not one, so
+    // waiting for `change` here would leave both columns open on a canvas
+    // that cannot hold them until something else happened to resize.
+    reconcile();
     query.addEventListener('change', reconcile);
     return () => query.removeEventListener('change', reconcile);
     // sidebarWidth is a dependency for the same reason as above: collapsing

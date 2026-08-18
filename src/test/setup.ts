@@ -16,19 +16,38 @@ if (!import.meta.env.VITE_AUTH_URL) {
   vi.stubEnv('VITE_AUTH_URL', 'http://localhost:4001');
 }
 
-// jsdom doesn't implement matchMedia — some UI code paths touch it.
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
+// jsdom doesn't implement matchMedia — some UI code paths touch it. The
+// default answers `false` to everything, which keeps responsive paths out of
+// the way of the tests that aren't about layout. A test that IS about layout
+// calls setViewportWidth() from ./viewport instead; this puts the default
+// back afterwards so the choice never leaks into the next test.
+const JSDOM_DEFAULT_WIDTH = 1024;
+
+function installDefaultMatchMedia() {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
+installDefaultMatchMedia();
+
+afterEach(() => {
+  installDefaultMatchMedia();
+  Object.defineProperty(window, 'innerWidth', {
+    value: JSDOM_DEFAULT_WIDTH,
+    configurable: true,
+  });
 });
 
 // jsdom has no layout, so it implements no scrolling either — scrollIntoView
