@@ -6,7 +6,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import AppSidebar from '../components/app/AppSidebar';
 import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
-import EditorRail from '../components/EditorRail';
 import InboxPage from '../pages/InboxPage';
 import { useInboxWaiting } from '../components/inbox/conversations';
 import type { Conversation } from '../lib/api';
@@ -20,7 +19,7 @@ import type { Conversation } from '../lib/api';
  * it that could open full-screen on top of the app.
  *
  * The consolidation these tests pin: Inbox is a nav destination like any
- * other, in the sidebar and the builder's rail, carrying the "someone is
+ * other, in the one sidebar every page shares, carrying the "someone is
  * waiting" badge the launcher used to hold — and clicking it NAVIGATES.
  * Nothing anywhere opens a second inbox surface over the page you are on.
  */
@@ -122,29 +121,16 @@ describe('the left navigation', () => {
   });
 
   it('however many badges render, there is one poll', async () => {
-    // The builder mounts the rail AND keeps the sidebar for mobile nav. Two
-    // components, one shared store — not one request each.
-    renderShell(<><AppSidebar desktop={false} /><EditorRail /></>);
+    // The sidebar's badge and any other reader of the count share one
+    // cached list — not one request each. (This used to pair the sidebar
+    // with the builder's icon rail; the rail is gone — the builder shows
+    // the same sidebar as everywhere else — but the property is the same
+    // with any second reader.)
+    renderShell(<><AppSidebar /><WaitingBadge /></>);
 
-    await screen.findByRole('link', { name: 'Inbox, 2 waiting' });
+    await screen.findByRole('link', { name: 'Inbox, 2 conversations waiting' });
+    await waitFor(() => expect(screen.getByTestId('waiting')).toHaveTextContent('2'));
     expect(fetchConversationsMock).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("the builder's rail", () => {
-  it('carries Inbox with the same waiting count, as a link', async () => {
-    renderShell(<EditorRail />);
-
-    const inbox = await screen.findByRole('link', { name: 'Inbox, 2 waiting' });
-    expect(inbox).toHaveAttribute('href', '/inbox');
-  });
-
-  it('and stays quiet when nobody is', async () => {
-    fetchConversationsMock.mockResolvedValue({ conversations: [] });
-    renderShell(<EditorRail />);
-
-    await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalled());
-    expect(screen.getByRole('link', { name: 'Inbox' })).toBeInTheDocument();
   });
 });
 

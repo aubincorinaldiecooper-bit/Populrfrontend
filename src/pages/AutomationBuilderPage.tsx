@@ -27,6 +27,7 @@ import { GENERIC_ERROR, isCreatorSafe } from '../lib/voice';
 import { derivedNotifications, type BuilderNotification } from '../lib/builderNotifications';
 import { NODE_LABEL, STEP_OPTIONS, nodeById, readTrigger, triggerNodes, type FlowNodeType } from '../lib/flowSchema';
 import LoadingState from '../components/LoadingState';
+import { HeaderLocal, HeaderActions } from '../components/app/headerSlots';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -58,22 +59,39 @@ import { cn } from '@/lib/utils';
 type SidePanel = 'preview' | 'notifications' | 'history' | 'ai' | null;
 
 /**
- * The width at which the notifications feed and a step's settings can be open
- * at the same time.
- *
- * This is arithmetic, not taste. The rail is 60 and each column is 320, so
- * two of them cost 700px of chrome; a canvas narrower than about 480 cannot
- * show a step and its next step at once, which is the least a flow editor can
- * be. 60 + 320 + 320 + 480 = 1180.
- *
- * It has to be this high because the panels are real columns now. As overlays
- * they floated over the canvas and cost it nothing, so two could be open on a
- * small laptop harmlessly; as columns they take the width away. Below this,
- * the exception is off and it is one thing at a time — which is the honest
- * trade, because two columns on a 900px screen leaves 200px of canvas and the
- * creator can no longer see the step the feed just sent them to.
+ * The widths every layout decision below is arithmetic over. SIDEBAR_WIDTH
+ * must match ui/sidebar.tsx — the builder shares the app shell now, and the
+ * one time these numbers went stale (the 60px icon rail became this 280px
+ * sidebar) every threshold that had the old chrome baked in silently
+ * over-promised 220px of canvas.
  */
-const TWO_COLUMN_MIN_WIDTH = 1180;
+const SIDEBAR_WIDTH = 280;
+const PANEL_WIDTH = 320;
+/** A canvas narrower than this cannot show a step and its next step at
+ *  once, which is the least a flow editor can be. */
+const CANVAS_MIN_WIDTH = 480;
+
+/**
+ * The width at which the checks feed and a step's settings can be open at
+ * the same time.
+ *
+ * This is arithmetic, not taste: the sidebar plus two real columns, plus
+ * the least canvas worth having. It has to be this high because the panels
+ * are columns, not overlays — they take their width from the canvas. Below
+ * this the exception is off and it is one thing at a time, which is the
+ * honest trade: both columns on a smaller screen would leave the creator
+ * unable to see the step the feed just sent them to.
+ */
+const TWO_COLUMN_MIN_WIDTH = SIDEBAR_WIDTH + PANEL_WIDTH * 2 + CANVAS_MIN_WIDTH; // 1400
+
+/**
+ * The window width at which the step editor anchors to its node instead of
+ * opening as a bottom sheet. The anchored card needs the content column —
+ * the window minus the sidebar — to be about 708px, which is what a 768px
+ * tablet offered back when the builder's chrome was a 60px rail. Same
+ * canvas guarantee, restated against the real sidebar: 708 + 280 = 988.
+ */
+const ANCHORED_EDITOR_MIN_WIDTH = 708 + SIDEBAR_WIDTH; // 988
 
 function roomForBothColumns(): boolean {
   return window.innerWidth >= TWO_COLUMN_MIN_WIDTH;
@@ -191,18 +209,23 @@ export default function AutomationBuilderPage() {
 
   /**
    * Where the step editor renders. Wide screens anchor it to the node —
-   * proximity is the point — but below tablet width a card floating over a
-   * small canvas obscures more than it helps, so it becomes a bottom sheet.
-   * Falls back to the window width where matchMedia doesn't exist.
+   * proximity is the point — but on a small canvas a floating card obscures
+   * more than it helps, so it becomes a bottom sheet.
+   *
+   * "Small" is about the CANVAS, not the window: the 280px sidebar shows
+   * from 768px up, so a 768px tablet has a 488px content column and an
+   * anchored 320px card would leave it 168px of canvas. The anchored card
+   * earns its place once the content column has the ~708px it always needed
+   * — see ANCHORED_EDITOR_MIN_WIDTH.
    */
   const [narrowEditor, setNarrowEditor] = useState(false);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time environment fallback
-      setNarrowEditor(window.innerWidth < 768);
+      setNarrowEditor(window.innerWidth < ANCHORED_EDITOR_MIN_WIDTH);
       return;
     }
-    const query = window.matchMedia('(max-width: 767px)');
+    const query = window.matchMedia(`(max-width: ${ANCHORED_EDITOR_MIN_WIDTH - 1}px)`);
     const sync = () => setNarrowEditor(query.matches);
     sync();
     query.addEventListener('change', sync);
@@ -543,20 +566,24 @@ export default function AutomationBuilderPage() {
   const isEmpty = graph.nodes.length === 0;
 
   return (
-    <div className="flex flex-col h-[100dvh] md:h-screen bg-[#F7F5F2]">
-      {/* ------------------------------------------------------------ header */}
-      <header className="shrink-0 flex items-center gap-3 px-4 md:px-5 py-2.5 bg-white border-b border-[#E8E4DF]">
+    // The shell's header sits above this — the same one every page gets —
+    // so the page takes what the viewport has left, exactly like the Inbox.
+    // The builder's own controls live in that header's slots below, not in
+    // a second bar of its own.
+    <div className="flex flex-col bg-[#F7F5F2]
+      h-[calc(100dvh-4rem-env(safe-area-inset-top))] md:h-[calc(100vh-3.5rem)]">
+      {/* ------------------------------------------- header slot: where am I */}
+      <HeaderLocal>
+        <div className="flex items-center gap-1.5 min-w-0">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => navigate('/automations')}
-          className="-ml-1.5 h-8 w-8 rounded-lg"
+          className="-ml-1.5 h-8 w-8 rounded-lg shrink-0"
           aria-label="Back to Automations"
         >
           <ArrowLeft size={17} />
         </Button>
-
-        <div className="flex items-center gap-1.5 min-w-0">
           <button
             type="button"
             onClick={() => navigate('/automations')}
@@ -602,13 +629,24 @@ export default function AutomationBuilderPage() {
             </Badge>
           )}
         </div>
+      </HeaderLocal>
 
-        <div className="ml-auto flex items-center gap-2">
+      {/* ------------------------------------- header slot: what can I do */}
+      <HeaderActions>
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
           {/* Canvas-scoped invites: owner-only, like every other way of
-              granting access. flowId is null only before the flow exists. */}
-          {flowId && <InviteToAutomationButton flowId={flowId} flowName={name} />}
+              granting access. flowId is null only before the flow exists.
+              Desktop-only: the shared header carries the hamburger and the
+              global cluster on phones, and Invite is the one control here
+              whose job — granting a collaborator access — nobody does from
+              a 390px screen. Dropping it is what keeps the name readable
+              beside Activate. */}
+          {flowId && (
+            <span className="hidden md:inline-flex">
+              <InviteToAutomationButton flowId={flowId} flowName={name} />
+            </span>
+          )}
 
           {/* Three different jobs, three different weights. Preview is a
               secondary action and looks like one; the bell is chrome that
@@ -662,8 +700,7 @@ export default function AutomationBuilderPage() {
               Activate
             </Button>
           )}
-        </div>
-      </header>
+      </HeaderActions>
 
       {/* The automation's live behaviour and this canvas have come apart.
           Sits directly under the header, above the canvas, because it

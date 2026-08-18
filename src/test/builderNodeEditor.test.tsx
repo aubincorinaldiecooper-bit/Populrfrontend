@@ -356,4 +356,43 @@ describe('narrow screens', () => {
       });
     }
   });
+
+  it('a tablet with the sidebar showing is a narrow screen too', async () => {
+    // "Narrow" is about the CANVAS, not the window. From 768px up the 280px
+    // sidebar is on screen, so a 900px tablet has a 620px content column —
+    // anchoring a 320px card there would leave 300px of canvas. The
+    // breakpoint answers for the room the editor actually has: media
+    // queries here respond as a real 900px window would (max-width: 987px
+    // matches; the desktop min-widths do not).
+    Object.defineProperty(window, 'innerWidth', { value: 900, configurable: true });
+    const realMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true, configurable: true,
+      value: (query: string) => ({
+        matches: /max-width:\s*(\d+)/.test(query)
+          ? 900 <= Number(/max-width:\s*(\d+)/.exec(query)![1])
+          : /min-width:\s*(\d+)/.test(query)
+            ? 900 >= Number(/min-width:\s*(\d+)/.exec(query)![1])
+            : false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+    try {
+      mountBuilder();
+      await screen.findByText('Preview');
+
+      selectNode('send-plain');
+      const editor = await screen.findByLabelText('Message settings');
+
+      // The sheet, not the anchored card — same assertion as the phone case.
+      expect(screen.getByTestId('canvas')).not.toContainElement(editor);
+      expect(canvas.props?.editorSlot ?? null).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true, configurable: true, value: realMatchMedia,
+      });
+    }
+  });
 });

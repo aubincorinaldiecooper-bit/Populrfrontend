@@ -159,7 +159,7 @@ beforeEach(() => {
   canvas.props = null;
   finishPropose = null;
   commitResult = {};
-  setViewportWidth(1440);
+  setViewportWidth(1520);
   mockUseApp.mockReturnValue({ showToast: vi.fn() });
 });
 
@@ -286,21 +286,21 @@ describe('one context at a time', () => {
     selectNode('trigger');
     await screen.findByText('When');
 
-    await user.click(screen.getByLabelText(/^Notifications,/));
+    await user.click(screen.getByLabelText(/^Automation checks,/));
 
-    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     expect(screen.getByText('When')).toBeInTheDocument();
   });
 
   // "Beside" is a width claim, and the panels are real columns now — they take
   // the width from the canvas rather than floating over it. Two of them plus
-  // the rail is 700px of chrome, so below ~1180 the exception has to be off:
+  // the 280px sidebar is 920px of chrome, so below ~1400 the exception is off:
   // keeping both would leave the creator seeing neither the list nor the step,
   // which is the exact thing the exception exists to preserve.
   it.each([
     ['a phone', 390],
     ['a small laptop, where two columns would leave 200px of canvas', 900],
-    ['one pixel below the threshold', 1179],
+    ['one pixel below the threshold', 1399],
   ])('but not on %s', async (_label, width) => {
     setViewportWidth(width);
     const user = userEvent.setup();
@@ -309,9 +309,9 @@ describe('one context at a time', () => {
     selectNode('trigger');
     await screen.findByText('When');
 
-    await user.click(screen.getByLabelText(/^Notifications,/));
+    await user.click(screen.getByLabelText(/^Automation checks,/));
 
-    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
   });
 
@@ -328,9 +328,9 @@ describe('one context at a time', () => {
       writable: true, configurable: true,
       value: (query: string) => ({
         // Answer per query, not blanket-true: this test is about the
-        // TWO-COLUMN threshold at 1440px, where the phone breakpoint is
+        // TWO-COLUMN threshold at 1520px, where the sheet breakpoint is
         // emphatically not matched. A stub that says yes to everything also
-        // claims a 1440px window is 767px wide, which would put the step
+        // claims a 1520px window is narrow, which would put the step
         // editor in its bottom sheet and quietly test a different layout.
         get matches() { return query.includes('min-width') ? media.matches : false; },
         media: query,
@@ -339,14 +339,14 @@ describe('one context at a time', () => {
       }),
     });
     try {
-      setViewportWidth(1440);
+      setViewportWidth(1520);
       const user = userEvent.setup();
       mountBuilder();
       await screen.findByText('Preview');
       selectNode('trigger');
       await screen.findByText('When');
-      await user.click(screen.getByLabelText(/^Notifications,/));
-      expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      await user.click(screen.getByLabelText(/^Automation checks,/));
+      expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
       expect(screen.getByText('When')).toBeInTheDocument();
 
       // The viewport crosses below the threshold.
@@ -355,7 +355,7 @@ describe('one context at a time', () => {
 
       // The step yields; the panel the creator deliberately opened stays.
       await waitFor(() => expect(screen.queryByText('When')).not.toBeInTheDocument());
-      expect(screen.getByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+      expect(screen.getByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     } finally {
       Object.defineProperty(window, 'matchMedia', {
         writable: true, configurable: true, value: realMatchMedia,
@@ -397,16 +397,16 @@ describe('one context at a time', () => {
   });
 
   it('and exactly at the threshold, both fit', async () => {
-    setViewportWidth(1180);
+    setViewportWidth(1400);
     const user = userEvent.setup();
     mountBuilder();
     await screen.findByText('Preview');
     selectNode('trigger');
     await screen.findByText('When');
 
-    await user.click(screen.getByLabelText(/^Notifications,/));
+    await user.click(screen.getByLabelText(/^Automation checks,/));
 
-    expect(await screen.findByRole('complementary', { name: 'Notifications' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Automation checks' })).toBeInTheDocument();
     expect(screen.getByText('When')).toBeInTheDocument();
   });
 });

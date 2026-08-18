@@ -160,7 +160,7 @@ describe('the builder’s top bar', () => {
 
     expect(screen.queryByText('Review')).not.toBeInTheDocument();
     expect(screen.getByText('Activate')).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Notifications,/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Automation checks,/)).toBeInTheDocument();
   });
 
   it('offers no second inbox surface — Inbox is the nav\'s job now', async () => {
@@ -177,7 +177,7 @@ describe('the builder’s top bar', () => {
 
   it('counts what is unresolved on the bell', async () => {
     mountBuilder();
-    const bell = await screen.findByLabelText('Notifications, 2 unread');
+    const bell = await screen.findByLabelText('Automation checks, 2 need attention');
     expect(bell).toHaveTextContent('2');
   });
 
@@ -189,7 +189,7 @@ describe('the builder’s top bar', () => {
       { nodeId: 'send', message: "Zernio needs the opening DM's text, so this Send can't be empty." },
     ];
     mountBuilder();
-    await screen.findByLabelText('Notifications, 1 unread');
+    await screen.findByLabelText('Automation checks, 1 need attention');
 
     expect(screen.queryByText(/zernio/i)).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/zernio/i);
@@ -198,7 +198,7 @@ describe('the builder’s top bar', () => {
   it('shows a plain bell when nothing needs the creator', async () => {
     serverProblems = [];
     mountBuilder();
-    expect(await screen.findByLabelText('Notifications, nothing unread')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Automation checks, all clear')).toBeInTheDocument();
   });
 });
 
@@ -206,7 +206,7 @@ describe('the notification feed', () => {
   it('asks in Populr’s words rather than reciting the validator', async () => {
     const user = userEvent.setup();
     mountBuilder();
-    await user.click(await screen.findByLabelText('Notifications, 2 unread'));
+    await user.click(await screen.findByLabelText('Automation checks, 2 need attention'));
 
     expect(await screen.findByText('Which connected account should this automation use?')).toBeInTheDocument();
     expect(screen.getByText('What should this message say?')).toBeInTheDocument();
@@ -218,7 +218,7 @@ describe('the notification feed', () => {
     serverProblems = [];
     const user = userEvent.setup();
     mountBuilder();
-    await user.click(await screen.findByLabelText('Notifications, nothing unread'));
+    await user.click(await screen.findByLabelText('Automation checks, all clear'));
 
     expect(await screen.findByText("You're all caught up.")).toBeInTheDocument();
   });
@@ -226,7 +226,7 @@ describe('the notification feed', () => {
   it('takes the creator to the step, and asks the question there', async () => {
     const user = userEvent.setup();
     mountBuilder();
-    await user.click(await screen.findByLabelText('Notifications, 2 unread'));
+    await user.click(await screen.findByLabelText('Automation checks, 2 need attention'));
     await user.click(await screen.findByText('Which connected account should this automation use?'));
 
     // Panned to the step it belongs to…
@@ -244,7 +244,7 @@ describe('the notification feed', () => {
   it('answering one takes it off the count and leaves it answered in the feed', async () => {
     const user = userEvent.setup();
     mountBuilder();
-    await user.click(await screen.findByLabelText('Notifications, 2 unread'));
+    await user.click(await screen.findByLabelText('Automation checks, 2 need attention'));
     await user.click(await screen.findByText('Which connected account should this automation use?'));
 
     // The server stops asking once the account is chosen — the same order of
@@ -254,7 +254,7 @@ describe('the notification feed', () => {
     await user.click(screen.getByText('@populr.space'));
 
     await waitFor(() => expect(updateFlowMock).toHaveBeenCalled(), { timeout: 3000 });
-    await waitFor(() => expect(screen.getByLabelText('Notifications, 1 unread')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('Automation checks, 1 need attention')).toBeInTheDocument());
     expect(await screen.findByText('Account chosen')).toBeInTheDocument();
   });
 });
@@ -275,7 +275,7 @@ describe('Activate', () => {
     expect(showToast).not.toHaveBeenCalledWith('Automation is live', 'success');
     // Not a modal, not a wall of validation — the feed, opened on the thing
     // standing in the way, one tap from the step that fixes it.
-    expect(await screen.findByLabelText('Notifications')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Automation checks')).toBeInTheDocument();
     await user.click(screen.getByText('Which connected account should this automation use?'));
     expect(screen.getByLabelText('When settings')).toBeInTheDocument();
   });
