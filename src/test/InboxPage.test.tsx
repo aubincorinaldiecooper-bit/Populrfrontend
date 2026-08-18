@@ -221,6 +221,49 @@ describe('InboxPage — conversations, not a queue', () => {
     expect(screen.queryByText("curious fan's message")).not.toBeInTheDocument();
   });
 
+  it('a slow conversation lands on the person it was asked about', async () => {
+    // Conversations are opened by clicking down a list, so the creator
+    // routinely asks for a second one before the first has answered. The
+    // slow answer belongs to the person it was asked about — if it can land
+    // wherever the view happens to be, one person's messages appear under
+    // another's name, and the composer beneath them addresses the wrong one.
+    const other = contactRecord({ id: 'c2', handle: 'other_person', name: 'Other Person' });
+    mockFetchConversations.mockResolvedValue({
+      conversations: [
+        conversation(),
+        conversation({ contactId: 'c2', handle: 'other_person', name: 'Other Person', latestInboxItemId: 'i2' }),
+      ],
+    });
+    let finishCuriousFan!: (v: ContactDetail) => void;
+    mockFetchContact.mockImplementation(async (id: string) => {
+      if (id === 'c2') {
+        return detail({
+          contact: other, latestInboxItemId: 'i2',
+          messages: [message({ id: 'm9', contact_id: 'c2', text: "other person's message" })],
+        });
+      }
+      return new Promise<ContactDetail>(r => { finishCuriousFan = r; });
+    });
+
+    const user = userEvent.setup();
+    renderInbox();
+
+    await waitFor(() => expect(screen.getByText('Curious Fan')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Curious Fan/ }));
+    await waitFor(() => expect(mockFetchContact).toHaveBeenCalledWith('c1'));
+
+    // Second click before the first answers.
+    await user.click(screen.getByRole('button', { name: /Other Person/ }));
+    await screen.findByText("other person's message");
+
+    finishCuriousFan(detail({ messages: [message({ id: 'm8', text: "curious fan's message" })] }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("curious fan's message")).not.toBeInTheDocument());
+    expect(screen.getByText("other person's message")).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Message Other Person/ })).toBeInTheDocument();
+  });
+
   it('keeps an open conversation answerable when a search filters it out', async () => {
     mockSendInboxReply.mockResolvedValue({ sentText: 'still here', channel: 'dm' });
     const user = userEvent.setup();
@@ -496,6 +539,24 @@ describe('InboxPage — honest states', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(screen.getByText('Curious Fan')).toBeInTheDocument());
+  });
+
+  it('a conversation that will not open says so where it would have been', async () => {
+    // This used to be a toast over an empty pane that read "Pick a
+    // conversation" — as though nothing had been picked. The creator had
+    // picked one; it just didn't arrive. The pane says what happened, and
+    // offers the only useful next move.
+    mockFetchContact.mockRejectedValueOnce(new Error('Could not open this conversation.'));
+    const user = userEvent.setup();
+    renderInbox('/inbox?c=c1');
+
+    await waitFor(() =>
+      expect(screen.getByText('Could not open this conversation.')).toBeInTheDocument());
+    expect(screen.queryByText('Pick a conversation')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /Message Curious Fan/ })).toBeInTheDocument());
   });
 
   it('a stale search response never overwrites a newer one', async () => {

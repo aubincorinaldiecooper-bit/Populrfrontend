@@ -155,21 +155,11 @@ function WaitingBadge() {
 }
 
 describe('the badge and the page it links to', () => {
-  it('is fed by the page\u2019s own fetch, without asking for the list again', async () => {
-    // The page and the badge share a key: the page writes what it just
-    // learned into it, and the badge reads it. To prove the badge is being
-    // FED rather than fetching for itself, its own request never answers —
-    // only the page's does. (The two still make one request each until the
-    // page's hook joins the cache too; what this pins is the hand-off that
-    // replaced a number passed between two stores.)
-    fetchConversationsMock.mockImplementation((args: { search?: string }) =>
-      args && 'search' in args
-        ? Promise.resolve({
-            conversations: [conversation('c1', 'Jordan', 1), conversation('c2', 'Maya', 1)],
-          })
-        : new Promise(() => {}),
-    );
-
+  it('is fed by the page\u2019s own fetch, and never asks for the list twice', async () => {
+    // The badge and the page want the same list. They used to fetch it
+    // separately and reconcile afterwards — the page telling the badge what
+    // it had just learned, through a bridge written by hand. Same key now, so
+    // there is nothing left to reconcile: one request, both read its answer.
     render(
       <MemoryRouter initialEntries={['/inbox']}>
         <WaitingBadge />
@@ -177,7 +167,38 @@ describe('the badge and the page it links to', () => {
       </MemoryRouter>,
     );
 
+    // The badge's count and the page's rows, off a single trip to the server.
     await waitFor(() => expect(screen.getByTestId('waiting')).toHaveTextContent('2'));
+    expect(screen.getByText('Jordan')).toBeInTheDocument();
+    expect(fetchConversationsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a page opened mid-flight joins the request rather than starting a second', async () => {
+    // The badge mounts with the app; the page mounts when the creator gets
+    // there, which is routinely before the badge's first answer has landed.
+    // Two readers, one key, one request already in flight — the page waits on
+    // it instead of asking the same question again.
+    let answer!: (v: { conversations: Conversation[] }) => void;
+    fetchConversationsMock.mockImplementation(() => new Promise(r => { answer = r; }));
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <WaitingBadge />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(fetchConversationsMock).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <WaitingBadge />
+        <Routes><Route path="/inbox" element={<InboxPage />} /></Routes>
+      </MemoryRouter>,
+    );
+    answer({ conversations: [conversation('c1', 'Jordan', 1), conversation('c2', 'Maya', 1)] });
+
+    await waitFor(() => expect(screen.getByText('Jordan')).toBeInTheDocument());
+    expect(screen.getByTestId('waiting')).toHaveTextContent('2');
+    expect(fetchConversationsMock).toHaveBeenCalledTimes(1);
   });
 
   it('a search that finds nobody is a filter, not news that nobody is waiting', async () => {

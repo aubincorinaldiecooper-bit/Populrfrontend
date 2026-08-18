@@ -1,24 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useApp } from '../../context/AppContext';
-import {
-  isBackendConfigured, fetchConversations, fetchContact, sendInboxReply, ApiError,
-} from '../../lib/api';
+import { useCallback } from 'react';
+import { useConversationsQuery } from './conversations';
+import { useContactConversation } from './useContactConversation';
+import { errorMessage } from '../../lib/errorCopy';
 import type { Conversation, ContactDetail } from '../../lib/api';
-import { queryKeys } from '../../lib/queryKeys';
 
 /**
  * The conversations, and whichever one is open.
  *
- * Two requests, deliberately kept apart. The list is cheap and refetched on
- * search or after a send; the open thread is the contact's own detail —
- * `GET /api/contacts/:id`, the canonical record — which already carries the
- * message history, the automations they belong to and their activity. Reusing
- * it means the conversation and the Contact page can never disagree about who
- * someone is, because there is only one place that answers.
+ * Two facts, each cached under its own name: the list for a search term, and
+ * the person at `contactId`. Neither is fetched here — the list is the same
+ * query the nav badge reads, and the thread is the same hook the Contacts
+ * page runs. This hook is the Inbox's arrangement of them, nothing more.
  *
- * Sending goes through the existing inbox reply endpoint, unchanged: one send
- * path for the drawer, the full Inbox and the page that came before both.
+ * What that replaced was two hand-rolled loads with a monotonic request id
+ * each, because both could be asked again before the last answer arrived —
+ * search is un-debounced, and threads are opened by clicking down a list. A
+ * counter comparing "is this still the newest request?" is the right answer
+ * to that question and the wrong shape for it: it has to be got right once
+ * per call site, it silently discards the answer rather than keeping it, and
+ * it can only ever protect the one piece of state it was written beside.
+ *
+ * Keys answer it structurally instead. A slow response lands in the entry for
+ * the term or the person it was ASKED about, so it can't overwrite an answer
+ * to a different question — and it's still there, warm, if the creator comes
+ * back to it.
+ *
+ * Which conversation is open is not state here either: it's the `contactId`
+ * argument, which the page reads from the URL. The URL was already the source
+ * of truth; keeping a copy beside it meant an effect to hold the two in step.
  */
 
 export interface ConversationsState {
@@ -28,157 +37,46 @@ export interface ConversationsState {
   /** The open thread's contact detail, or null while nothing is open. */
   thread: ContactDetail | null;
   threadLoading: boolean;
-  selectedId: string | null;
+  /** Why the open conversation couldn't be loaded, if it couldn't. */
+  threadError: string | null;
   sending: boolean;
   /** The inbox item the open thread replies through — from the thread's own
    *  detail, so an open conversation is answerable no matter how it was
    *  reached or what the list is currently filtered to. */
   replyTarget: string | null;
-  select: (contactId: string | null) => void;
   refresh: () => void;
+  /** Ask for the open conversation again — the way back from threadError. */
+  reloadThread: () => void;
   send: (text: string) => Promise<boolean>;
   /** Panel edits (notes, stage, tags) merge into the open thread — an
    *  updater, so overlapping edits each land their own field. */
   updateThread: (update: (current: ContactDetail) => ContactDetail) => void;
 }
 
-export function useConversations(search: string): ConversationsState {
-  const { showToast } = useApp();
-  const queryClient = useQueryClient();
-  const backendConfigured = isBackendConfigured();
+export function useConversations(search: string, contactId: string | null): ConversationsState {
+  const list = useConversationsQuery(search);
+  const conversation = useContactConversation(contactId);
+  const { refetch } = list;
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(backendConfigured);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [thread, setThread] = useState<ContactDetail | null>(null);
-  const [threadLoading, setThreadLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-
-  // Monotonic request ids. Search is un-debounced and threads are opened by
-  // clicking down a list, so without these an older response can land last and
-  // show the wrong person's messages under the right person's name.
-  const listSeq = useRef(0);
-  const threadSeq = useRef(0);
-
-  const refresh = useCallback(() => {
-    if (!backendConfigured) return;
-    const seq = ++listSeq.current;
-    setLoading(true);
-    setError(null);
-    fetchConversations({ search: search.trim() || undefined })
-      .then(res => {
-        if (seq !== listSeq.current) return;
-        setConversations(res.conversations);
-        // The nav badge counts the same list, under the same key. Writing
-        // the fresh answer into the cache is how it hears about it — no
-        // second request, and no number handed between two stores that
-        // could disagree. Only from the UNFILTERED list, though: a search
-        // that narrows to nobody is a filter, not news that nobody is
-        // waiting.
-        if (!search.trim()) {
-          queryClient.setQueryData(queryKeys.conversations(''), res);
-        }
-      })
-      .catch(err => {
-        if (seq !== listSeq.current) return;
-        setError(err instanceof Error ? err.message : 'Could not load your conversations.');
-      })
-      .finally(() => {
-        if (seq === listSeq.current) setLoading(false);
-      });
-  }, [backendConfigured, search, queryClient]);
-
-  useEffect(() => {
-    // Data fetch from the backend, not derived state — see ContactsPage.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
-  }, [refresh]);
-
-  const loadThread = useCallback((contactId: string) => {
-    const seq = ++threadSeq.current;
-    setThreadLoading(true);
-    fetchContact(contactId)
-      .then(detail => {
-        if (seq !== threadSeq.current) return;
-        setThread(detail);
-      })
-      .catch(err => {
-        if (seq !== threadSeq.current) return;
-        setThread(null);
-        showToast(err instanceof Error ? err.message : 'Could not open this conversation.', 'error');
-      })
-      .finally(() => {
-        if (seq === threadSeq.current) setThreadLoading(false);
-      });
-  }, [showToast]);
-
-  // Mirrors selectedId for the async send path, which must be able to ask
-  // "is this still the open conversation?" after an await — its closure's
-  // captured selectedId is the answer to a question from before the await.
-  const selectedRef = useRef<string | null>(null);
-
-  const select = useCallback((contactId: string | null) => {
-    setSelectedId(contactId);
-    selectedRef.current = contactId;
-    if (!contactId) {
-      // Bump the sequence so a thread still in flight can't land on a closed
-      // conversation and reopen it.
-      threadSeq.current += 1;
-      setThread(null);
-      return;
-    }
-    setThread(null);
-    loadThread(contactId);
-  }, [loadThread]);
-
-  // The thread's own record of how a reply goes out. The list used to be the
-  // only carrier of this, which meant a search that filtered the open person
-  // out silently made their conversation unanswerable — the detail carrying
-  // its own target removed that whole class of problem.
-  const replyTarget = thread?.latestInboxItemId ?? null;
-
-  const send = useCallback(async (text: string): Promise<boolean> => {
-    const target = thread?.latestInboxItemId ?? null;
-    if (!target) {
-      // Replies go out through an inbox item — it carries the channel and the
-      // message being answered. Saying so is better than a send that fails,
-      // and better than the silent `return false` this used to do when the
-      // conversation simply wasn't in the filtered list.
-      showToast("There's nothing to reply to on this conversation yet.", 'error');
-      return false;
-    }
-    // Whose conversation this reply belongs to, fixed before the await. The
-    // creator can click another person while this is in flight.
-    const sentFor = selectedId;
-    setSending(true);
-    try {
-      const result = await sendInboxReply(target, { text });
-      showToast(`Reply sent on ${result.channel === 'dm' ? 'DM' : 'the comment thread'}.`, 'success');
-      refresh();
-      // Only reload the thread if it is still the open one. Reloading the
-      // conversation we sent from would otherwise land AFTER the newly opened
-      // one and win, showing that person's messages under this person's reply
-      // target — and the next reply would go to the wrong recipient.
-      if (sentFor && selectedRef.current === sentFor) loadThread(sentFor);
-      return true;
-    } catch (err) {
-      // 422 means the platform genuinely can't carry this reply — say that,
-      // not a generic failure.
-      const message = err instanceof ApiError && err.code === 'not_supported_on_platform'
-        ? err.message
-        : err instanceof Error ? err.message : 'Could not send this reply.';
-      showToast(message, 'error');
-      return false;
-    } finally {
-      setSending(false);
-    }
-  }, [thread, selectedId, showToast, refresh, loadThread]);
+  const refresh = useCallback(() => { void refetch(); }, [refetch]);
 
   return {
-    conversations, loading, error, thread, threadLoading, selectedId, sending,
-    replyTarget, select, refresh, send,
-    updateThread: (update: (current: ContactDetail) => ContactDetail) =>
-      setThread(prev => (prev ? update(prev) : prev)),
+    conversations: list.data?.conversations ?? [],
+    // isLoading, not isPending: a query held back because the backend isn't
+    // configured is not loading, and a background refetch of a list already
+    // on screen shouldn't replace it with skeletons.
+    loading: list.isLoading,
+    error: list.isError
+      ? errorMessage(list.error, 'Could not load your conversations.')
+      : null,
+    thread: conversation.detail,
+    threadLoading: conversation.loading,
+    threadError: conversation.error,
+    sending: conversation.sending,
+    replyTarget: conversation.detail?.latestInboxItemId ?? null,
+    refresh,
+    reloadThread: conversation.reload,
+    send: conversation.send,
+    updateThread: conversation.updateDetail,
   };
 }

@@ -8,7 +8,7 @@ import { queryKeys } from '../../lib/queryKeys';
  * The nav badge and the Inbox page used to ask this question separately —
  * two requests for the same list, two answers that could differ, and a
  * hand-written bridge between them so the page could tell the badge what it
- * had just learned. They share the key now: whoever asks first fetches,
+ * had just learned. Both run this hook now: whoever asks first fetches,
  * whoever asks second joins that request, and an answer arriving anywhere
  * updates everywhere.
  */
