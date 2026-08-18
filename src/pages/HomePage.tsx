@@ -315,7 +315,7 @@ export default function HomePage() {
                   it actually runs on. */}
               {data.automationPerformance.length > 0 && (
                 <section className="pop-card p-5">
-                  <h2 className="pop-card-title mb-1">Automation performance</h2>
+                  <h2 className="type-section-title mb-1">Automation performance</h2>
                   <p className="text-[12px] text-[#6B6B6B] mb-3">
                     Only what each channel can really measure — nothing padded with zeros.
                   </p>
@@ -335,7 +335,7 @@ export default function HomePage() {
               {/* RECENT — a few meaningful things, quietly. */}
               {data.recentActivity.length > 0 && (
                 <section className="pop-card p-5">
-                  <h2 className="pop-card-title mb-3">Recent</h2>
+                  <h2 className="type-section-title mb-3">Recent</h2>
                   <div className="space-y-2.5">
                     {data.recentActivity.map((event, i) => (
                       <div key={`${event.kind}-${i}`} className="flex items-start gap-2.5">

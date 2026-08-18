@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { useState } from 'react';
 import { AlertCircle, Loader2, Mail, UserPlus } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -103,7 +105,7 @@ export default function InviteToAutomationButton({ flowId, flowName }: {
               placeholder="teammate@example.com"
               autoFocus
               disabled={sending}
-              className="pop-search w-full text-[13px]"
+              className="w-full text-[13px]"
             />
             {error && (
               <div className="mt-2 flex items-start gap-1.5">
@@ -114,7 +116,7 @@ export default function InviteToAutomationButton({ flowId, flowName }: {
             <button
               type="submit"
               disabled={sending}
-              className="pop-btn-primary mt-3 w-full justify-center text-[12.5px] py-2 disabled:opacity-60"
+              className={cn(buttonVariants(), "mt-3 w-full justify-center text-[12.5px] py-2 disabled:opacity-60")}
             >
               {sending
                 ? <><Loader2 size={13} className="animate-spin" />Sending…</>

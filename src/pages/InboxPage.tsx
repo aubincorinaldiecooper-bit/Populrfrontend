@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { AlertCircle, ArrowLeft, MessagesSquare } from 'lucide-react';
@@ -115,7 +117,7 @@ export default function InboxPage() {
         <div className="pop-card p-4 mb-4 flex items-center gap-3">
           <AlertCircle size={16} className="text-[#DC2626] flex-shrink-0" />
           <p className="text-[13px] text-[#111111] flex-1">{error}</p>
-          <button onClick={refresh} className="pop-btn-tertiary text-[12px] py-1.5 px-3">Retry</button>
+          <button onClick={refresh} className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-1.5 px-3")}>Retry</button>
         </div>
       )}
 

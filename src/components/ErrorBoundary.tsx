@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -87,13 +89,13 @@ export default class ErrorBoundary extends Component<Props, State> {
                 : 'This page ran into an unexpected error. Reloading usually clears it; if it keeps happening, let us know.'}
             </p>
             <div className="flex items-center gap-2.5 mt-4">
-              <button onClick={this.handleReload} className="pop-btn-primary text-[12px] py-2 px-3">
+              <button onClick={this.handleReload} className={cn(buttonVariants(), "text-[12px] py-2 px-3")}>
                 <RefreshCw size={13} /> Reload
               </button>
               {!chunk && (
                 <button
                   onClick={() => window.location.assign('/')}
-                  className="pop-btn-tertiary text-[12px] py-2 px-3"
+                  className={cn(buttonVariants({ variant: 'outline' }), "text-[12px] py-2 px-3")}
                 >
                   Go home
                 </button>

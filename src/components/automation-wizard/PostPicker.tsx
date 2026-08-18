@@ -1,5 +1,6 @@
+import { SearchInput } from '@/components/ui/search-input';
 import { useMemo, useState } from 'react';
-import { Check, MessageCircle, Heart, Search, ExternalLink } from 'lucide-react';
+import {Check, MessageCircle, Heart, ExternalLink } from 'lucide-react';
 import { platformMeta } from '../../lib/platformMeta';
 import type { Post } from '../../lib/api';
 
@@ -53,14 +54,11 @@ export default function PostPicker({
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9B8F] pointer-events-none" />
-          <input
-            type="search"
+          <SearchInput
             value={search}
             onChange={e => setSearch(e.target.value)}
             aria-label="Search your posts by caption"
-            placeholder="Search your posts..."
-            className="pop-search"
+            placeholder="Search your posts…"
           />
         </div>
         <div className="flex gap-1.5 flex-shrink-0" role="group" aria-label="Sort posts">

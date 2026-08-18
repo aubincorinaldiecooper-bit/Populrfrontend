@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { Check, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { getSubscriptionCheckoutUrl } from '../lib/api';
@@ -84,11 +86,11 @@ export default function SubscriptionModal({
           <button
             onClick={handleSubscribe}
             disabled={!checkoutUrl}
-            className="pop-btn-primary text-[13px] py-2.5 justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className={cn(buttonVariants(), "text-[13px] py-2.5 justify-center disabled:opacity-40 disabled:cursor-not-allowed")}
           >
             Subscribe for $12/month
           </button>
-          <button onClick={onClose} className="pop-btn-ghost text-[13px] py-2.5 justify-center">
+          <button onClick={onClose} className={cn(buttonVariants({ variant: 'ghost' }), "text-[13px] py-2.5 justify-center")}>
             Not now
           </button>
         </div>
