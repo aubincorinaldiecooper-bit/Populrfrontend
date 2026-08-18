@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Plus, Tag } from 'lucide-react';
+import MenuHighlight from './MenuHighlight';
 import { normalizeTag } from '../../lib/tags';
 
 /**
@@ -127,8 +128,10 @@ export default function TagCombobox({
           aria-label={ariaLabel}
           className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-64 overflow-y-auto
             rounded-xl border border-[#E8E4DF] bg-white p-1
-            shadow-[0_8px_28px_rgba(17,17,17,0.12)]"
+            shadow-[0_8px_28px_rgba(17,17,17,0.12)]
+            origin-top motion-safe:animate-[pop-menu-in_140ms_cubic-bezier(0.23,1,0.32,1)]"
         >
+          <MenuHighlight activeIndex={activeIndex} />
           {rows.length === 0 && (
             <p className="px-2.5 py-2 text-[12px] text-[#8A857E]">
               No tags yet — type one to create it.
@@ -144,8 +147,9 @@ export default function TagCombobox({
                 aria-selected={!isCreate && tag === value}
                 onClick={() => commit(row)}
                 onMouseEnter={() => setActiveIndex(i)}
-                className={`flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer
-                  ${i === activeIndex ? 'bg-[#F4F7EC]' : ''}`}
+                // relative, so rows paint above the sliding highlight -- the one
+                // element that now marks the active row.
+                className="relative flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer"
               >
                 {isCreate ? (
                   <>

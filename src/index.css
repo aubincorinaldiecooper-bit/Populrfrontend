@@ -282,6 +282,15 @@
   to   { opacity: 1; transform: none; }
 }
 
+/* The builder's own menus arrive rather than appear: a short drop and
+ * unsqueeze out of the control that opened them (transform-origin top at
+ * the call site). Quick, because a menu is a tool being picked up, not an
+ * event — any slower and the creator is waiting for chrome. */
+@keyframes pop-menu-in {
+  from { opacity: 0; transform: translateY(-3px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* ─── Proposal motion (the Beautiful UI vocabulary, in Populr's accent) ───
  * The agent's build trace and the confirmation card reveal with these; all
  * three land on their end state under reduced motion via the global rule

@@ -167,6 +167,28 @@ describe('the tag picker', () => {
     expect(normalizeTag('  Warm Lead ')).toBe('warm_lead');
     expect(normalizeTag('VIP!!')).toBe('vip');
   });
+
+  it('takes the highlight away when the typing leaves no rows to highlight', () => {
+    // Filtering can empty the list without the active index moving: type
+    // something that matches, then punctuation that normalises to nothing —
+    // no matches, and nothing to create either. A highlight measured only
+    // when the index changes would still be sitting there, a lit row over
+    // the "no tags" message.
+    render(<TagCombobox value={null} tags={['warm_lead']} onChange={vi.fn()} />);
+    const input = screen.getByLabelText('Tag');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'warm' } });
+
+    const highlight = () =>
+      screen.getByRole('listbox').querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(highlight().style.opacity).toBe('1');
+
+    fireEvent.change(input, { target: { value: '...' } });
+
+    expect(screen.getByText(/No tags yet/)).toBeInTheDocument();
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(highlight().style.opacity).toBe('0');
+  });
 });
 
 describe('the dropdown', () => {
@@ -217,6 +239,41 @@ describe('the dropdown', () => {
     fireEvent.click(screen.getByLabelText('Pick'));
     fireEvent.click(screen.getByText('Beta'));
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('marks the active row with ONE sliding highlight, and tells ears the same story', () => {
+    // The tint used to be painted by whichever row was active — a light
+    // blinking on and off down the list. It is one element now, gliding
+    // between rows; what must hold is that there is exactly one, that it is
+    // invisible to assistive tech (the row itself still answers through
+    // aria-activedescendant), and that it shows only while a row is active.
+    render(
+      <Select
+        value=""
+        ariaLabel="Pick"
+        placeholder="Choose…"
+        options={[{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }]}
+        onChange={vi.fn()}
+      />,
+    );
+    const button = screen.getByLabelText('Pick');
+    fireEvent.click(button);
+
+    const listbox = screen.getByRole('listbox');
+    const highlight = listbox.querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(highlight).not.toBeNull();
+    // Nothing is active yet (the placeholder is showing), so nothing is lit.
+    expect(highlight.style.opacity).toBe('0');
+    // And no row carries its own tint — the highlight is the only marker.
+    expect(listbox.querySelectorAll('[role="option"].bg-\\[\\#F4F7EC\\]').length).toBe(0);
+
+    fireEvent.keyDown(button, { key: 'ArrowDown' });
+    expect(highlight.style.opacity).toBe('1');
+    // The row the highlight sits on is the row a screen reader hears.
+    expect(button).toHaveAttribute(
+      'aria-activedescendant',
+      listbox.querySelectorAll('[role="option"]')[0].id,
+    );
   });
 });
 
