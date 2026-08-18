@@ -132,36 +132,8 @@
   /* ─── Populr Design Tokens ─── */
 
   /* Page surface */
-  .pop-page {
-    @apply p-6 lg:p-8 max-w-[1200px] mx-auto;
-  }
 
   /* Cards */
-  .pop-card {
-    @apply bg-card rounded-2xl border border-border;
-  }
-  .pop-card-hover {
-    @apply hover:border-[#D4CFC8] hover:shadow-card transition-all;
-  }
-  /* A card that lifts, rather than one that lights up.
-   *
-   * One pixel is deliberately almost imperceptible: on a list of cards, the
-   * point is that the row under the cursor separates from the page, not that
-   * it announces itself. The border and shadow do the visible work; the
-   * movement only makes it feel physical.
-   *
-   * Only the three properties that change are transitioned — `transition-all`
-   * on a card this size also animates colors and layout the browser is better
-   * off repainting instantly. `motion-safe` because a 1px jump with no
-   * transition is worse than no movement at all, and someone who asked for
-   * reduced motion should get the border and shadow alone. */
-  .pop-card-lift {
-    @apply transition-[transform,box-shadow,border-color] duration-200 ease-out
-           hover:border-[#D4CFC8] hover:shadow-card motion-safe:hover:-translate-y-px;
-  }
-  .pop-card-compact {
-    @apply bg-card rounded-2xl border border-border p-4;
-  }
 
   /* Inputs */
 

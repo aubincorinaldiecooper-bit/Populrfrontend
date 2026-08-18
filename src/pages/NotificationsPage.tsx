@@ -1,3 +1,5 @@
+import { Card } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { AlertCircle } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
@@ -32,7 +34,7 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="pop-page">
+    <Page>
       <PageHeader
         title="Notifications"
         subtitle="What happened while you weren't looking."
@@ -50,7 +52,7 @@ export default function NotificationsPage() {
       />
 
       {failed && !items ? (
-        <div className="pop-card flex items-start gap-3 p-6">
+        <Card className="flex items-start gap-3 p-6">
           <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-[#D97706]" />
           <div>
             <p className="text-[13px] font-semibold text-foreground">
@@ -60,23 +62,23 @@ export default function NotificationsPage() {
               Populr can&apos;t reach its server, so your notifications can&apos;t be loaded right now.
             </p>
           </div>
-        </div>
+        </Card>
       ) : isPending && !items ? (
-        <div className="pop-card space-y-3 p-4">
+        <Card className="space-y-3 p-4">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
-        </div>
+        </Card>
       ) : items && items.length === 0 ? (
-        <div className="pop-card">
+        <Card>
           <EmptyState
             icon="alert"
             title="Nothing needs you right now"
             description="When something happens while you're away — an automation going live, a teammate joining, an account needing attention — it lands here."
           />
-        </div>
+        </Card>
       ) : (
-        <div className="pop-card overflow-hidden py-1">
+        <Card className="overflow-hidden py-1">
           <ul className="divide-y divide-border-subtle">
             {(items ?? []).map(n => (
               <li key={n.id}>
@@ -84,8 +86,8 @@ export default function NotificationsPage() {
               </li>
             ))}
           </ul>
-        </div>
+        </Card>
       )}
-    </div>
+    </Page>
   );
 }

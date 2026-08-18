@@ -1,3 +1,5 @@
+import { Card, cardVariants } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { useCallback, useEffect, useState } from 'react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -153,9 +155,9 @@ export default function TeamPage() {
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page">
+      <Page>
         <PageHeader title="Team" subtitle="Invite someone to help run this workspace." />
-        <div className="pop-card p-6 flex items-start gap-3">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[13px] font-semibold text-[#111111]">Populr isn&apos;t connected to its server yet</p>
@@ -163,13 +165,13 @@ export default function TeamPage() {
               Populr can&apos;t reach its server, so your team can&apos;t be loaded right now.
             </p>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     );
   }
 
   return (
-    <div className="pop-page">
+    <Page>
       <PageHeader
         title="Team"
         subtitle="Invite someone to help run this workspace. Everyone you invite can view it — you choose what else they can do."
@@ -184,7 +186,7 @@ export default function TeamPage() {
         ) : undefined}
       />
 
-      <section className="pop-card p-6" aria-label="Your team">
+      <section className={cn(cardVariants(), "p-6")} aria-label="Your team">
         {loading && (
           <p className="text-[12px] text-[#9B9B8F] flex items-center gap-2">
             <Loader2 size={14} className="animate-spin" />Loading your team…
@@ -375,6 +377,6 @@ export default function TeamPage() {
           </>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

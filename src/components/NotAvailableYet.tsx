@@ -1,3 +1,4 @@
+import { Page } from '@/components/ui/page';
 import { buttonVariants } from '@/components/ui/button';
 import { Link } from 'react-router';
 import { ArrowRight } from 'lucide-react';
@@ -26,7 +27,7 @@ export default function NotAvailableYet({
   description: string;
 }) {
   return (
-    <div className="pop-page">
+    <Page>
       <PageHeader title={title} />
       <EmptyState
         icon={icon}
@@ -38,6 +39,6 @@ export default function NotAvailableYet({
           </Link>
         }
       />
-    </div>
+    </Page>
   );
 }

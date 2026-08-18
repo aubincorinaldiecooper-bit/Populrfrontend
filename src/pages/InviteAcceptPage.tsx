@@ -1,3 +1,4 @@
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -100,7 +101,7 @@ export default function InviteAcceptPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="pop-card w-full max-w-md p-7 text-center">
+      <Card className="w-full max-w-md p-7 text-center">
         {outcome.kind === 'working' && (
           <>
             <div className="w-12 h-12 rounded-2xl bg-[#FAFAF8] flex items-center justify-center mx-auto mb-4">
@@ -167,7 +168,7 @@ export default function InviteAcceptPage() {
             </div>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

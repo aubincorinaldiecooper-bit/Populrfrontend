@@ -1,3 +1,4 @@
+import { Page } from '@/components/ui/page';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
@@ -100,15 +101,15 @@ export default function PostDetailPage() {
 
   if (loading) {
     return (
-      <div className="pop-page max-w-[720px] flex items-center justify-center py-24">
+      <Page className="max-w-[720px] flex items-center justify-center py-24">
         <Loader2 size={28} className="animate-spin text-muted-foreground" aria-label="Loading" />
-      </div>
+      </Page>
     );
   }
 
   if (error || !post) {
     return (
-      <div className="pop-page max-w-[720px]">
+      <Page className="max-w-[720px]">
         <Button variant="ghost" size="sm" className="mb-6 -ml-1.5" onClick={() => navigate('/content')}>
         <ArrowLeft size={16} /> Back to Content
       </Button>
@@ -116,7 +117,7 @@ export default function PostDetailPage() {
           <AlertTitle>Couldn&apos;t load this post</AlertTitle>
           <p className="mt-0.5">{error ?? 'This post could not be found.'}</p>
         </Alert>
-      </div>
+      </Page>
     );
   }
 
@@ -125,7 +126,7 @@ export default function PostDetailPage() {
   const anyFailed = targets.some(t => t.status === 'failed');
 
   return (
-    <div className="pop-page max-w-[820px]">
+    <Page className="max-w-[820px]">
       <Button variant="ghost" size="sm" className="mb-6 -ml-1.5" onClick={() => navigate('/content')}>
         <ArrowLeft size={16} /> Back to Content
       </Button>
@@ -272,6 +273,6 @@ export default function PostDetailPage() {
         confirmLabel="Cancel the post"
         onConfirm={() => void handleCancel()}
       />
-    </div>
+    </Page>
   );
 }

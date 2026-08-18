@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+import { Page } from '@/components/ui/page';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import useEmblaCarousel from 'embla-carousel-react';
@@ -6,7 +8,7 @@ import {
   Upload, X as XIcon, GripVertical, AlertCircle,
   ChevronLeft, ChevronRight, Loader2, Check, ArrowRight, RefreshCw,
 } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { Card, cardVariants } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
@@ -314,21 +316,21 @@ export default function CreatePostPage() {
 
   if (!backendConfigured) {
     return (
-      <div className="pop-page max-w-[640px]">
+      <Page className="max-w-[640px]">
         <PageHeader title="Create Post" />
         <Alert variant="warning">
           <AlertTitle>Populr isn&apos;t connected to its server yet</AlertTitle>
           <p className="mt-0.5">Populr can&apos;t reach its server, so posts can&apos;t be created right now.</p>
         </Alert>
-      </div>
+      </Page>
     );
   }
 
   if (loadingExisting) {
     return (
-      <div className="pop-page max-w-[720px] flex items-center justify-center py-24">
+      <Page className="max-w-[720px] flex items-center justify-center py-24">
         <Loader2 size={28} className="animate-spin text-muted-foreground" aria-label="Loading" />
-      </div>
+      </Page>
     );
   }
 
@@ -364,7 +366,7 @@ export default function CreatePostPage() {
     };
 
     return (
-      <div className="pop-page max-w-[560px]">
+      <Page className="max-w-[560px]">
         <div className="text-center mb-8">
           <h1 className="type-page-title">{!allDone ? 'Publishing your post' : heading}</h1>
           <p className="type-body mt-2">
@@ -423,7 +425,7 @@ export default function CreatePostPage() {
             </Button>
           </div>
         )}
-      </div>
+      </Page>
     );
   }
 
@@ -435,7 +437,7 @@ export default function CreatePostPage() {
   }[step];
 
   return (
-    <div className="pop-page max-w-[720px]">
+    <Page className="max-w-[720px]">
       <div className="flex items-center justify-between mb-6">
         <Button variant="ghost" size="sm" className="-ml-1.5" onClick={step === 1 ? () => navigate(-1) : goBack}>
           <ChevronLeft size={16} /> Back
@@ -532,7 +534,7 @@ export default function CreatePostPage() {
                     <div
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
-                      className="pop-card border-dashed p-8 text-center cursor-pointer hover:border-[#D4CFC8]"
+                      className={cn(cardVariants(), "cursor-pointer border-dashed p-8 text-center hover:border-border-strong")}
                       onClick={() => document.getElementById('create-post-file-input')?.click()}
                     >
                       <input
@@ -556,7 +558,7 @@ export default function CreatePostPage() {
                     {mediaItems.length > 0 && (
                       <div className={mediaType === 'carousel' ? 'grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4' : 'mt-4'}>
                         {mediaItems.map((m, i) => (
-                          <div key={m.url + i} className="relative pop-card overflow-hidden group">
+                          <Card key={m.url + i} className="relative overflow-hidden group">
                             {m.mediaType === 'video' ? (
                               <video src={m.url} className="w-full aspect-video object-cover" muted />
                             ) : (
@@ -582,7 +584,7 @@ export default function CreatePostPage() {
                               <span className="type-caption">{m.fileSizeBytes ? formatBytes(m.fileSizeBytes) : ''}</span>
                               {m.durationSeconds && <span className="type-caption">{formatDuration(m.durationSeconds)}</span>}
                             </div>
-                          </div>
+                          </Card>
                         ))}
                       </div>
                     )}
@@ -650,10 +652,10 @@ export default function CreatePostPage() {
                     const P = platformMeta(a.platform);
                     const Icon = P.icon;
                     return (
-                      <div key={a.id} className="pop-card-compact flex items-center gap-3">
+                      <Card key={a.id} className="flex items-center gap-3 p-4">
                         <Icon size={18} style={{ color: P?.color }} />
                         <p className="text-[12px] text-[#6B6B6B]">{platformLabel(a.platform)} doesn&apos;t support this media type.</p>
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
@@ -707,10 +709,10 @@ export default function CreatePostPage() {
       {step === 3 && (
         <div>
           {issues.length > 0 && (
-            <div className="pop-card p-4 mb-5 border-[#FEE2E2] bg-[#FEE2E2]/30">
+            <Card className="p-4 mb-5 border-[#FEE2E2] bg-[#FEE2E2]/30">
               <p className="text-[13px] font-semibold text-[#DC2626] mb-1.5">Fix these before publishing</p>
               {issues.map((iss, i) => <p key={i} className="text-[12px] text-[#DC2626]">{iss.message}</p>)}
-            </div>
+            </Card>
           )}
 
           <div className="relative">
@@ -782,6 +784,6 @@ export default function CreatePostPage() {
           </Button>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

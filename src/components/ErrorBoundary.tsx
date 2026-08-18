@@ -1,3 +1,5 @@
+import { Card } from '@/components/ui/card';
+import { Page } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
@@ -76,8 +78,8 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     const chunk = isChunkLoadError(error);
     return (
-      <div className="pop-page max-w-[560px] py-16">
-        <div className="pop-card p-6 flex items-start gap-3">
+      <Page className="max-w-[560px] py-16">
+        <Card className="p-6 flex items-start gap-3">
           <AlertCircle size={18} className="text-[#D97706] flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-[14px] font-semibold text-[#111111]">
@@ -102,8 +104,8 @@ export default class ErrorBoundary extends Component<Props, State> {
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     );
   }
 }
