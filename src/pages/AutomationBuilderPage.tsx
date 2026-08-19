@@ -6,6 +6,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { isOwnerView, canEditAutomations } from '../lib/access';
 import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
+import CollaboratorFacepile from '../components/automation-builder/CollaboratorFacepile';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
 import { useBuilderNotifications } from '../components/automation-builder/useBuilderNotifications';
@@ -661,6 +662,12 @@ export default function AutomationBuilderPage() {
 
       {/* ------------------------------------- header slot: what can I do */}
       <HeaderActions>
+          {/* Who else is on this canvas right now. First in the cluster
+              because it answers a question the creator has before they touch
+              anything — am I about to edit over somebody? — and because it
+              is the one thing here that is not a control. */}
+          <CollaboratorFacepile flowId={flowId} />
+
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
           {/* Canvas-scoped invites: owner-only, like every other way of

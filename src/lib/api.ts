@@ -1048,6 +1048,22 @@ export interface AutomationFlow {
    * to report here", never "healthy and checked".
    */
   problems?: string[];
+  /**
+   * Who last changed this automation, and when.
+   *
+   * Creator edits only — a repair the server makes to a broken graph is not
+   * anybody's work, so it leaves this alone. `null` means nobody has edited
+   * it since attribution existed, which the card reads as "say nothing"
+   * rather than "nobody".
+   */
+  lastEditedBy?: Person | null;
+  lastEditedAt?: string | null;
+  /**
+   * How many people OTHER than you can open this automation. 0 is "just
+   * you", and the card says nothing. Sent by the list route only; absent
+   * means "not reported here", never "nobody".
+   */
+  sharedWith?: number;
 }
 
 /** A blocking problem Review shows, tied to the step it belongs to. */
@@ -1424,9 +1440,86 @@ export interface TeamMember {
   automation: AutomationScope | null;
 }
 
-/** GET /api/team — this workspace's collaborators and its invitations. */
-export async function fetchTeam(): Promise<{ invitations: TeamInvitation[]; members: TeamMember[] }> {
+/**
+ * A person, as far as Populr has seen them.
+ *
+ * Every field is optional in practice: someone invited who has not signed in
+ * since is known only by the address the invite went to, and plenty of
+ * accounts have no picture. The UI's job is to degrade through those in
+ * order — name, then address, then "A teammate" — and never to fall through
+ * to an account id, which is not a name and is not shown.
+ */
+export interface Person {
+  name: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+}
+
+export type TeamRole = 'owner' | 'member' | 'canvas';
+
+export interface TeamPerson {
+  /**
+   * What removal is addressed to. Opaque on purpose — the payload has never
+   * carried account ids and doesn't start now. `null` for the owner, who has
+   * no invitation behind them and nothing to withdraw; the UI reads that
+   * absence rather than being told separately.
+   */
+  handle: string | null;
+  person: Person;
+  role: TeamRole;
+  permissions: TeamPermissions;
+  joinedAt: string;
+  automation: AutomationScope | null;
+  /** Whether this is the person reading the page. */
+  you: boolean;
+}
+
+/**
+ * GET /api/team — this workspace's people and its invitations.
+ *
+ * `people` is the roster: the owner included, named by who they are. It
+ * arrives beside the older `members` array, which is the same collaborators
+ * keyed by the address they were invited at — kept while both sides of a
+ * deploy are in the air, and read by nothing new.
+ */
+export async function fetchTeam(): Promise<{
+  invitations: TeamInvitation[];
+  members: TeamMember[];
+  people?: TeamPerson[];
+}> {
   return apiFetch('/api/team');
+}
+
+/** DELETE /api/team/members/:handle — withdraw someone's access entirely:
+ *  their grant, the invitation behind it, and their place in the workspace. */
+export async function removeTeammate(handle: string): Promise<void> {
+  await apiFetch(`/api/team/members/${encodeURIComponent(handle)}`, { method: 'DELETE' });
+}
+
+export interface Collaborator {
+  person: Person;
+  role: TeamRole;
+  you: boolean;
+  /** On this canvas right now, as opposed to merely able to be. */
+  here: boolean;
+}
+
+/** GET /api/team/automations/:id/collaborators — everyone who can open one
+ *  automation, and who has it open at this moment. */
+export async function fetchCollaborators(flowId: string): Promise<Collaborator[]> {
+  const data = await apiFetch<{ collaborators: Collaborator[] }>(
+    `/api/team/automations/${flowId}/collaborators`,
+  );
+  return data.collaborators;
+}
+
+/** POST /api/team/automations/:id/presence — the builder saying it's here,
+ *  or (leaving) that it has closed. */
+export async function announcePresence(flowId: string, leaving = false): Promise<void> {
+  await apiFetch(`/api/team/automations/${flowId}/presence`, {
+    method: 'POST',
+    body: { leaving },
+  });
 }
 
 /** POST /api/team/invites — create and email an invitation. Pass

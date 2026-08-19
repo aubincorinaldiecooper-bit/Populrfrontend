@@ -534,8 +534,22 @@ export default function AutomationsPage() {
       ) : !error && filtered.length === 0 ? (
         <EmptyState
           icon="automations"
-          title={search || statusTab !== 'all' ? 'No automations match that search' : 'No automations yet'}
-          description="Describe what should happen and Populr builds the steps for you."
+          title={
+            search || statusTab !== 'all'
+              ? 'No automations match that search'
+              : mayCreate
+                ? 'No automations yet'
+                // Somebody who just accepted an invitation lands here, and
+                // "no automations yet" reads as their own empty workspace —
+                // exactly the wrong conclusion when they are standing in
+                // someone else's, waiting to be given something.
+                : 'Nothing has been shared with you yet'
+          }
+          description={
+            mayCreate
+              ? 'Describe what should happen and Populr builds the steps for you.'
+              : "When the workspace owner shares an automation with you, it'll be here."
+          }
           action={mayCreate ? (
             <Button onClick={startNew} disabled={creatingAutomation}>
               New automation

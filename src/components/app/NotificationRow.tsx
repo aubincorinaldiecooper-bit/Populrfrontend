@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Zap, UsersRound, AlertTriangle, Bell } from 'lucide-react';
+import { Zap, UsersRound, AlertTriangle, Bell, DoorOpen, Pencil } from 'lucide-react';
 import { timeAgo } from '../../lib/timeAgo';
 import type { WorkspaceNotification } from '../../lib/api';
 
@@ -7,6 +7,11 @@ const kindIcon: Record<string, React.ElementType> = {
   automation_live: Zap,
   member_joined: UsersRound,
   account_reconnect: AlertTriangle,
+  /** Your own arrival, addressed to you — the one line in the feed that is
+   *  about you rather than about the work. */
+  you_joined: DoorOpen,
+  /** Somebody else worked on an automation you can open. */
+  automation_edited: Pencil,
 };
 
 /**

@@ -21,4 +21,9 @@ export const queryKeys = {
   contact: (contactId: string) => ['contact', contactId] as const,
   /** Every open conversation thread — what a new message could have landed in. */
   contactThreads: ['contact'] as const,
+  /** Who can open one automation, and who has it open right now. */
+  collaborators: (flowId: string) => ['collaborators', flowId] as const,
+  /** Every canvas being watched — someone arriving or leaving changes one of
+   *  them, and the nudge doesn't say which. */
+  allCollaborators: ['collaborators'] as const,
 };
