@@ -1,5 +1,6 @@
 import { render as rtlRender, type RenderOptions, type RenderResult } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SidebarProvider } from '@/components/ui/sidebar';
 
 /**
  * Render with a cache that lives exactly as long as one test.
@@ -31,8 +32,17 @@ export function render(
   const queryClient = options?.queryClient ?? createTestQueryClient();
   const result = rtlRender(ui, {
     ...options,
+    // The shell's providers, not the test's decoration. Every authenticated
+    // surface in the app renders inside both of these — the query cache and
+    // the navigation state — so a piece of it rendered here does too. The
+    // navigation one is here rather than at each call site because pages ask
+    // it real questions now (the builder measures its columns against the
+    // width the column is actually taking), and a provider each suite had to
+    // remember is a provider a suite will forget.
     wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <SidebarProvider>{children}</SidebarProvider>
+      </QueryClientProvider>
     ),
   });
   return { ...result, queryClient };

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import HomePage from '../pages/HomePage';
 import AppSidebar from '../components/app/AppSidebar';
-import { SidebarProvider } from '../components/ui/sidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { DashboardData, ConnectedAccount } from '../lib/api';
 
@@ -145,7 +145,7 @@ describe('the north-star action', () => {
       <MemoryRouter initialEntries={['/']}>
         <CreateAutomationProvider>
           <Routes>
-            <Route path="/" element={<SidebarProvider><AppSidebar /></SidebarProvider>} />
+            <Route path="/" element={<AppSidebar />} />
             <Route path="/automations/:flowId" element={<p>BUILDER PAGE</p>} />
           </Routes>
         </CreateAutomationProvider>

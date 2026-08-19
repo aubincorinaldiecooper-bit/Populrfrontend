@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { render } from './render';
+import { setViewportWidth } from './viewport';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import AutomationBuilderPage from '../pages/AutomationBuilderPage';
@@ -150,9 +152,6 @@ async function ask(user: ReturnType<typeof userEvent.setup>, prompt: string) {
  * and a test that depends on it silently is a test that will confuse the next
  * person to change the threshold.
  */
-function setViewportWidth(px: number) {
-  Object.defineProperty(window, 'innerWidth', { value: px, configurable: true });
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -323,6 +322,10 @@ describe('one context at a time', () => {
     // threshold never watched.
     const listeners: (() => void)[] = [];
     const media = { matches: true };
+    // The width first, then a stub that can be made to CROSS: setViewportWidth
+    // installs a matchMedia that answers honestly for one fixed width, and a
+    // crossing is exactly the thing one fixed width cannot express.
+    setViewportWidth(1520);
     const realMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
       writable: true, configurable: true,
@@ -339,7 +342,6 @@ describe('one context at a time', () => {
       }),
     });
     try {
-      setViewportWidth(1520);
       const user = userEvent.setup();
       mountBuilder();
       await screen.findByText('Preview');
