@@ -364,3 +364,115 @@ describe('at rail width', () => {
     expect(within(menu).getByRole('menuitem', { name: /Host Studio/ })).toBeInTheDocument();
   });
 });
+
+/* Giving back access you were granted.
+ *
+ * The only exit used to be asking the owner to remove you, which means
+ * someone who has stopped working with a creator carries their workspace
+ * around indefinitely. What this pins:
+ *   - it is offered to a guest and never to an owner, who has nothing to
+ *     leave and whom the server refuses anyway;
+ *   - it asks first, naming what will be lost;
+ *   - afterwards access is re-resolved and they land Home, because the page
+ *     they were on belongs to the workspace they just left.
+ */
+describe('leaving a workspace you were invited into', () => {
+  const joinedAccess: WorkspaceAccess = {
+    id: 'w_host', name: 'Host Studio', role: 'member',
+    permissions: { editAutomations: true, contactOutreach: false },
+    canvasAutomation: null,
+  };
+  const canvasAccess: WorkspaceAccess = {
+    id: 'w_host', name: 'Host Studio', role: 'canvas',
+    permissions: { editAutomations: false, contactOutreach: false },
+    canvasAutomation: { id: '77', name: 'Welcome DM' },
+  };
+
+  async function leaveSetup(access: WorkspaceAccess) {
+    const api = await import('../lib/api');
+    const leave = vi.spyOn(api, 'leaveWorkspace').mockResolvedValue(undefined);
+    const refreshWorkspaceAccess = vi.fn().mockResolvedValue(undefined);
+    mockUseApp.mockReturnValue(appContext({
+      workspaces: [OWN, JOINED], workspaceAccess: access,
+      switchToWorkspace, showToast, refreshWorkspaceAccess,
+    }));
+    render(
+      <MemoryRouter initialEntries={['/contacts']}>
+        <Routes>
+          <Route path="/contacts" element={<AccountMenu />} />
+          <Route path="/" element={<p>HOME</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    return { leave, refreshWorkspaceAccess };
+  }
+
+  it('is not offered to an owner — there is nothing to leave', async () => {
+    const user = userEvent.setup();
+    setup([OWN, JOINED]);
+    const menu = await openMenu(user);
+    expect(within(menu).queryByRole('menuitem', { name: /^Leave/ })).not.toBeInTheDocument();
+  });
+
+  it('names the workspace it would give back, and asks before doing it', async () => {
+    const user = userEvent.setup();
+    const { leave } = await leaveSetup(joinedAccess);
+    const menu = await openMenu(user);
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    expect(await screen.findByText('Leave Host Studio?')).toBeInTheDocument();
+    // Asked, not done: nothing has been given back yet.
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  it('a canvas seat is told which automation it loses', async () => {
+    const user = userEvent.setup();
+    await leaveSetup(canvasAccess);
+    const menu = await openMenu(user);
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    expect(await screen.findByText(/“Welcome DM”/)).toBeInTheDocument();
+  });
+
+  it('leaves, re-resolves access, and lands Home', async () => {
+    const user = userEvent.setup();
+    const { leave, refreshWorkspaceAccess } = await leaveSetup(joinedAccess);
+    const menu = await openMenu(user);
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    await user.click(await screen.findByRole('button', { name: 'Leave' }));
+
+    await waitFor(() => expect(leave).toHaveBeenCalledTimes(1));
+    // Re-resolving is what moves them: the server forgets a selection that
+    // no longer points at anything they hold, so this lands them in their own.
+    await waitFor(() => expect(refreshWorkspaceAccess).toHaveBeenCalled());
+    expect(await screen.findByText('HOME')).toBeInTheDocument();
+  });
+
+  it('a refused leave says so and leaves them where they were', async () => {
+    const user = userEvent.setup();
+    const api = await import('../lib/api');
+    vi.spyOn(api, 'leaveWorkspace').mockRejectedValue(new Error('The server is busy.'));
+    const refreshWorkspaceAccess = vi.fn().mockResolvedValue(undefined);
+    mockUseApp.mockReturnValue(appContext({
+      workspaces: [OWN, JOINED], workspaceAccess: joinedAccess,
+      switchToWorkspace, showToast, refreshWorkspaceAccess,
+    }));
+    render(
+      <MemoryRouter initialEntries={['/contacts']}>
+        <Routes>
+          <Route path="/contacts" element={<AccountMenu />} />
+          <Route path="/" element={<p>HOME</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const menu = await openMenu(user);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    await user.click(await screen.findByRole('button', { name: 'Leave' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('The server is busy.', 'error'));
+    expect(refreshWorkspaceAccess).not.toHaveBeenCalled();
+    expect(screen.queryByText('HOME')).not.toBeInTheDocument();
+  });
+});

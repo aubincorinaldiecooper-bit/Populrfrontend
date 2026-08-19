@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { isOwnerView, canEditAutomations } from '../lib/access';
-import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
+import ShareAutomation from '../components/automation-builder/ShareAutomation';
 import CollaboratorFacepile from '../components/automation-builder/CollaboratorFacepile';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
@@ -670,16 +670,15 @@ export default function AutomationBuilderPage() {
 
           <SaveIndicator state={saveState} savedAt={savedAt} />
 
-          {/* Canvas-scoped invites: owner-only, like every other way of
+          {/* Sharing one automation: owner-only, like every other way of
               granting access. flowId is null only before the flow exists.
               Desktop-only: the shared header carries the hamburger and the
-              global cluster on phones, and Invite is the one control here
-              whose job — granting a collaborator access — nobody does from
-              a 390px screen. Dropping it is what keeps the name readable
-              beside Activate. */}
+              global cluster on phones, and sharing is the one control here
+              whose job nobody does from a 390px screen. Dropping it is what
+              keeps the name readable beside Activate. */}
           {flowId && (
             <span className="hidden md:inline-flex">
-              <InviteToAutomationButton flowId={flowId} flowName={name} />
+              <ShareAutomation flowId={flowId} flowName={name} />
             </span>
           )}
 
@@ -814,6 +813,17 @@ export default function AutomationBuilderPage() {
             {editorFor('sheet')}
           </SheetContent>
         </Sheet>
+
+        {/* A viewer on an empty canvas: nothing to do, and until now nothing
+            said so either — a blank screen reads as a page that failed to
+            load rather than an automation nobody has built yet. */}
+        {isEmpty && !composing && !mayEdit && (
+          <div className="absolute inset-x-0 top-1/3 flex justify-center px-6">
+            <p className="max-w-xs text-center text-[12.5px] leading-relaxed text-[#8A857E]">
+              Nothing has been built here yet. The steps will appear as they&apos;re drawn.
+            </p>
+          </div>
+        )}
 
         {isEmpty && !composing && mayEdit && (
           <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">

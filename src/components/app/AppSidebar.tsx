@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import AccountMenu from '../AccountMenu';
 import { navItems, isActivePath } from '../../lib/nav';
 import { useApp } from '../../context/AppContext';
+import { isGuestView, roleLabel } from '../../lib/access';
 import { useInboxWaiting } from '../inbox/conversations';
 import { useCreateAutomation } from '../../context/CreateAutomationContext';
 
@@ -125,6 +126,13 @@ function AppSidebarBody() {
           </button>
         </div>
 
+        {/* Whose workspace this is, for anyone it isn't. A guest could work
+            for an hour without ever being told they were a visitor: the
+            workspace name lived only inside the account menu, and only once
+            they held more than one. It sits above the nav because it frames
+            everything below it. */}
+        <WorkspaceStanding collapsed={collapsed} />
+
         {/* Create CTA — the same action as Home's "Create an automation":
             one creation experience, two entry points. It survives the rail
             because collapsing is now something a creator does anywhere, not
@@ -206,6 +214,62 @@ function AppSidebarBody() {
         <AccountMenu onNavigate={closeMobile} compact={collapsed} />
       </SidebarFooter>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Whose workspace this is, and what this session's standing in it is.
+ *
+ * Only for a guest. An owner is in their own account and telling them so
+ * every time they look at the nav would be noise; for everyone else it is
+ * the thing that explains why a control they expected isn't there.
+ *
+ * At rail width there is no room for two lines, so it becomes the workspace's
+ * initial with the whole sentence on hover — the same trade every other
+ * control in the column makes.
+ */
+function WorkspaceStanding({ collapsed }: { collapsed: boolean }) {
+  const { workspaceAccess } = useApp();
+  if (!isGuestView(workspaceAccess) || !workspaceAccess) return null;
+
+  const standing = roleLabel(workspaceAccess);
+  const sentence = `${workspaceAccess.name}${standing ? ` · ${standing}` : ''}`;
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              // Not a control: it says where you are, and there is nothing
+              // to press. Its name carries the whole sentence so the rail
+              // is not a worse answer for a screen reader than the column.
+              role="note"
+              aria-label={sentence}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-muted
+                text-[13px] font-semibold text-sidebar-foreground"
+            >
+              {workspaceAccess.name.trim().charAt(0).toUpperCase() || '·'}
+            </span>
+          }
+        />
+        <TooltipContent side="right" aria-hidden>{sentence}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <div role="note" className="mx-1 rounded-2xl bg-sidebar-muted px-3.5 py-2.5">
+      <p className="font-label text-[10px] uppercase tracking-widest text-sidebar-muted-foreground">
+        You're in
+      </p>
+      <p className="truncate text-[13px] font-semibold text-sidebar-foreground">
+        {workspaceAccess.name}
+      </p>
+      {standing && (
+        <p className="mt-0.5 text-[11.5px] text-sidebar-muted-foreground">{standing}</p>
+      )}
+    </div>
   );
 }
 

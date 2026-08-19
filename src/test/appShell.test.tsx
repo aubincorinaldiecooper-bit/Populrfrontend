@@ -148,6 +148,69 @@ describe('what the nav offers depends on who is signed in', () => {
   });
 });
 
+/* Whose workspace this is.
+ *
+ * A guest could work for an hour without ever being told they were a visitor
+ * in somebody else's account: the workspace name lived only inside the
+ * account menu, and only once they held more than one. It is also the thing
+ * that explains why a control they expected isn't there.
+ */
+describe('knowing where you are', () => {
+  const guest = (permissions: { editAutomations: boolean; contactOutreach: boolean }, role: 'canvas' | 'member') => ({
+    id: 'w1', name: 'Summer Drop', role,
+    permissions,
+    canvasAutomation: role === 'canvas' ? { id: 'flow_7', name: 'Culture comments' } : null,
+  });
+
+  it('names the workspace and the standing a view-only guest has in it', () => {
+    mockUseApp.mockReturnValue(appContext({
+      showToast: vi.fn(), accounts: [],
+      workspaceAccess: guest({ editAutomations: false, contactOutreach: false }, 'canvas'),
+    }));
+    renderShell(<AppSidebar />);
+
+    const where = screen.getByRole('note');
+    expect(where).toHaveTextContent('Summer Drop');
+    expect(where).toHaveTextContent('Guest · view only');
+  });
+
+  it('says can-edit when the seat can edit', () => {
+    mockUseApp.mockReturnValue(appContext({
+      showToast: vi.fn(), accounts: [],
+      workspaceAccess: guest({ editAutomations: true, contactOutreach: false }, 'canvas'),
+    }));
+    renderShell(<AppSidebar />);
+    expect(screen.getByRole('note')).toHaveTextContent('Guest · can edit');
+  });
+
+  it('a member is a member, not a guest', () => {
+    mockUseApp.mockReturnValue(appContext({
+      showToast: vi.fn(), accounts: [],
+      workspaceAccess: guest({ editAutomations: true, contactOutreach: false }, 'member'),
+    }));
+    renderShell(<AppSidebar />);
+    expect(screen.getByRole('note')).toHaveTextContent('Member · can edit');
+  });
+
+  it('is absent for an owner — telling someone they are in their own account is noise', () => {
+    mockUseApp.mockReturnValue(appContext({
+      showToast: vi.fn(), accounts: [],
+      workspaceAccess: {
+        id: 'w1', name: 'My Studio', role: 'owner',
+        permissions: { editAutomations: true, contactOutreach: true },
+        canvasAutomation: null,
+      },
+    }));
+    renderShell(<AppSidebar />);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
+  it('is absent while access is still resolving, rather than guessing', () => {
+    renderShell(<AppSidebar />);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+});
+
 describe("the header's Inbox glance", () => {
   it('lists who is waiting and deep-links each row to the real conversation', async () => {
     const user = userEvent.setup();
