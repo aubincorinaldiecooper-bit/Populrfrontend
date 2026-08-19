@@ -6,7 +6,7 @@ import { getApiAuthToken } from './authClient';
  *
  * The server holds one response open and writes a line when something in
  * this workspace changes. The line names a FAMILY — conversations,
- * notifications — and carries nothing else, so what arrives here is never
+ * notifications, presence — and carries nothing else, so what arrives here is never
  * data to render, only a reason to re-ask. The cache already knows how to
  * ask; components/app/useLiveFeed.ts is the half that does.
  *
@@ -16,9 +16,9 @@ import { getApiAuthToken } from './authClient';
  * connection that never comes back costs lateness rather than silence.
  */
 
-export type FeedTopic = 'conversations' | 'notifications';
+export type FeedTopic = 'conversations' | 'notifications' | 'presence';
 
-const TOPICS = new Set<string>(['conversations', 'notifications'] satisfies FeedTopic[]);
+const TOPICS = new Set<string>(['conversations', 'notifications', 'presence'] satisfies FeedTopic[]);
 
 /** First retry, doubling to the cap — a server restart shouldn't stampede. */
 const FIRST_RETRY_MS = 1_000;

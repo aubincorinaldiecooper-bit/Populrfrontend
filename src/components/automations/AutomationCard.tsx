@@ -1,7 +1,7 @@
 import { cardVariants } from '@/components/ui/card';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Zap, GitBranch, Pause, Play, MoreHorizontal, Pencil, Copy, Trash2, Loader2, AlertTriangle,
+  Zap, GitBranch, Pause, Play, MoreHorizontal, Pencil, Copy, Trash2, Loader2, AlertTriangle, Users,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -13,6 +13,7 @@ import {
 import StatusPill from '../StatusPill';
 import { platformMeta } from '../../lib/platformMeta';
 import { timeAgo } from '../../lib/timeAgo';
+import { displayName } from '../../lib/people';
 import { describeFlow } from '../../lib/flowSummary';
 import type { AutomationFlow } from '../../lib/api';
 
@@ -288,8 +289,24 @@ export default function AutomationCard({
         </div>
       </div>
 
-      <div className="mt-3 pt-2.5 border-t border-[#F4F1EC]">
-        <span className="text-[10.5px] text-[#B5B0A5]">Updated {timeAgo(flow.updatedAt)}</span>
+      <div className="mt-3 pt-2.5 border-t border-[#F4F1EC] flex items-center gap-2 flex-wrap">
+        {/* "Updated 4 minutes ago" stopped being enough the moment more than
+            one person could do the updating. When we know who, the line says
+            who — and when we don't, it says exactly what it always said
+            rather than inventing an author. */}
+        <span className="text-[10.5px] text-[#B5B0A5]">
+          {flow.lastEditedBy
+            ? <>Edited by {displayName(flow.lastEditedBy)} {timeAgo(flow.lastEditedAt ?? flow.updatedAt)}</>
+            : <>Updated {timeAgo(flow.updatedAt)}</>}
+        </span>
+        {/* Shared, and with how many. 0 is "just you" and says nothing —
+            a badge on every card in a solo workspace is decoration. */}
+        {typeof flow.sharedWith === 'number' && flow.sharedWith > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B6B6B]">
+            <Users size={11} className="text-[#9B9B8F]" />
+            Shared with {flow.sharedWith} {flow.sharedWith === 1 ? 'other' : 'others'}
+          </span>
+        )}
       </div>
     </div>
   );

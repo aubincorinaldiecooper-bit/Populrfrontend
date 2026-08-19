@@ -31,6 +31,12 @@ export function useLiveFeed(): void {
           // screen, and "every contact" is at most the one being read.
           void queryClient.invalidateQueries({ queryKey: queryKeys.conversationLists });
           void queryClient.invalidateQueries({ queryKey: queryKeys.contactThreads });
+        } else if (topic === 'presence') {
+          // Somebody opened or closed an automation. Which one isn't said —
+          // and doesn't need to be: the only presence query mounted is the
+          // canvas this creator is looking at, if they are in a builder at
+          // all, so the coarse key costs one refetch or none.
+          void queryClient.invalidateQueries({ queryKey: queryKeys.allCollaborators });
         } else {
           void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
         }

@@ -8,6 +8,7 @@ import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import InboxPage from '../pages/InboxPage';
 import { useInboxWaiting } from '../components/inbox/conversations';
 import type { Conversation } from '../lib/api';
+import { appContext } from './appContext.mock';
 
 /* One inbox.
  *
@@ -52,7 +53,7 @@ vi.mock('../context/AuthContext', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn(), accounts: [] }));
   fetchConversationsMock.mockResolvedValue({
     conversations: [
       conversation('c1', 'Jordan', 1),

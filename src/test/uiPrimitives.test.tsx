@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+// AppProvider reads the query client now (it clears the cache on a workspace
+// switch), so the real provider needs the real wrapper.
+import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';

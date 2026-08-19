@@ -8,9 +8,12 @@ import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import { isOwnerView } from '../lib/access';
 import {
-  isBackendConfigured, fetchTeam, inviteTeammate, revokeInvitation,
-  type TeamInvitation, type TeamMember, type TeamPermissions,
+  isBackendConfigured, fetchTeam, inviteTeammate, removeTeammate, revokeInvitation,
+  type TeamInvitation, type TeamMember, type TeamPermissions, type TeamPerson,
 } from '../lib/api';
+import Avatar from '../components/inbox/Avatar';
+import ConfirmDialog from '../components/app/ConfirmDialog';
+import { contactLine, displayName } from '../lib/people';
 
 /**
  * Team: who else can work in this workspace, and inviting them. Its own
@@ -77,6 +80,23 @@ export default function TeamPage() {
 
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  // The roster, as people. Kept separately from `members` — which is the same
+  // collaborators keyed by the address they were invited at — because a
+  // server that hasn't been redeployed yet sends only the latter, and a page
+  // that renders nobody would be a worse answer than the old list.
+  const [people, setPeople] = useState<TeamPerson[] | null>(null);
+  const [removing, setRemoving] = useState<TeamPerson | null>(null);
+  const [removingHandle, setRemovingHandle] = useState<string | null>(null);
+  /**
+   * A single action failed — a removal, a withdrawal.
+   *
+   * Deliberately not loadError, which is "the team couldn't be loaded" and
+   * replaces the whole section with a retry. A removal that didn't go
+   * through must leave the roster on screen: it is still the truth, and
+   * blanking it would tell the owner nothing about who has access at the
+   * exact moment they were trying to change it.
+   */
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(backendConfigured);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -99,7 +119,11 @@ export default function TeamPage() {
     setLoading(true);
     setLoadError(null);
     fetchTeam()
-      .then(team => { setInvitations(team.invitations); setMembers(team.members); })
+      .then(team => {
+        setInvitations(team.invitations);
+        setMembers(team.members);
+        setPeople(team.people ?? null);
+      })
       .catch(err => setLoadError(err instanceof Error ? err.message : 'Could not load your team.'))
       .finally(() => setLoading(false));
   }, []);
@@ -143,15 +167,37 @@ export default function TeamPage() {
       await revokeInvitation(invitation.id);
       setInvitations(prev =>
         prev.map(i => (i.id === invitation.id ? { ...i, status: 'revoked' as const } : i)));
+      setActionError(null);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not withdraw that invite.');
+      setActionError(err instanceof Error ? err.message : 'Could not withdraw that invite.');
     } finally {
       setRevoking(null);
     }
   };
 
+  const remove = async (target: TeamPerson) => {
+    if (!target.handle) return;
+    setRemovingHandle(target.handle);
+    try {
+      await removeTeammate(target.handle);
+      setPeople(prev => (prev ?? []).filter(p => p.handle !== target.handle));
+      // The older array keys on the invited address; a removal has to reach
+      // it too or the fallback list would keep showing someone who is gone.
+      setMembers(prev => prev.filter(m => m.email !== target.person.email));
+      setActionError(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not remove them just now.');
+    } finally {
+      setRemovingHandle(null);
+    }
+  };
+
   const pending = invitations.filter(i => i.status === 'pending');
   const settled = invitations.filter(i => i.status === 'expired' || i.status === 'revoked');
+  // Everyone but the person reading it, for the "you're the only one here"
+  // question — an owner alone in their workspace is still one row long.
+  const others = (people ?? []).filter(p => !p.you);
+  const rosterEmpty = people ? others.length === 0 : members.length === 0;
 
   if (!backendConfigured) {
     return (
@@ -205,6 +251,13 @@ export default function TeamPage() {
 
         {!loading && !loadError && (
           <>
+            {actionError && (
+              <div className="mb-4 flex items-start gap-2 rounded-xl bg-[#FEF2F2] border border-[#FECACA] px-3 py-2.5">
+                <AlertCircle size={14} className="text-[#DC2626] flex-shrink-0 mt-0.5" />
+                <p className="text-[12.5px] text-[#111111]">{actionError}</p>
+              </div>
+            )}
+
             {sent && sent.delivered && (
               <div className="mb-4 flex items-center gap-2 rounded-xl bg-[#FBFFF0] border border-[#C5FF3D] px-3 py-2.5">
                 <Mail size={14} className="text-[#3F5212] flex-shrink-0" />
@@ -299,10 +352,68 @@ export default function TeamPage() {
               </form>
             )}
 
-            {/* People who accepted. The owner isn't listed: this is the list of
-                collaborators, and you are not a collaborator in your own
-                workspace. */}
-            {members.length > 0 && (
+            {/* Everyone in this workspace, the owner included. A roster that
+                left out the person who built the place was a list of
+                collaborators pretending to be a team. */}
+            {people && people.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9B9B8F] mb-2">
+                  In this workspace
+                </p>
+                <div className="divide-y divide-[#F0EDE8]">
+                  {people.map(entry => {
+                    const name = displayName(entry.person);
+                    const secondary = contactLine(entry.person);
+                    return (
+                      <div key={entry.handle ?? 'owner'} className="flex items-center gap-3 py-2.5">
+                        <Avatar
+                          handle={entry.person.email}
+                          name={entry.person.name}
+                          avatarUrl={entry.person.avatarUrl}
+                          size="sm"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] text-[#111111] truncate">
+                            {name}
+                            {entry.you && <span className="text-[#9B9B8F]"> · you</span>}
+                          </p>
+                          <p className="text-[11.5px] text-[#6B6B6B] truncate">
+                            {entry.role === 'owner'
+                              ? 'Owner · runs this workspace'
+                              : entry.automation
+                                ? <>Works on <span className="font-medium text-[#111111]">&ldquo;{entry.automation.name}&rdquo;</span> only</>
+                                : permissionSummary(entry.permissions)}
+                            {secondary && <span className="text-[#9B9B8F]"> · {secondary}</span>}
+                          </p>
+                        </div>
+                        {/* Withdrawing access is the owner's, and there is
+                            nothing to withdraw from the owner — which is why
+                            the handle's absence is the condition rather than
+                            a second check on the role. */}
+                        {ownerView && entry.handle && (
+                          <button
+                            type="button"
+                            onClick={() => setRemoving(entry)}
+                            disabled={removingHandle === entry.handle}
+                            aria-label={`Remove ${name} from this workspace`}
+                            className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50')}
+                          >
+                            {removingHandle === entry.handle
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : <><X size={12} />Remove</>}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* The shape this list had before people had names — rendered only
+                when the server hasn't sent the roster, so an old server and a
+                new page still show a team rather than an empty page. */}
+            {!people && members.length > 0 && (
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9B9B8F] mb-2">
                   In this workspace
@@ -325,7 +436,7 @@ export default function TeamPage() {
             )}
 
             {pending.length > 0 && (
-              <div className={members.length > 0 ? 'mt-5' : ''}>
+              <div className={(people ?? members).length > 0 ? 'mt-5' : ''}>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9B9B8F] mb-2">
                   Invited, not joined yet
                 </p>
@@ -367,7 +478,7 @@ export default function TeamPage() {
               </p>
             )}
 
-            {members.length === 0 && pending.length === 0 && !inviting && (
+            {rosterEmpty && pending.length === 0 && !inviting && (
               <p className="text-[12px] text-[#6B6B6B]">
                 {ownerView
                   ? <>You&apos;re the only one here. Invite someone when you want help running this workspace.</>
@@ -377,6 +488,22 @@ export default function TeamPage() {
           </>
         )}
       </section>
+
+      {/* Removing someone is not undoable from here — their invitation is
+          withdrawn with their access, so getting them back means inviting
+          them again. Worth one question. */}
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={open => { if (!open) setRemoving(null); }}
+        title={`Remove ${displayName(removing?.person)}?`}
+        description={
+          removing?.automation
+            ? `They'll lose access to "${removing.automation.name}". Their invite link stops working, so you'd need to invite them again.`
+            : `They'll lose access to this workspace. Their invite link stops working, so you'd need to invite them again.`
+        }
+        confirmLabel="Remove"
+        onConfirm={() => { const target = removing; setRemoving(null); if (target) void remove(target); }}
+      />
     </Page>
   );
 }

@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import ContactsPage from '../pages/ContactsPage';
 import type { ContactRecord } from '../lib/api';
+import { appContext } from './appContext.mock';
 
 /* Contacts is the directory; the person is the conversation.
  *
@@ -114,7 +115,7 @@ vi.mock('../lib/api', async () => {
 
 describe('ContactsPage — pagination beyond the first page', () => {
   it('advances via Next to fetch and render the remaining contacts', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
 
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
@@ -144,7 +145,7 @@ describe('ContactsPage — pagination beyond the first page', () => {
 
 describe('ContactsPage — classification chips (urgency, recency, tags)', () => {
   it('"Waiting on you" toggles the needsReply filter and resets to page one', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
@@ -163,7 +164,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
   });
 
   it('"Recently active" requests the recency sort', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
@@ -178,7 +179,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
     // Stage and score are real fields with a real backend — the panel still
     // edits them — but the directory no longer leads with them: no stage
     // tabs, no Stage/Score columns. From and Last active take their place.
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText('@user0')).toBeInTheDocument());
@@ -195,7 +196,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
   });
 
   it('workspace tags render as chips; picking one filters, picking it again clears', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
@@ -221,7 +222,7 @@ describe('ContactsPage — classification chips (urgency, recency, tags)', () =>
  */
 describe('ContactsPage — filtered to one automation', () => {
   it('asks for only that automation\'s audience, and names it', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
 
     render(
       <MemoryRouter initialEntries={['/contacts?automation=f1']}>
@@ -239,7 +240,7 @@ describe('ContactsPage — filtered to one automation', () => {
   });
 
   it('is as easy to leave as it was to arrive at', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
 
     render(
@@ -257,7 +258,7 @@ describe('ContactsPage — filtered to one automation', () => {
   });
 
   it('shows no audience banner when nothing is filtered', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
 
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
 
@@ -274,7 +275,7 @@ describe('ContactsPage — filtered to one automation', () => {
  * retired; these tests are the door it can't come back through. */
 describe('ContactsPage — a contact opens to their conversation', () => {
   it('opens the person named in the URL straight into their conversation', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
 
     render(
       <MemoryRouter initialEntries={['/contacts?contact=c_7']}>
@@ -290,7 +291,7 @@ describe('ContactsPage — a contact opens to their conversation', () => {
   });
 
   it('clicking a row opens the conversation — no Message button hop, nothing sent', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
 
     render(<MemoryRouter><ContactsPage /></MemoryRouter>);
@@ -305,7 +306,7 @@ describe('ContactsPage — a contact opens to their conversation', () => {
   });
 
   it('there is no intermediate CRM profile screen anymore', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
 
     render(
       <MemoryRouter initialEntries={['/contacts?contact=c_3']}>
@@ -322,7 +323,7 @@ describe('ContactsPage — a contact opens to their conversation', () => {
   });
 
   it('context is collapsed by default and opens on Details', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
 
     render(
@@ -351,7 +352,7 @@ describe('ContactsPage — a contact opens to their conversation', () => {
   });
 
   it('replies from here go through the same safe send path as the Inbox', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
 
     render(
@@ -369,7 +370,7 @@ describe('ContactsPage — a contact opens to their conversation', () => {
   });
 
   it('going back lands on the directory, filters intact', async () => {
-    mockUseApp.mockReturnValue({ accounts: [], showToast: vi.fn() });
+    mockUseApp.mockReturnValue(appContext({ accounts: [], showToast: vi.fn() }));
     const user = userEvent.setup();
 
     render(

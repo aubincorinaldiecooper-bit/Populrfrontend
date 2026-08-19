@@ -7,6 +7,7 @@ import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import { describeFlow } from '../lib/flowSummary';
 import type { AutomationFlow } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* The Automations list, after the phase-2 pass.
  *
@@ -112,7 +113,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn(), accounts: [] }));
   fetchFlowsMock.mockResolvedValue([flow()]);
   updateFlowMock.mockImplementation(async (id: string, patch: { name?: string }) =>
     ({ flow: flow({ id, ...patch }) }));
@@ -220,7 +221,7 @@ describe('the actions on a card', () => {
 
   it('puts the old name back when the rename fails', async () => {
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     updateFlowMock.mockRejectedValue(new Error('Could not rename this automation.'));
     const user = userEvent.setup();
     renderPage();

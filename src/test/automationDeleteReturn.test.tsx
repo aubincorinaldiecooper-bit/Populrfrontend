@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
 import AutomationsPage from '../pages/AutomationsPage';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { AutomationFlow } from '../lib/api';
+import { appContext } from './appContext.mock';
 
 /* Deleting an automation, then navigating away and coming back.
  *
@@ -137,7 +138,7 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -156,7 +157,7 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -185,7 +186,7 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'daytime party'), flow('f2', 'weekend boat drops!')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -224,7 +225,7 @@ describe('deleting an automation, then coming back to the page', () => {
     reset();
     mockDeleteFlow.mockImplementationOnce(async () => { throw new Error('Network unreachable'); });
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -248,7 +249,7 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     const first = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -278,7 +279,7 @@ describe('deleting an automation, then coming back to the page', () => {
     serverFlows = [flow('f1', 'Half-built draft'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     const view = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -317,7 +318,7 @@ describe('Undo', () => {
     serverFlows = [flow('f1', 'Guide DM', 'live')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -353,7 +354,7 @@ describe('Undo', () => {
     serverFlows = [flow('f1', 'Guide DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -382,7 +383,7 @@ describe('Undo', () => {
     serverFlows = [flow('f1', 'Guide DM'), flow('f2', 'Waitlist DM')];
     reset();
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     const first = render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);
@@ -411,7 +412,7 @@ describe('Undo', () => {
     reset();
     mockDeleteFlow.mockImplementationOnce(async () => { throw new Error('Network unreachable'); });
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast, accounts: [] });
+    mockUseApp.mockReturnValue(appContext({ showToast, accounts: [] }));
     const user = userEvent.setup();
 
     render(<MemoryRouter><CreateAutomationProvider><AutomationsPage /></CreateAutomationProvider></MemoryRouter>);

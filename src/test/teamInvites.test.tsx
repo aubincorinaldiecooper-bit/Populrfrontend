@@ -6,6 +6,8 @@ import TeamPage from '../pages/TeamPage';
 import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
 import InviteAcceptPage from '../pages/InviteAcceptPage';
 import { ApiError, type TeamInvitation, type TeamMember } from '../lib/api';
+import { appContext } from './appContext.mock';
+import type { WorkspaceAccess } from '../lib/api';
 
 /* Inviting a teammate, and being one.
  *
@@ -35,15 +37,26 @@ const mockAccept = vi.fn();
 
 // The workspace access the chrome reads (owner by default; tests flip it to
 // walk in a member's or canvas invitee's shoes).
-let mockAccess: unknown = null;
+let mockAccess: WorkspaceAccess | null = null;
 
 const mockRefreshAccess = vi.fn();
+const mockSwitchWorkspace = vi.fn().mockResolvedValue(undefined);
+
+// The acceptance page names the account it is binding the invite to, and
+// offers a way out if it is the wrong one — so it reads the session.
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: { name: 'Sam', email: 'sam@example.com' },
+    signOut: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
 
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({
+  useApp: () => appContext({
     showToast: vi.fn(),
     workspaceAccess: mockAccess,
     refreshWorkspaceAccess: mockRefreshAccess,
+    switchToWorkspace: mockSwitchWorkspace,
   }),
 }));
 
@@ -310,7 +323,7 @@ describe('the invite link survives sign-in', () => {
 });
 
 describe('canvas-scoped invites', () => {
-  const memberAccess = {
+  const memberAccess: WorkspaceAccess = {
     id: 'w1', name: 'Summer Drop', role: 'member',
     permissions: { editAutomations: false, contactOutreach: false },
     canvasAutomation: null,
@@ -388,9 +401,13 @@ describe('/invite/:token — canvas acceptance', () => {
     renderAccept();
 
     expect(await screen.findByText('You’re in')).toBeInTheDocument();
-    // The app re-resolves who they are NOW — the chrome must not keep
-    // showing the pre-acceptance workspace until a reload.
-    expect(mockRefreshAccess).toHaveBeenCalled();
+    // It MOVES them, rather than re-reading and hoping. Re-resolving alone
+    // re-runs the server's fallback inference, and for anyone who already
+    // has an automation or a connected account of their own that answers
+    // "your own workspace" — so they joined a team and landed back where
+    // they started. Accepting is the clearest statement of which workspace
+    // someone means; this makes it the one they are in.
+    expect(mockSwitchWorkspace).toHaveBeenCalledWith('w1', null);
     expect(screen.getByText(/it’s what Populr opens for you now/)).toBeInTheDocument();
     // The pre-access-era disclaimer is gone: membership now resolves access.
     expect(screen.queryByText(/being switched on next/)).not.toBeInTheDocument();
