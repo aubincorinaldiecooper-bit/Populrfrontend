@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router';
 import ChannelsPage from '../pages/ChannelsPage';
 import type { ConnectedAccount } from '../lib/api';
+import { appContext } from './appContext.mock';
 
 /* Channels must list real accounts, not one-per-platform.
  *
@@ -63,10 +64,12 @@ beforeEach(() => {
     value: { writeText: mockClipboardWrite },
     configurable: true,
   });
-  mockUseApp.mockReturnValue({
+  mockUseApp.mockReturnValue(appContext({
+    // Real OnboardingPlatform shape: the partial literal this used to be
+    // only type-checked because the whole mock was untyped.
     connectedPlatforms: [
-      { id: 'instagram', status: 'connected' },
-      { id: 'twitter', status: 'connected' },
+      { id: 'instagram', name: 'Instagram', icon: 'instagram', status: 'connected' },
+      { id: 'twitter', name: 'X', icon: 'twitter', status: 'connected' },
     ],
     accounts,
     beginPlatformConnect: mockBeginPlatformConnect,
@@ -76,7 +79,7 @@ beforeEach(() => {
     disconnectAccount: mockDisconnectAccount,
     showToast: vi.fn(),
     openSubscriptionModal: vi.fn(),
-  });
+  }));
 });
 
 function renderPage() {
@@ -90,13 +93,13 @@ describe('ChannelsPage — independent per-account lifecycle', () => {
    * reach the disconnect endpoint. */
 
   it('a reconnect-required A and a connected B render independent statuses and actions', () => {
-    mockUseApp.mockReturnValue({
+    mockUseApp.mockReturnValue(appContext({
       ...mockUseApp(),
       accounts: [
         account({ id: 'ig_a', username: 'thelifeofaubin', status: 'reconnect_required', is_connected: true }),
         account({ id: 'ig_b', username: 'secondaccount' }),
       ],
-    });
+    }));
     renderPage();
     // Assertions are scoped to each account's OWN row — a regression that
     // swapped the two renderings would still satisfy page-global queries
@@ -165,13 +168,13 @@ describe('ChannelsPage — beta channel surface', () => {
   });
 
   it('two X accounts render as separate rows with their own Disconnect', () => {
-    mockUseApp.mockReturnValue({
+    mockUseApp.mockReturnValue(appContext({
       ...mockUseApp(),
       accounts: [
         account({ id: 'x_1', platform: 'twitter', username: 'more.feed' }),
         account({ id: 'x_2', platform: 'twitter', username: 'justforlaughs' }),
       ],
-    });
+    }));
     renderPage();
     expect(screen.getByText('@more.feed')).toBeInTheDocument();
     expect(screen.getByText('@justforlaughs')).toBeInTheDocument();
@@ -179,10 +182,10 @@ describe('ChannelsPage — beta channel surface', () => {
   });
 
   it('an existing account on a hidden platform stays manageable but gets no new-connect actions', () => {
-    mockUseApp.mockReturnValue({
+    mockUseApp.mockReturnValue(appContext({
       ...mockUseApp(),
       accounts: [account({ id: 'tt_1', platform: 'tiktok', username: 'oldtok' })],
-    });
+    }));
     renderPage();
     // The account is not stranded: its row renders with Disconnect...
     expect(screen.getByText('TikTok')).toBeInTheDocument();

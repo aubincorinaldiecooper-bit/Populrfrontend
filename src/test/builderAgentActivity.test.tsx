@@ -8,6 +8,7 @@ import AutomationBuilderPage from '../pages/AutomationBuilderPage';
 import { activityLines, parseOperations, type FlowOperation } from '../lib/composerActivity';
 import type { AutomationFlow } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* The builder, after the phase-3 pass.
  *
@@ -159,7 +160,7 @@ beforeEach(() => {
   finishPropose = null;
   commitResult = {};
   setViewportWidth(1520);
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn() }));
 });
 
 describe('what Populr says it is doing', () => {

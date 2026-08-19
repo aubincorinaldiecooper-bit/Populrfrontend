@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import SettingsPage from '../pages/SettingsPage';
+import { appContext } from './appContext.mock';
 
 /* The workspace automation pause switch.
  *
@@ -21,7 +22,7 @@ const mockSetWorkspacePause = vi.fn();
 const mockShowToast = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({ showToast: mockShowToast }),
+  useApp: () => appContext({ showToast: mockShowToast }),
 }));
 
 vi.mock('../context/AuthContext', () => ({

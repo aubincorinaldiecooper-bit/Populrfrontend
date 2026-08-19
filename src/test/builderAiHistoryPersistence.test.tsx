@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import AutomationBuilderPage from '../pages/AutomationBuilderPage';
 import type { AutomationFlow, FlowAiMessage } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* The conversation survives the browser.
  *
@@ -136,7 +137,7 @@ beforeEach(() => {
   finishPropose = null;
   aiMessagesMock.mockImplementation(async () => ({ messages: [], hasMore: false }));
   Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn() }));
 });
 
 describe('the conversation survives a reload', () => {

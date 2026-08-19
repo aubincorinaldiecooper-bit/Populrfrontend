@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import Layout from '../components/Layout';
 import { HeaderLocal, HeaderActions } from '../components/app/headerSlots';
 import { navItems } from '../lib/nav';
+import { appContext } from './appContext.mock';
 
 /* The content changes. The product shell does not.
  *
@@ -30,7 +31,7 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { name: 'Creator', email: 'c@example.com' }, signOut: vi.fn() }),
 }));
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({ showToast: vi.fn(), accounts: [], workspaceAccess: null }),
+  useApp: () => appContext(),
 }));
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');

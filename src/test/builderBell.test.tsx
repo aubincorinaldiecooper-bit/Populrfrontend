@@ -8,6 +8,7 @@ import { useBuilderNotifications } from '../components/automation-builder/useBui
 import { renderHook, waitFor as waitForHook } from '@testing-library/react';
 import { FlowNotReadyError, type AutomationFlow, type FlowProblem } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* The top right of the builder, after Review became a bell.
  *
@@ -151,7 +152,7 @@ beforeEach(() => {
     { nodeId: 'trigger', message: NEEDS_ACCOUNT },
     { nodeId: 'send', message: NEEDS_MESSAGE },
   ];
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn() }));
 });
 
 describe('the builder’s top bar', () => {
@@ -266,7 +267,7 @@ describe('Activate', () => {
       new FlowNotReadyError([{ nodeId: 'trigger', message: NEEDS_ACCOUNT }]),
     );
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue(appContext({ showToast }));
     const user = userEvent.setup();
     mountBuilder();
 
@@ -285,7 +286,7 @@ describe('Activate', () => {
     serverProblems = [];
     activateFlowMock.mockResolvedValueOnce({ flow: flowFixture(), legacyPaused: false });
     const showToast = vi.fn();
-    mockUseApp.mockReturnValue({ showToast });
+    mockUseApp.mockReturnValue(appContext({ showToast }));
     const user = userEvent.setup();
     mountBuilder();
 

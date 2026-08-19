@@ -1,13 +1,14 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { OnboardingPlatform } from '../data';
 import { defaultOnboardingPlatforms } from '../data';
 import { connectFailure } from '../lib/connectErrors';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
-  fetchWorkspaceAccess,
+  fetchWorkspaceAccess, fetchWorkspaces, switchWorkspace,
 } from '../lib/api';
-import type { ConnectedAccount, WorkspaceAccess } from '../lib/api';
+import type { ConnectedAccount, WorkspaceAccess, WorkspaceOption } from '../lib/api';
 import { useAuth } from './AuthContext';
 import { toast as sonnerToast } from 'sonner';
 
@@ -54,9 +55,10 @@ interface AppState {
   // because the majority case is an owner and the API refuses anything a
   // member truly can't do. The chrome catches up when this resolves.
   workspaceAccess: WorkspaceAccess | null;
+  workspaces: WorkspaceOption[];
 }
 
-interface AppContextType extends AppState {
+export interface AppContextType extends AppState {
   // Onboarding platform connection
   beginPlatformConnect: (id: string) => void;
   refreshConnectedAccounts: () => Promise<void>;
@@ -74,6 +76,10 @@ interface AppContextType extends AppState {
   /** Re-resolve which workspace this account acts in — call after anything
    *  that changes it, i.e. accepting an invitation. */
   refreshWorkspaceAccess: () => Promise<void>;
+  /** Everywhere this creator can go. Empty until loaded. */
+  workspaces: WorkspaceOption[];
+  /** Move to another workspace, or to one shared automation inside one. */
+  switchToWorkspace: (workspaceId: string, automationId?: string | null) => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   // Toast
   showToast: (message: string, type?: Toast['type'], options?: ToastOptions) => void;
@@ -108,6 +114,9 @@ function delay(ms: number): Promise<void> {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  // Switching workspaces empties this — see switchToWorkspace. main.tsx puts
+  // QueryClientProvider above AppProvider precisely so it can be reached here.
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AppState>({
     connectedPlatforms: defaultOnboardingPlatforms.map(p => ({ ...p })),
     accounts: [],
@@ -117,6 +126,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isLoading: false,
     subscriptionModal: null,
     workspaceAccess: null,
+    workspaces: [],
   });
 
   const { user } = useAuth();
@@ -486,12 +496,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const refreshWorkspaceAccess = useCallback(async () => {
     if (!isBackendConfigured()) return;
     try {
-      const access = await fetchWorkspaceAccess();
-      setState(prev => ({ ...prev, workspaceAccess: access }));
+      const [access, list] = await Promise.all([
+        fetchWorkspaceAccess(),
+        // Where else this creator could go. A failure here costs the
+        // switcher its other entries, never the access resolution beside
+        // it — being unable to list your workspaces is not a reason to stop
+        // knowing which one you are in.
+        fetchWorkspaces().then(r => r.workspaces).catch(err => {
+          console.warn('[access] could not list workspaces:', err);
+          return null;
+        }),
+      ]);
+      setState(prev => ({
+        ...prev,
+        workspaceAccess: access,
+        workspaces: list ?? prev.workspaces,
+      }));
     } catch (err) {
       console.warn('[access] could not resolve workspace access:', err);
     }
   }, []);
+
+  /**
+   * Move to another workspace.
+   *
+   * Everything cached is an answer about the workspace it was fetched in —
+   * automations, contacts, the inbox, the audience counts, the bell. Moving
+   * without clearing would show one workspace's data under another's name
+   * until each query happened to refetch, so the cache is emptied before the
+   * new access lands rather than invalidated key by key.
+   *
+   * The server validates the choice and refuses a workspace this person no
+   * longer holds, so a stale switcher throws here instead of half-moving
+   * them; the caller reports it and the session stays where it was.
+   */
+  const switchToWorkspace = useCallback(
+    async (workspaceId: string, automationId?: string | null) => {
+      await switchWorkspace(workspaceId, automationId ?? null);
+      queryClient.clear();
+      await refreshWorkspaceAccess();
+      await refreshConnectedAccounts();
+    },
+    [queryClient, refreshWorkspaceAccess, refreshConnectedAccounts],
+  );
 
   useEffect(() => {
     if (!authedUserId) return;
@@ -516,6 +563,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeSubscriptionModal,
       refreshAccounts,
       refreshWorkspaceAccess,
+      switchToWorkspace,
       disconnectAccount,
       showToast,
       removeToast,

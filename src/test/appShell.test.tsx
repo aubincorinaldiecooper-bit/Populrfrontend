@@ -8,6 +8,7 @@ import AppHeader from '../components/app/AppHeader';
 import PageHeader from '../components/PageHeader';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { Conversation } from '../lib/api';
+import { appContext } from './appContext.mock';
 
 /* The shell.
  *
@@ -55,7 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fetchNotificationsMock.mockResolvedValue({ notifications: [], unread: 0 });
   markNotificationsReadMock.mockResolvedValue({ marked: 0 });
-  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [], workspaceAccess: null });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn(), accounts: [], workspaceAccess: null }));
   fetchConversationsMock.mockResolvedValue({
     conversations: [conversation('c1', 'Jordan', 2), conversation('c2', 'Alex', 0)],
   });
@@ -117,7 +118,7 @@ describe('the phone drawer', () => {
 
 describe('what the nav offers depends on who is signed in', () => {
   it('a canvas invitee sees their automation and Settings — no doors that 403', async () => {
-    mockUseApp.mockReturnValue({
+    mockUseApp.mockReturnValue(appContext({
       showToast: vi.fn(),
       accounts: [],
       workspaceAccess: {
@@ -125,7 +126,7 @@ describe('what the nav offers depends on who is signed in', () => {
         permissions: { editAutomations: true, contactOutreach: false },
         canvasAutomation: { id: 'flow_7', name: 'Culture comments' },
       },
-    });
+    }));
     renderShell(<AppSidebar />);
 
     const links = screen.getAllByRole('link');
@@ -177,7 +178,7 @@ describe("the header's Inbox glance", () => {
 
 describe("the header respects who is signed in", () => {
   it('offers no Inbox control to a canvas invitee — their workspace Inbox answers 403', () => {
-    mockUseApp.mockReturnValue({
+    mockUseApp.mockReturnValue(appContext({
       showToast: vi.fn(),
       accounts: [],
       workspaceAccess: {
@@ -185,7 +186,7 @@ describe("the header respects who is signed in", () => {
         permissions: { editAutomations: true, contactOutreach: false },
         canvasAutomation: { id: 'flow_7', name: 'Culture comments' },
       },
-    });
+    }));
     renderShell(<AppHeader />);
 
     expect(screen.queryByRole('button', { name: /^Inbox/ })).not.toBeInTheDocument();

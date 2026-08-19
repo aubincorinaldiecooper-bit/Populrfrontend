@@ -93,7 +93,7 @@ function notifyUnauthorized(): void {
 async function apiFetch<T>(
   path: string,
   init?: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     body?: unknown;
     /**
      * Let the request outlive the document that started it.
@@ -1485,6 +1485,56 @@ export interface WorkspaceAccess {
 export async function fetchWorkspaceAccess(): Promise<WorkspaceAccess> {
   const me = await apiFetch<{ workspace: WorkspaceAccess }>('/api/me');
   return me.workspace;
+}
+
+/**
+ * One workspace a creator can move into: their own, one they joined, or a
+ * single automation someone shared with them.
+ *
+ * `automation` set means this entry IS that one canvas — not a workspace
+ * with an automation highlighted. Holding a canvas inside a workspace you
+ * are also a member of produces two entries, because it is two different
+ * amounts of access and offering only one of them would misdescribe both.
+ */
+export interface WorkspaceOption {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+  permissions: TeamPermissions;
+  automation: AutomationScope | null;
+  since: string;
+}
+
+/** Which of the options the session is acting in right now. */
+export interface CurrentWorkspace {
+  id: string;
+  automationId: string | null;
+}
+
+/** GET /api/me/workspaces — everywhere this creator can go. */
+export async function fetchWorkspaces(): Promise<{
+  workspaces: WorkspaceOption[];
+  current: CurrentWorkspace;
+}> {
+  return apiFetch('/api/me/workspaces');
+}
+
+/**
+ * PUT /api/me/workspace — move.
+ *
+ * The server validates the choice against what this person actually holds
+ * and answers 404 otherwise, so a stale switcher (a workspace revoked while
+ * the menu was open) refuses rather than half-moving them.
+ */
+export async function switchWorkspace(
+  workspaceId: string,
+  automationId?: string | null,
+): Promise<WorkspaceOption> {
+  const body = await apiFetch<{ workspace: WorkspaceOption }>('/api/me/workspace', {
+    method: 'PUT',
+    body: JSON.stringify({ workspaceId, automationId: automationId ?? null }),
+  });
+  return body.workspace;
 }
 
 /* ─── Notifications ─── */

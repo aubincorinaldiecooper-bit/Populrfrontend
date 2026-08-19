@@ -9,6 +9,7 @@ import AppSidebar from '../components/app/AppSidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
 import type { AutomationFlow } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* The contextual step editor.
  *
@@ -176,7 +177,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   canvas.props = null;
   setViewportWidth(1440);
-  mockUseApp.mockReturnValue({ showToast: vi.fn(), accounts: [] });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn(), accounts: [] }));
 });
 
 describe('opening, switching, closing', () => {

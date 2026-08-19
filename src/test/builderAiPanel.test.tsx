@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import AutomationBuilderPage from '../pages/AutomationBuilderPage';
 import type { AutomationFlow } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* Ask Populr, as a collapsible conversation.
  *
@@ -152,7 +153,7 @@ beforeEach(() => {
   rejectPropose = null;
   fixtures.empty = false;
   setViewportWidth(1440);
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn() }));
 });
 
 describe('collapsed by default', () => {

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MoreVertical, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { MoreVertical, Settings as SettingsIcon, LogOut, Check } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import type { WorkspaceOption } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { resolveIdentity } from '../lib/identity';
@@ -34,9 +36,42 @@ export default function AccountMenu({
 }: { onNavigate?: () => void; compact?: boolean }) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { showToast } = useApp();
+  const { showToast, workspaces, workspaceAccess, switchToWorkspace } = useApp();
   const identity = resolveIdentity(user);
   const [signingOut, setSigningOut] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
+
+  // A workspace and a canvas grant inside it are two entries with the same
+  // workspace id, so identity is the pair.
+  const keyOf = (w: WorkspaceOption) => `${w.id}:${w.automation?.id ?? ''}`;
+  const isCurrent = (w: WorkspaceOption) =>
+    w.id === workspaceAccess?.id &&
+    (w.automation?.id ?? null) === (workspaceAccess?.canvasAutomation?.id ?? null);
+  const others = workspaces.filter(w => !isCurrent(w));
+
+  const roleWord = (w: WorkspaceOption) =>
+    w.role === 'owner' ? 'Yours' : w.role === 'canvas' ? 'Shared' : 'Joined';
+
+  const move = async (w: WorkspaceOption) => {
+    if (switching || isCurrent(w)) return;
+    setSwitching(keyOf(w));
+    try {
+      await switchToWorkspace(w.id, w.automation?.id ?? null);
+      onNavigate?.();
+      // Home, always: the page they were on belongs to the workspace they
+      // just left. A contact, an automation, an inbox thread — none of them
+      // exist over here, and following them would land on a 404 that reads
+      // like the switch failed.
+      navigate('/');
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Couldn't open that workspace. Try again.",
+        'error',
+      );
+    } finally {
+      setSwitching(null);
+    }
+  };
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -59,6 +94,44 @@ export default function AccountMenu({
 
   const menu = (
     <DropdownMenuContent aria-label="Account" side="top" align={compact ? 'start' : 'end'}>
+      {/* Which workspace, above who you are: the account never changes and
+          the workspace does, so the changeable thing goes where a creator
+          looks first. Absent entirely for someone who only has their own —
+          a menu offering one choice is not a choice. */}
+      {others.length > 0 && (
+        <>
+          <p className="px-3 pb-1.5 pt-1 font-label text-[10.5px] uppercase tracking-widest text-muted-foreground">
+            Workspace
+          </p>
+          {workspaces.map(w => {
+            const active = isCurrent(w);
+            return (
+              <DropdownMenuItem
+                key={`${w.id}:${w.automation?.id ?? ''}`}
+                disabled={switching !== null}
+                onClick={() => void move(w)}
+              >
+                <Check
+                  size={15}
+                  className={active ? 'text-on-surface' : 'invisible'}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {/* A canvas grant is one automation, not a workspace — say
+                      the automation's name, because that is the thing they
+                      were given and the only thing they will find inside. */}
+                  {w.automation ? w.automation.name : w.name}
+                  {switching === keyOf(w) && ' …'}
+                </span>
+                <span className="font-label text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                  {roleWord(w)}
+                </span>
+              </DropdownMenuItem>
+            );
+          })}
+          <DropdownMenuSeparator />
+        </>
+      )}
       <DropdownMenuItem onClick={goToSettings}>
         <SettingsIcon size={15} className="text-muted-foreground" />
         Settings

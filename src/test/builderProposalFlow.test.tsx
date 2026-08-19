@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import AutomationBuilderPage from '../pages/AutomationBuilderPage';
 import type { AutomationFlow, ComposerProgressEvent, FlowProposal } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* The proposal-first composer, end to end through the page.
  *
@@ -182,7 +183,7 @@ beforeEach(() => {
     summary: "Built it — it's on your canvas.",
   }));
   Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn() }));
 });
 
 describe('a prompt creates a proposal, not a change', () => {

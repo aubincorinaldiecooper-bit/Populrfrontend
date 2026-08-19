@@ -6,6 +6,7 @@ import { render } from './render';
 import Layout from '../components/Layout';
 import { SIDEBAR_WIDTH, SIDEBAR_RAIL_WIDTH } from '../components/ui/sidebar';
 import { navItems } from '../lib/nav';
+import { appContext } from './appContext.mock';
 
 /* Collapsing the navigation, as a property of the one shell.
  *
@@ -26,7 +27,7 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { name: 'Creator', email: 'c@example.com' }, signOut: vi.fn() }),
 }));
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({ showToast: vi.fn(), accounts: [], workspaceAccess: null }),
+  useApp: () => appContext(),
 }));
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');

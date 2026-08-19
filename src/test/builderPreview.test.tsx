@@ -8,6 +8,7 @@ import PreviewPanel from '../components/automation-builder/PreviewPanel';
 import { buildConversation } from '../lib/previewConversation';
 import type { AutomationFlow, FlowSimulationResult } from '../lib/api';
 import type { FlowGraph } from '../lib/flowSchema';
+import { appContext } from './appContext.mock';
 
 /* Preview — what "Test" became.
  *
@@ -459,7 +460,7 @@ vi.mock('../context/AppContext', () => ({ useApp: () => mockUseApp() }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUseApp.mockReturnValue({ showToast: vi.fn() });
+  mockUseApp.mockReturnValue(appContext({ showToast: vi.fn() }));
 });
 
 describe('the builder’s Preview button', () => {

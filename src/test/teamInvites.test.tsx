@@ -6,6 +6,8 @@ import TeamPage from '../pages/TeamPage';
 import InviteToAutomationButton from '../components/automation-builder/InviteToAutomationButton';
 import InviteAcceptPage from '../pages/InviteAcceptPage';
 import { ApiError, type TeamInvitation, type TeamMember } from '../lib/api';
+import { appContext } from './appContext.mock';
+import type { WorkspaceAccess } from '../lib/api';
 
 /* Inviting a teammate, and being one.
  *
@@ -35,12 +37,12 @@ const mockAccept = vi.fn();
 
 // The workspace access the chrome reads (owner by default; tests flip it to
 // walk in a member's or canvas invitee's shoes).
-let mockAccess: unknown = null;
+let mockAccess: WorkspaceAccess | null = null;
 
 const mockRefreshAccess = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({
+  useApp: () => appContext({
     showToast: vi.fn(),
     workspaceAccess: mockAccess,
     refreshWorkspaceAccess: mockRefreshAccess,
@@ -310,7 +312,7 @@ describe('the invite link survives sign-in', () => {
 });
 
 describe('canvas-scoped invites', () => {
-  const memberAccess = {
+  const memberAccess: WorkspaceAccess = {
     id: 'w1', name: 'Summer Drop', role: 'member',
     permissions: { editAutomations: false, contactOutreach: false },
     canvasAutomation: null,

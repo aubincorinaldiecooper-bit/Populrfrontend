@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import InboxPage from '../pages/InboxPage';
 import type { Conversation, ContactDetail, ContactRecord, ContactMessage } from '../lib/api';
+import { appContext } from './appContext.mock';
 
 /* The Inbox is a messaging product, not a work queue.
  *
@@ -73,7 +74,7 @@ const mockUpdateContact = vi.fn();
 const mockShowToast = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
-  useApp: () => ({ showToast: mockShowToast }),
+  useApp: () => appContext({ showToast: mockShowToast }),
 }));
 
 vi.mock('../lib/api', async () => {
