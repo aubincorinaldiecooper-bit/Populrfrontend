@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { endServerStateSession } from '../lib/queryClient';
 import type { OnboardingPlatform } from '../data';
 import { defaultOnboardingPlatforms } from '../data';
 import { connectFailure } from '../lib/connectErrors';
@@ -532,8 +533,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
    */
   const switchToWorkspace = useCallback(
     async (workspaceId: string, automationId?: string | null) => {
-      await switchWorkspace(workspaceId, automationId ?? null);
-      queryClient.clear();
+      const moved = await switchWorkspace(workspaceId, automationId ?? null);
+
+      // The same boundary signing out crosses, and for the same reason:
+      // clear() alone empties the store but tells a MOUNTED observer
+      // nothing, so the bell and the Inbox badge — which live in the shell
+      // and survive the navigation — would keep rendering the workspace
+      // they were fetched in until something happened to refetch them.
+      // endServerStateSession resets live queries, drops the rest, and
+      // advances the epoch so a mutation still in flight cannot roll the old
+      // workspace's data back in.
+      endServerStateSession(queryClient);
+
+      // Apply what the server just told us, rather than waiting to be told
+      // again. refreshWorkspaceAccess swallows its own failures by design,
+      // so a transient /api/me error would otherwise leave `workspaceAccess`
+      // describing the workspace they just left — and the shell decides what
+      // to render from exactly that: a canvas invitee would be offered an
+      // owner's menu, or an owner reduced to one automation.
+      setState(prev => ({
+        ...prev,
+        workspaceAccess: {
+          id: moved.id,
+          name: moved.name,
+          role: moved.role,
+          permissions: moved.permissions,
+          canvasAutomation: moved.role === 'canvas' ? moved.automation : null,
+        },
+      }));
+
+      // Reconcile in the background — this is a second opinion, not the
+      // source of truth for the move.
       await refreshWorkspaceAccess();
       await refreshConnectedAccounts();
     },
@@ -541,10 +571,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    // Whoever is signed in now, this is not the previous account's answer.
+    // AuthContext supports swapping sessions in place, so AppProvider is not
+    // remounted — and the refresh below keeps the last known list when its
+    // own fetch fails, which is right for a flaky network and badly wrong
+    // across an identity change: the new account would be shown the former
+    // one's workspaces, and the names of automations shared with them.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState(prev => ({ ...prev, workspaces: [], workspaceAccess: null }));
     if (!authedUserId) return;
     // Data fetch from the backend on sign-in, not derived state — the same
     // pattern (and the same lint carve-out) as the accounts refresh above.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshWorkspaceAccess();
   }, [authedUserId, refreshWorkspaceAccess]);
 

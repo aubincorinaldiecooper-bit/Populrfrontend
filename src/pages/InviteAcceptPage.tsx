@@ -2,10 +2,12 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { AlertCircle, Check, Loader2, RefreshCw, Users } from 'lucide-react';
 import { ApiError, acceptInvitation, type AutomationScope, type InviteAcceptStatus } from '../lib/api';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { resolveIdentity } from '../lib/identity';
 
 /**
  * Where a team invite link lands: /invite/<token>.
@@ -71,25 +73,64 @@ function refusal(err: unknown): Outcome {
 
 export default function InviteAcceptPage() {
   const { token = '' } = useParams();
-  const { refreshWorkspaceAccess } = useApp();
+  const { refreshWorkspaceAccess, switchToWorkspace } = useApp();
+  const { user, signOut } = useAuth();
+  const acceptingAs = resolveIdentity(user).email;
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'working' });
   // The token is single-use: a second POST for the same link would be told
   // it was already used and turn a success into an error message. React 18's
   // development double-effect makes that a certainty without this guard.
   const claimed = useRef(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
+  const navigate = useNavigate();
+
+  /**
+   * Leave, and come back to this same link.
+   *
+   * The invite is already spent if it was accepted — this is for the person
+   * who realises mid-flow that they are signed in as the wrong one, and for
+   * the one who lands here logged in as an account that was never invited.
+   * Signing out returns them to /login with this path stashed, so the link
+   * survives the round trip exactly as it does for a first-time recipient.
+   */
+  const signInAsSomeoneElse = useCallback(async () => {
+    if (switchingAccount) return;
+    setSwitchingAccount(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true, state: { returnTo: `/invite/${token}` } });
+    } catch {
+      setSwitchingAccount(false);
+    }
+  }, [navigate, signOut, switchingAccount, token]);
 
   const accept = useCallback(() => {
     setOutcome({ kind: 'working' });
     acceptInvitation(token)
-      .then(result => {
-        // Membership just changed what this account can reach; re-resolve the
-        // workspace context NOW so "Go to Populr" opens the joined workspace
-        // (or the canvas) instead of a stale view of the old one.
-        void refreshWorkspaceAccess();
+      .then(async result => {
+        if (result.status !== 'owner') {
+          // MOVE them, don't just re-read. Refreshing alone re-runs the
+          // server's fallback inference, and for anyone who has an
+          // automation or a connected account of their own that answers
+          // "your own workspace" — so the link below opened an automation
+          // that, from where they were standing, did not exist. Accepting an
+          // invitation is the clearest possible statement of which workspace
+          // someone means; this makes it the one they are in.
+          //
+          // A failure here costs them the automatic move, not the
+          // membership: they are on the team either way and the switcher in
+          // the sidebar can take them across.
+          try {
+            await switchToWorkspace(result.workspaceId, result.automation?.id ?? null);
+          } catch (err) {
+            console.warn('[invite] joined, but could not open the workspace:', err);
+            await refreshWorkspaceAccess();
+          }
+        }
         setOutcome({ kind: 'done', status: result.status, automation: result.automation ?? null });
       })
       .catch(err => setOutcome(refusal(err)));
-  }, [token, refreshWorkspaceAccess]);
+  }, [token, refreshWorkspaceAccess, switchToWorkspace]);
 
   useEffect(() => {
     if (claimed.current) return;
@@ -149,6 +190,30 @@ export default function InviteAcceptPage() {
               <Link to="/" className={cn(buttonVariants(), "mt-5 inline-flex")}>Go to Populr</Link>
             )}
           </>
+        )}
+
+        {/* Which account this is happening to.
+            An invite binds to whoever is signed in, once and permanently.
+            Two accounts in one browser is the ordinary case for the person
+            testing their own product, and it is the ordinary case for anyone
+            with a work login and a personal one — so the page says which one
+            it used rather than letting them find out later from a workspace
+            that isn't theirs. */}
+        {acceptingAs && outcome.kind !== 'working' && (
+          <p className="mt-5 border-t border-border pt-4 text-[12px] leading-relaxed text-[#6B6B6B]">
+            {outcome.kind === 'done' && outcome.status !== 'owner'
+              ? <>Joined as <span className="font-semibold text-[#111111]">{acceptingAs}</span>.</>
+              : <>Signed in as <span className="font-semibold text-[#111111]">{acceptingAs}</span>.</>}
+            {' '}
+            <button
+              type="button"
+              onClick={() => void signInAsSomeoneElse()}
+              disabled={switchingAccount}
+              className="underline underline-offset-2 hover:text-[#111111] disabled:opacity-60"
+            >
+              {switchingAccount ? 'Signing out…' : 'Use a different account'}
+            </button>
+          </p>
         )}
 
         {outcome.kind === 'refused' && (

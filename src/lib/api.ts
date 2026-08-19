@@ -1530,9 +1530,12 @@ export async function switchWorkspace(
   workspaceId: string,
   automationId?: string | null,
 ): Promise<WorkspaceOption> {
+  // The object, not a string: apiFetch stringifies for us. Passing JSON here
+  // wrapped it in JSON again, and the server saw a body with no workspaceId
+  // on it at all.
   const body = await apiFetch<{ workspace: WorkspaceOption }>('/api/me/workspace', {
     method: 'PUT',
-    body: JSON.stringify({ workspaceId, automationId: automationId ?? null }),
+    body: { workspaceId, automationId: automationId ?? null },
   });
   return body.workspace;
 }

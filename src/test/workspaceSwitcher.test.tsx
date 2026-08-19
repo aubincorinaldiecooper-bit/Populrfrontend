@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { render } from './render';
@@ -30,8 +30,10 @@ import type { WorkspaceAccess, WorkspaceOption } from '../lib/api';
 
 const mockUseApp = vi.fn();
 vi.mock('../context/AppContext', () => ({ useApp: () => mockUseApp() }));
+let authedUser: { id: string; name: string; email: string } =
+  { id: 'u_aubin', name: 'Aubin', email: 'aubin@example.com' };
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ user: { name: 'Aubin', email: 'aubin@example.com' }, signOut: vi.fn() }),
+  useAuth: () => ({ user: authedUser, signOut: vi.fn() }),
 }));
 
 const OWN: WorkspaceOption = {
@@ -182,6 +184,164 @@ describe('switching', () => {
 
     expect(showToast).toHaveBeenCalledWith("You don't have access to that workspace.", 'error');
     expect(screen.queryByText('HOME')).not.toBeInTheDocument();
+  });
+});
+
+describe('the wire', () => {
+  it('sends the ids as fields the server can read', async () => {
+    // The bug this exists for: apiFetch stringifies the body itself, so a
+    // pre-stringified one arrived as JSON wrapped in JSON — a request with
+    // no workspaceId on it at all, refused every time. A mocked
+    // switchToWorkspace can never see that, so this asserts against the
+    // actual fetch.
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ workspace: { id: 'w_host', name: 'Host Studio', role: 'member', permissions: { editAutomations: true, contactOutreach: false }, automation: null, since: '2026-02-01T00:00:00.000Z' } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const api = await import('../lib/api');
+      await api.switchWorkspace('w_host', '77');
+
+      // By URL, not by index: apiFetch fetches an auth token first, so the
+      // first call is not the one under test.
+      const call = (fetchMock.mock.calls as unknown as [string, RequestInit][])
+        .find(([url]) => String(url).includes('/api/me/workspace'));
+      expect(call, 'the switch request was never made').toBeTruthy();
+      const sent = JSON.parse(String(call![1].body)) as Record<string, unknown>;
+      expect(sent.workspaceId).toBe('w_host');
+      expect(sent.automationId).toBe('77');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('the server-state boundary', () => {
+  it('a switch ends the session the old workspace’s answers belonged to', async () => {
+    // clear() empties the store but tells a MOUNTED observer nothing — the
+    // bell and the Inbox badge live in the shell and survive the navigation
+    // Home, so they would keep rendering the workspace they were fetched in
+    // until something happened to refetch. endServerStateSession is the
+    // boundary sign-out already uses: it resets live queries, drops the
+    // rest, and advances the epoch so a mutation still in flight cannot roll
+    // the old workspace's data back in.
+    //
+    // The epoch is the observable half, and the half clear() cannot fake.
+    const { serverStateEpoch } = await import('../lib/queryClient');
+    const { AppProvider, useApp } = await vi.importActual<typeof import('../context/AppContext')>(
+      '../context/AppContext',
+    );
+    const api = await import('../lib/api');
+    vi.spyOn(api, 'switchWorkspace').mockResolvedValue(JOINED);
+    vi.spyOn(api, 'isBackendConfigured').mockReturnValue(true);
+    vi.spyOn(api, 'fetchWorkspaceAccess').mockResolvedValue(ownAccess);
+    vi.spyOn(api, 'fetchWorkspaces').mockResolvedValue({
+      workspaces: [OWN, JOINED],
+      current: { id: 'w_own', automationId: null },
+    });
+    vi.spyOn(api, 'fetchConnectedAccounts').mockResolvedValue([]);
+
+    let move: ((id: string, automationId?: string | null) => Promise<void>) | null = null;
+    function Probe() {
+      move = useApp().switchToWorkspace;
+      return null;
+    }
+    render(
+      <MemoryRouter>
+        <AppProvider><Probe /></AppProvider>
+      </MemoryRouter>,
+    );
+
+    const before = serverStateEpoch();
+    await act(async () => { await move!('w_host', null); });
+    expect(serverStateEpoch()).toBeGreaterThan(before);
+  });
+
+  it('applies the workspace the server returned, even when the follow-up read fails', async () => {
+    // refreshWorkspaceAccess swallows its own failures by design — a
+    // transient /api/me error should not blank the shell. That is right for
+    // a refresh and wrong for a MOVE: the switch already succeeded, so
+    // discarding its result and waiting to be told again leaves
+    // workspaceAccess describing the workspace they just left. The shell
+    // decides what to render from exactly that, so a canvas invitee would be
+    // handed an owner's menu.
+    const { AppProvider, useApp } = await vi.importActual<typeof import('../context/AppContext')>(
+      '../context/AppContext',
+    );
+    const api = await import('../lib/api');
+    vi.spyOn(api, 'isBackendConfigured').mockReturnValue(true);
+    vi.spyOn(api, 'fetchConnectedAccounts').mockResolvedValue([]);
+    vi.spyOn(api, 'fetchWorkspaces').mockResolvedValue({
+      workspaces: [OWN, SHARED_CANVAS],
+      current: { id: 'w_own', automationId: null },
+    });
+    const access = vi.spyOn(api, 'fetchWorkspaceAccess').mockResolvedValue(ownAccess);
+    vi.spyOn(api, 'switchWorkspace').mockResolvedValue(SHARED_CANVAS);
+
+    let move: ((id: string, automationId?: string | null) => Promise<void>) | null = null;
+    // Annotated because TS narrows the initialiser to null and the writes
+    // happen inside a component it cannot see called.
+    let current = null as WorkspaceAccess | null;
+    function Probe() {
+      const app = useApp();
+      move = app.switchToWorkspace;
+      current = app.workspaceAccess;
+      return null;
+    }
+    render(
+      <MemoryRouter><AppProvider><Probe /></AppProvider></MemoryRouter>,
+    );
+    await waitFor(() => expect(current?.id).toBe('w_own'));
+
+    // The move lands; the reconciling read behind it does not.
+    access.mockRejectedValue(new Error('offline'));
+    await act(async () => { await move!('w_host', '77'); });
+
+    expect(current?.id).toBe('w_host');
+    expect(current?.role).toBe('canvas');
+    expect(current?.canvasAutomation?.id).toBe('77');
+  });
+});
+
+describe('a different account inherits nothing', () => {
+  it('the workspace list is emptied when the signed-in identity changes', async () => {
+    // AuthContext can swap sessions in place, so AppProvider is not
+    // remounted — and the refresh keeps the last known list when its own
+    // fetch fails, which is right for a flaky network and badly wrong across
+    // an identity change: the new account would be shown the previous one's
+    // workspaces, and the names of automations shared with THEM.
+    const { AppProvider, useApp } = await vi.importActual<typeof import('../context/AppContext')>(
+      '../context/AppContext',
+    );
+    const api = await import('../lib/api');
+    vi.spyOn(api, 'isBackendConfigured').mockReturnValue(true);
+    vi.spyOn(api, 'fetchConnectedAccounts').mockResolvedValue([]);
+    vi.spyOn(api, 'fetchWorkspaceAccess').mockResolvedValue(ownAccess);
+    const list = vi.spyOn(api, 'fetchWorkspaces').mockResolvedValue({
+      workspaces: [OWN, JOINED],
+      current: { id: 'w_own', automationId: null },
+    });
+
+    let seen: WorkspaceOption[] = [];
+    function Probe() {
+      seen = useApp().workspaces;
+      return null;
+    }
+    authedUser = { id: 'u_aubin', name: 'Aubin', email: 'aubin@example.com' };
+    const { rerender } = render(
+      <MemoryRouter><AppProvider><Probe /></AppProvider></MemoryRouter>,
+    );
+    await waitFor(() => expect(seen).toHaveLength(2));
+
+    // A different person signs in, and their own list cannot be fetched.
+    list.mockRejectedValue(new Error('offline'));
+    authedUser = { id: 'u_someone_else', name: 'Sam', email: 'sam@example.com' };
+    await act(async () => {
+      rerender(<MemoryRouter><AppProvider><Probe /></AppProvider></MemoryRouter>);
+    });
+
+    await waitFor(() => expect(seen).toHaveLength(0));
   });
 });
 
