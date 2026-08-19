@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import ConfirmDialog from './app/ConfirmDialog';
-import { leaveWorkspace, type WorkspaceOption } from '../lib/api';
+import type { WorkspaceOption } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { isGuestView } from '../lib/access';
@@ -38,7 +38,7 @@ export default function AccountMenu({
 }: { onNavigate?: () => void; compact?: boolean }) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { showToast, workspaces, workspaceAccess, switchToWorkspace, refreshWorkspaceAccess } = useApp();
+  const { showToast, workspaces, workspaceAccess, switchToWorkspace, leaveCurrentWorkspace } = useApp();
   const identity = resolveIdentity(user);
   const [signingOut, setSigningOut] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
@@ -87,11 +87,15 @@ export default function AccountMenu({
    * someone who has stopped working with a creator carries their workspace
    * around indefinitely. The server forgets the stale selection on its way
    * out, so re-resolving lands them back in their own.
+   *
+   * Through the context rather than calling the endpoint here: leaving is a
+   * workspace change, and everything a workspace change has to do — ending
+   * the server-state session so mounted observers stop rendering the old
+   * one, re-reading the accounts — lives with switching.
    */
   const leave = async () => {
     try {
-      await leaveWorkspace();
-      await refreshWorkspaceAccess();
+      await leaveCurrentWorkspace();
       onNavigate?.();
       navigate('/');
       showToast(

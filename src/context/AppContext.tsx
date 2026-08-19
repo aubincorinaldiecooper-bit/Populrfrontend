@@ -7,7 +7,7 @@ import { connectFailure } from '../lib/connectErrors';
 import {
   isBackendConfigured, getPlatformConnectUrl, fetchConnectedAccounts,
   syncConnectedAccounts, disconnectAccount as disconnectAccountApi, ApiError,
-  fetchWorkspaceAccess, fetchWorkspaces, switchWorkspace,
+  fetchWorkspaceAccess, fetchWorkspaces, switchWorkspace, leaveWorkspace,
 } from '../lib/api';
 import type { ConnectedAccount, WorkspaceAccess, WorkspaceOption } from '../lib/api';
 import { useAuth } from './AuthContext';
@@ -81,6 +81,9 @@ export interface AppContextType extends AppState {
   workspaces: WorkspaceOption[];
   /** Move to another workspace, or to one shared automation inside one. */
   switchToWorkspace: (workspaceId: string, automationId?: string | null) => Promise<void>;
+  /** Give back access to the workspace this session is in. Owners have
+   *  nothing to leave; the server refuses it for them. */
+  leaveCurrentWorkspace: () => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   // Toast
   showToast: (message: string, type?: Toast['type'], options?: ToastOptions) => void;
@@ -570,6 +573,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [queryClient, refreshWorkspaceAccess, refreshConnectedAccounts],
   );
 
+  /**
+   * Leaving is a workspace change, so it crosses the same boundary.
+   *
+   * It lives here rather than in the menu that offers it for exactly that
+   * reason: what a workspace change has to do — end the server-state
+   * session, re-resolve access, re-read the accounts — is knowledge this
+   * file already owns, and a second copy of it in a component is a second
+   * copy to forget a step from. The first version of this did forget two:
+   * the bell, the Inbox badge and the connected-account list all kept
+   * rendering the workspace the person had just walked out of.
+   *
+   * No optimistic setState twin of the one above: leaving doesn't say where
+   * you land, the server decides by forgetting a selection that no longer
+   * points at anything held, and refreshWorkspaceAccess is what reads it.
+   */
+  const leaveCurrentWorkspace = useCallback(async () => {
+    await leaveWorkspace();
+    endServerStateSession(queryClient);
+    await refreshWorkspaceAccess();
+    await refreshConnectedAccounts();
+  }, [queryClient, refreshWorkspaceAccess, refreshConnectedAccounts]);
+
   useEffect(() => {
     // Whoever is signed in now, this is not the previous account's answer.
     // AuthContext supports swapping sessions in place, so AppProvider is not
@@ -601,6 +626,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshAccounts,
       refreshWorkspaceAccess,
       switchToWorkspace,
+      leaveCurrentWorkspace,
       disconnectAccount,
       showToast,
       removeToast,

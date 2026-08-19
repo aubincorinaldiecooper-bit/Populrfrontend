@@ -298,6 +298,24 @@ describe('/invite/:token — what is being offered', () => {
     expect(screen.getByText(/Have a look at the second message/)).toBeInTheDocument();
   });
 
+  it('does not promise commenting, which has not shipped', async () => {
+    mockPreview.mockResolvedValue(preview({
+      automation: { id: '7', name: 'Culture comments' },
+      canEdit: false,
+    }));
+    renderAccept();
+    await screen.findByText('You can look, not change');
+    // The offer describes what the grant does TODAY. Naming a surface that
+    // doesn't exist yet is the same class of lie as promising editing to
+    // somebody who was sent a look.
+    //
+    // Matched against the promise, not the word: the automation in this
+    // fixture is called "Culture comments", and a bare /comment/i passes or
+    // fails on what somebody named their automation.
+    expect(screen.queryByText(/can comment on it/)).not.toBeInTheDocument();
+    expect(screen.getByText(/see how this automation works, start to finish/)).toBeInTheDocument();
+  });
+
   it('an edit invite says so, and it is the default a canvas invite always meant', async () => {
     mockPreview.mockResolvedValue(preview({
       automation: { id: '7', name: 'Culture comments' },
@@ -340,6 +358,43 @@ describe('/invite/:token — accepting', () => {
   // The old "shared access is being switched on next" disclaimer is retired
   // on purpose: membership now resolves real access. The truthful copy is
   // pinned in the canvas-acceptance describe below.
+
+  it('the welcome says what the grant says, not what the happy path assumed', async () => {
+    const user = userEvent.setup();
+    mockPreview.mockResolvedValue(preview({
+      automation: { id: '7', name: 'Culture comments' },
+      canEdit: false,
+    }));
+    mockAccept.mockResolvedValue({
+      status: 'accepted',
+      workspaceId: 'w1',
+      automation: { id: '7', name: 'Culture comments' },
+    });
+    renderAccept();
+    await acceptIt(user);
+
+    // The first sentence a view-only guest reads, immediately before every
+    // write they try is refused. It used to say "open and edit".
+    expect(await screen.findByText(/see how it works/)).toBeInTheDocument();
+    expect(screen.getByText(/Changing it stays with the owner/)).toBeInTheDocument();
+    expect(screen.queryByText(/open and edit/)).not.toBeInTheDocument();
+  });
+
+  it('an editing invite still says editing', async () => {
+    const user = userEvent.setup();
+    mockPreview.mockResolvedValue(preview({
+      automation: { id: '7', name: 'Culture comments' },
+      canEdit: true,
+    }));
+    mockAccept.mockResolvedValue({
+      status: 'accepted',
+      workspaceId: 'w1',
+      automation: { id: '7', name: 'Culture comments' },
+    });
+    renderAccept();
+    await acceptIt(user);
+    expect(await screen.findByText(/open and edit/)).toBeInTheDocument();
+  });
 
   it('accepting twice with the same account is calm, not an error', async () => {
     const user = userEvent.setup();

@@ -39,6 +39,7 @@ export function appContext(overrides: Partial<AppContextType> = {}): AppContextT
     refreshAccounts: vi.fn(),
     refreshWorkspaceAccess: vi.fn(),
     switchToWorkspace: vi.fn(),
+    leaveCurrentWorkspace: vi.fn(),
     disconnectAccount: vi.fn(),
     showToast: vi.fn(),
     removeToast: vi.fn(),

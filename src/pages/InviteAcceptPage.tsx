@@ -45,7 +45,10 @@ type Outcome =
   | { kind: 'reading' }
   | { kind: 'offer'; invite: InvitePreview }
   | { kind: 'working' }
-  | { kind: 'done'; status: InviteAcceptStatus; automation: AutomationScope | null }
+  /** `canEdit` rides along from the preview: the accept response says WHICH
+   *  automation you joined, not what you may do to it, and the welcome has
+   *  to say the same thing the refusals will. */
+  | { kind: 'done'; status: InviteAcceptStatus; automation: AutomationScope | null; canEdit: boolean }
   | { kind: 'refused'; title: string; detail: string; retryable: boolean };
 
 function refusal(err: unknown): Outcome {
@@ -121,7 +124,14 @@ export default function InviteAcceptPage() {
     }
   }, [navigate, signOut, switchingAccount, token]);
 
-  const accept = useCallback(() => {
+  const accept = useCallback((invite: InvitePreview) => {
+    // What they were offered is what they accepted. Reading it from the
+    // preview rather than from the accept response is not a shortcut: the
+    // response has no permission in it at all, and inventing one here is
+    // exactly how the welcome ends up contradicting the first refusal.
+    const granted = invite.automation
+      ? invite.canEdit !== false
+      : invite.permissions.editAutomations;
     setOutcome({ kind: 'working' });
     acceptInvitation(token)
       .then(async result => {
@@ -144,7 +154,12 @@ export default function InviteAcceptPage() {
             await refreshWorkspaceAccess();
           }
         }
-        setOutcome({ kind: 'done', status: result.status, automation: result.automation ?? null });
+        setOutcome({
+          kind: 'done',
+          status: result.status,
+          automation: result.automation ?? null,
+          canEdit: granted,
+        });
       })
       .catch(err => setOutcome(refusal(err)));
   }, [token, refreshWorkspaceAccess, switchToWorkspace]);
@@ -167,7 +182,9 @@ export default function InviteAcceptPage() {
         } else if (invite.status === 'accepted') {
           setOutcome(refusal(new ApiError('used', 410, 'invite_used')));
         } else if (invite.yours) {
-          setOutcome({ kind: 'done', status: 'owner', automation: invite.automation });
+          // Their own workspace: the owner branch says nothing about grants,
+          // so this value is never read.
+          setOutcome({ kind: 'done', status: 'owner', automation: invite.automation, canEdit: true });
         } else {
           setOutcome({ kind: 'offer', invite });
         }
@@ -196,7 +213,9 @@ export default function InviteAcceptPage() {
           </>
         )}
 
-        {outcome.kind === 'offer' && <Offer invite={outcome.invite} onAccept={accept} />}
+        {outcome.kind === 'offer' && (
+          <Offer invite={outcome.invite} onAccept={() => accept(outcome.invite)} />
+        )}
 
         {outcome.kind === 'working' && (
           <>
@@ -231,10 +250,16 @@ export default function InviteAcceptPage() {
               {outcome.status === 'already_member' ? 'You’re already on the team' : 'You’re in'}
             </p>
             <p className="text-[13px] text-[#6B6B6B] mt-2 leading-relaxed">
+              {/* The welcome says what the grant says. An unconditional "open
+                  and edit" was the first sentence a view-only guest read, and
+                  every write they then attempted was refused — the product
+                  contradicting itself between the door and the first step. */}
               {outcome.status === 'already_member'
                 ? 'This invite was already accepted with this account — nothing else to do.'
                 : outcome.automation
-                  ? <>You can now open and edit <span className="font-semibold text-[#111111]">&ldquo;{outcome.automation.name}&rdquo;</span>. Whoever invited you can see you on their team.</>
+                  ? outcome.canEdit
+                    ? <>You can now open and edit <span className="font-semibold text-[#111111]">&ldquo;{outcome.automation.name}&rdquo;</span>. Whoever invited you can see you on their team.</>
+                    : <>You can now open <span className="font-semibold text-[#111111]">&ldquo;{outcome.automation.name}&rdquo;</span> and see how it works. Changing it stays with the owner.</>
                   : 'You’ve joined the workspace — it’s what Populr opens for you now.'}
             </p>
             {outcome.automation ? (
@@ -363,7 +388,10 @@ function Offer({ invite, onAccept }: { invite: InvitePreview; onAccept: () => vo
             {invite.automation
               ? canEdit
                 ? 'This one automation, and nothing else in their workspace. Turning it on stays with them.'
-                : 'You’ll see how this automation works and can comment on it. Editing and turning it on stay with them.'
+                // Not "and can comment on it": saying so would promise a
+                // surface that has not shipped. The offer describes what the
+                // grant does today, and gains the sentence when it can keep it.
+                : 'You’ll see how this automation works, start to finish. Editing and turning it on stay with them.'
               : canEdit
                 ? 'Their automations are yours to build on. Turning one on stays with them.'
                 : 'You’ll see their automations, their inbox and their contacts.'}

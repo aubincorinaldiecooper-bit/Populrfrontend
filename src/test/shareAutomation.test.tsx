@@ -312,6 +312,29 @@ describe('who’s on it', () => {
     await waitFor(() => expect(mockRemoveTeammate).toHaveBeenCalledWith('seat_1'));
   });
 
+  it('a view-only workspace member is not reported as an editor', async () => {
+    const user = userEvent.setup();
+    // No handle, and no editing in their workspace grant. Reading the handle
+    // to decide the LABEL said "can edit" about every member — including this
+    // one, whose grant says the opposite. The handle answers "can I change
+    // this from here"; the grant answers "what can they do".
+    mockCollaborators.mockResolvedValue([
+      collaborator({
+        person: { name: 'Alex', email: 'alex@example.com', avatarUrl: null },
+        role: 'member', handle: null, canEdit: false,
+      }),
+    ]);
+    shareSheet();
+    await user.click(screen.getByRole('button', { name: /Share/ }));
+
+    await screen.findByText('Alex');
+    expect(seatOf('Alex')).toHaveTextContent('Can view');
+    // Still says where the grant comes from — the fix is to the verb, not to
+    // the explanation of why it can't be changed here.
+    expect(seatOf('Alex')).toHaveTextContent('from their workspace access');
+    expect(seatOf('Alex')).not.toHaveTextContent('Can edit');
+  });
+
   it('a workspace member is listed but not changed from here', async () => {
     const user = userEvent.setup();
     // No handle: the backend withholds one for a workspace-wide grant, and

@@ -110,12 +110,15 @@ function CollaboratorRow({ person: c, onChanged }: {
           {name}
           {c.you && <span className="text-[#9B9B8F]"> · you</span>}
         </p>
+        {/* What their seat can do, and — for a workspace member — where that
+            comes from. The grant answers the first half; the missing handle
+            answers the second. Reading the handle for BOTH said "can edit"
+            about every member, including one whose workspace grant is
+            view-only, which is the opposite of what this list is for. */}
         <p className="text-[11px] text-[#6B6B6B]">
           {c.role === 'owner'
             ? 'Owner'
-            : c.handle
-              ? c.canEdit ? 'Can edit' : 'Can view'
-              : 'Can edit · from their workspace access'}
+            : `${c.canEdit ? 'Can edit' : 'Can view'}${c.handle ? '' : ' · from their workspace access'}`}
         </p>
       </div>
 
