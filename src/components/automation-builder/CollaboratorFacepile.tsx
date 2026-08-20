@@ -56,7 +56,7 @@ export default function CollaboratorFacepile({ flowId }: { flowId: string | null
       window.clearInterval(timer);
       // Say goodbye rather than letting the window age out: the others should
       // see someone leave when they leave, not forty seconds later.
-      void announcePresence(flowId, true).catch(() => {});
+      void announcePresence(flowId, { leaving: true }).catch(() => {});
     };
   }, [enabled, flowId]);
 

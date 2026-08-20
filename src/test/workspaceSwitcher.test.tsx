@@ -258,6 +258,47 @@ describe('the server-state boundary', () => {
     expect(serverStateEpoch()).toBeGreaterThan(before);
   });
 
+  it('leaving crosses the same boundary a switch does', async () => {
+    // The finding this pins: leaving changed which workspace you are in but
+    // only re-resolved access, so React Query observers and the connected
+    // accounts kept answering for the workspace just walked out of —
+    // potentially rendering someone else's numbers under your own name.
+    // Leaving is a workspace change; it owes what a workspace change owes.
+    const { serverStateEpoch } = await import('../lib/queryClient');
+    const { AppProvider, useApp } = await vi.importActual<typeof import('../context/AppContext')>(
+      '../context/AppContext',
+    );
+    const api = await import('../lib/api');
+    vi.spyOn(api, 'isBackendConfigured').mockReturnValue(true);
+    vi.spyOn(api, 'leaveWorkspace').mockResolvedValue(undefined);
+    vi.spyOn(api, 'fetchWorkspaceAccess').mockResolvedValue(ownAccess);
+    vi.spyOn(api, 'fetchWorkspaces').mockResolvedValue({
+      workspaces: [OWN],
+      current: { id: 'w_own', automationId: null },
+    });
+    const accounts = vi.spyOn(api, 'fetchConnectedAccounts').mockResolvedValue([]);
+
+    let leave: (() => Promise<void>) | null = null;
+    function Probe() {
+      leave = useApp().leaveCurrentWorkspace;
+      return null;
+    }
+    render(
+      <MemoryRouter>
+        <AppProvider><Probe /></AppProvider>
+      </MemoryRouter>,
+    );
+
+    const before = serverStateEpoch();
+    const readsBefore = accounts.mock.calls.length;
+    await act(async () => { await leave!(); });
+
+    expect(serverStateEpoch()).toBeGreaterThan(before);
+    // And the account list is re-read: connected accounts are per-workspace,
+    // so the ones on screen belonged to the workspace they just gave back.
+    expect(accounts.mock.calls.length).toBeGreaterThan(readsBefore);
+  });
+
   it('applies the workspace the server returned, even when the follow-up read fails', async () => {
     // refreshWorkspaceAccess swallows its own failures by design — a
     // transient /api/me error should not blank the shell. That is right for
@@ -362,5 +403,115 @@ describe('at rail width', () => {
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByRole('menuitem', { name: /Host Studio/ })).toBeInTheDocument();
+  });
+});
+
+/* Giving back access you were granted.
+ *
+ * The only exit used to be asking the owner to remove you, which means
+ * someone who has stopped working with a creator carries their workspace
+ * around indefinitely. What this pins:
+ *   - it is offered to a guest and never to an owner, who has nothing to
+ *     leave and whom the server refuses anyway;
+ *   - it asks first, naming what will be lost;
+ *   - afterwards access is re-resolved and they land Home, because the page
+ *     they were on belongs to the workspace they just left.
+ */
+describe('leaving a workspace you were invited into', () => {
+  const joinedAccess: WorkspaceAccess = {
+    id: 'w_host', name: 'Host Studio', role: 'member',
+    permissions: { editAutomations: true, contactOutreach: false },
+    canvasAutomation: null,
+  };
+  const canvasAccess: WorkspaceAccess = {
+    id: 'w_host', name: 'Host Studio', role: 'canvas',
+    permissions: { editAutomations: false, contactOutreach: false },
+    canvasAutomation: { id: '77', name: 'Welcome DM' },
+  };
+
+  async function leaveSetup(access: WorkspaceAccess) {
+    const leave = vi.fn().mockResolvedValue(undefined);
+    mockUseApp.mockReturnValue(appContext({
+      workspaces: [OWN, JOINED], workspaceAccess: access,
+      switchToWorkspace, showToast, leaveCurrentWorkspace: leave,
+    }));
+    render(
+      <MemoryRouter initialEntries={['/contacts']}>
+        <Routes>
+          <Route path="/contacts" element={<AccountMenu />} />
+          <Route path="/" element={<p>HOME</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    return { leave };
+  }
+
+  it('is not offered to an owner — there is nothing to leave', async () => {
+    const user = userEvent.setup();
+    setup([OWN, JOINED]);
+    const menu = await openMenu(user);
+    expect(within(menu).queryByRole('menuitem', { name: /^Leave/ })).not.toBeInTheDocument();
+  });
+
+  it('names the workspace it would give back, and asks before doing it', async () => {
+    const user = userEvent.setup();
+    const { leave } = await leaveSetup(joinedAccess);
+    const menu = await openMenu(user);
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    expect(await screen.findByText('Leave Host Studio?')).toBeInTheDocument();
+    // Asked, not done: nothing has been given back yet.
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  it('a canvas seat is told which automation it loses', async () => {
+    const user = userEvent.setup();
+    await leaveSetup(canvasAccess);
+    const menu = await openMenu(user);
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    expect(await screen.findByText(/“Welcome DM”/)).toBeInTheDocument();
+  });
+
+  it('leaves through the workspace boundary, and lands Home', async () => {
+    const user = userEvent.setup();
+    const { leave } = await leaveSetup(joinedAccess);
+    const menu = await openMenu(user);
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    await user.click(await screen.findByRole('button', { name: 'Leave' }));
+
+    // Through the context's own crossing — not by calling the endpoint here
+    // and re-resolving access alone. Leaving is a workspace change, and the
+    // rest of what a workspace change owes (ending the server-state session
+    // so the bell and the Inbox badge stop rendering the workspace just
+    // left, re-reading the accounts) lives with switching. That is pinned in
+    // its own test below, against the real provider.
+    await waitFor(() => expect(leave).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('HOME')).toBeInTheDocument();
+  });
+
+  it('a refused leave says so and leaves them where they were', async () => {
+    const user = userEvent.setup();
+    const leave = vi.fn().mockRejectedValue(new Error('The server is busy.'));
+    mockUseApp.mockReturnValue(appContext({
+      workspaces: [OWN, JOINED], workspaceAccess: joinedAccess,
+      switchToWorkspace, showToast, leaveCurrentWorkspace: leave,
+    }));
+    render(
+      <MemoryRouter initialEntries={['/contacts']}>
+        <Routes>
+          <Route path="/contacts" element={<AccountMenu />} />
+          <Route path="/" element={<p>HOME</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const menu = await openMenu(user);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Leave Host Studio' }));
+    await user.click(await screen.findByRole('button', { name: 'Leave' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('The server is busy.', 'error'));
+    expect(screen.queryByText('HOME')).not.toBeInTheDocument();
   });
 });

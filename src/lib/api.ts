@@ -1496,12 +1496,81 @@ export async function removeTeammate(handle: string): Promise<void> {
   await apiFetch(`/api/team/members/${encodeURIComponent(handle)}`, { method: 'DELETE' });
 }
 
+/**
+ * PATCH /api/team/members/:handle — change what someone can do, in place.
+ *
+ * Which fields apply depends on how they were invited: a workspace
+ * membership has two flags, a canvas seat has one. Promoting used to mean
+ * removing them and inviting again, which revokes their link and their place.
+ */
+export async function updateTeammate(
+  handle: string,
+  change: { editAutomations?: boolean; contactOutreach?: boolean; canEdit?: boolean },
+): Promise<void> {
+  await apiFetch(`/api/team/members/${encodeURIComponent(handle)}`, {
+    method: 'PATCH',
+    body: change,
+  });
+}
+
+/** POST /api/team/invites/:id/resend — same person, same grant, new link. */
+export async function resendInvitation(id: string): Promise<{ inviteUrl: string }> {
+  return apiFetch(`/api/team/invites/${encodeURIComponent(id)}/resend`, { method: 'POST' });
+}
+
+/** DELETE /api/team/membership — leave the workspace you're currently in. */
+export async function leaveWorkspace(): Promise<void> {
+  await apiFetch('/api/team/membership', { method: 'DELETE' });
+}
+
+/**
+ * What an invite link is, before it is spent.
+ *
+ * A read — looking at a link must not accept it, or the screen that exists
+ * to let somebody decide would decide for them.
+ */
+export interface InvitePreview {
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  invitedBy: Person;
+  workspaceName: string | null;
+  automation: AutomationScope | null;
+  /** For a canvas invite: edit or view. null on a workspace-wide invite. */
+  canEdit: boolean | null;
+  permissions: TeamPermissions;
+  note: string | null;
+  expiresAt: string;
+  /** The address it was sent to, so somebody signed in as a different
+   *  account can see why the link may not be meant for this session. */
+  invitedEmail: string;
+  /** An owner following their own workspace's link. */
+  yours: boolean;
+}
+
+export async function fetchInvitePreview(token: string): Promise<InvitePreview> {
+  const data = await apiFetch<{ invite: InvitePreview }>(
+    `/api/team/invites/${encodeURIComponent(token)}`,
+  );
+  return data.invite;
+}
+
 export interface Collaborator {
   person: Person;
   role: TeamRole;
   you: boolean;
   /** On this canvas right now, as opposed to merely able to be. */
   here: boolean;
+  /** Which step they have open. null is "here, but not in any particular
+   *  step" — the honest answer while somebody is panning around. */
+  at: string | null;
+  /** Whether their seat may change this automation. */
+  canEdit: boolean;
+  /**
+   * What a change to their access is addressed to — present only for a
+   * canvas seat. A workspace member's reach comes from a workspace-wide
+   * grant, and changing it on one automation's share sheet would silently
+   * change every automation; that belongs on the Team page.
+   */
+  handle: string | null;
 }
 
 /** GET /api/team/automations/:id/collaborators — everyone who can open one
@@ -1513,13 +1582,90 @@ export async function fetchCollaborators(flowId: string): Promise<Collaborator[]
   return data.collaborators;
 }
 
-/** POST /api/team/automations/:id/presence — the builder saying it's here,
- *  or (leaving) that it has closed. */
-export async function announcePresence(flowId: string, leaving = false): Promise<void> {
+/**
+ * POST /api/team/automations/:id/presence — the builder saying it's here and
+ * which step it has open, or (leaving) that it has closed.
+ */
+export async function announcePresence(
+  flowId: string,
+  options: { leaving?: boolean; nodeId?: string | null } = {},
+): Promise<void> {
   await apiFetch(`/api/team/automations/${flowId}/presence`, {
     method: 'POST',
-    body: { leaving },
+    body: { leaving: options.leaving === true, nodeId: options.nodeId ?? null },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Comments on a canvas
+// ---------------------------------------------------------------------------
+
+export interface CanvasComment {
+  id: string;
+  body: string;
+  by: Person;
+  /** Whether this session wrote it — the only thing that decides whether
+   *  taking it back is offered. */
+  you: boolean;
+  at: string;
+}
+
+export interface CommentThread extends CanvasComment {
+  /** The step it is anchored to, or null for a comment about the whole
+   *  automation ("this opens too abruptly" is a real comment about no step). */
+  nodeId: string | null;
+  /** That step has since been deleted. The words stay; the anchor says so
+   *  rather than pointing at nothing. */
+  nodeMissing: boolean;
+  resolved: boolean;
+  resolvedBy: Person | null;
+  replies: CanvasComment[];
+}
+
+export async function fetchComments(flowId: string): Promise<CommentThread[]> {
+  const data = await apiFetch<{ threads: CommentThread[] }>(`/api/flows/${flowId}/comments`);
+  return data.threads;
+}
+
+export async function addComment(
+  flowId: string,
+  input: { body: string; nodeId?: string | null; parentId?: string | null },
+): Promise<void> {
+  await apiFetch(`/api/flows/${flowId}/comments`, { method: 'POST', body: input });
+}
+
+export async function resolveComment(
+  flowId: string,
+  commentId: string,
+  resolved: boolean,
+): Promise<void> {
+  await apiFetch(`/api/flows/${flowId}/comments/${commentId}/resolve`, {
+    method: 'POST',
+    body: { resolved },
+  });
+}
+
+export async function deleteComment(flowId: string, commentId: string): Promise<void> {
+  await apiFetch(`/api/flows/${flowId}/comments/${commentId}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Who changed an automation
+// ---------------------------------------------------------------------------
+
+export interface EditEntry {
+  id: string;
+  by: Person;
+  summary: string;
+  at: string;
+  /** When a collapsed session started, so "worked on this for an hour" is
+   *  legible rather than looking like a single instant. */
+  startedAt: string;
+}
+
+export async function fetchFlowHistory(flowId: string): Promise<EditEntry[]> {
+  const data = await apiFetch<{ history: EditEntry[] }>(`/api/flows/${flowId}/history`);
+  return data.history;
 }
 
 /** POST /api/team/invites — create and email an invitation. Pass
@@ -1530,12 +1676,27 @@ export async function inviteTeammate(
   email: string,
   permissions: TeamPermissions,
   automationId?: string,
-): Promise<TeamInvitation> {
-  const data = await apiFetch<{ invitation: TeamInvitation }>('/api/team/invites', {
-    method: 'POST',
-    body: { email, permissions, ...(automationId ? { automationId } : {}) },
-  });
-  return data.invitation;
+  /** Only meaningful with an automationId: whether the seat may change it,
+   *  and an optional note quoted to the recipient. Omitting canEdit means
+   *  edit, which is what every canvas invite meant before there was a choice. */
+  scope?: { canEdit?: boolean; message?: string },
+): Promise<TeamInvitation & { inviteUrl?: string }> {
+  const data = await apiFetch<{ invitation: TeamInvitation; inviteUrl?: string }>(
+    '/api/team/invites',
+    {
+      method: 'POST',
+      body: {
+        email,
+        permissions,
+        ...(automationId ? { automationId } : {}),
+        ...(scope?.canEdit !== undefined ? { canEdit: scope.canEdit } : {}),
+        ...(scope?.message ? { message: scope.message } : {}),
+      },
+    },
+  );
+  // The link rides along so the owner can copy what they just sent — the
+  // invitation itself still carries no token.
+  return { ...data.invitation, inviteUrl: data.inviteUrl };
 }
 
 /** DELETE /api/team/invites/:id — withdraw an invitation that hasn't been used. */

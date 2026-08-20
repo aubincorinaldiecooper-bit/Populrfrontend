@@ -37,6 +37,9 @@ function person(name: string, here: boolean, you = false): Collaborator {
     role: you ? 'owner' : 'member',
     you,
     here,
+    at: null,
+    canEdit: true,
+    handle: null,
   };
 }
 
@@ -130,7 +133,7 @@ describe('the heartbeat', () => {
     // Explicit, rather than waiting out the server's staleness window: the
     // others should see someone leave when they leave, not forty seconds
     // later.
-    expect(announcePresence).toHaveBeenCalledWith('7', true);
+    expect(announcePresence).toHaveBeenCalledWith('7', { leaving: true });
   });
 
   it('keeps saying it while the builder stays open', async () => {
