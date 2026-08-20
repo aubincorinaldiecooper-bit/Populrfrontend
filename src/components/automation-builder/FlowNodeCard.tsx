@@ -228,7 +228,10 @@ function FlowNodeCardInner({ data }: NodeProps) {
      things that would be refused. */
   const card = (
     <div
-      className={`relative ${enterDelay !== null
+      // A step says it can be picked up. React Flow makes it draggable but
+      // leaves the cursor alone, so until now the only way to find that out
+      // was to try it.
+      className={`relative ${readOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${enterDelay !== null
         ? 'motion-safe:animate-[pop-node-in_220ms_ease-out_both]' : ''}`}
       style={enterDelay !== null ? { animationDelay: `${enterDelay}ms` } : undefined}
       onMouseEnter={() => setHovered(true)}

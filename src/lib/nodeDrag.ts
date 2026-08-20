@@ -56,3 +56,16 @@ export function releaseDrag(
   for (const id of ids) delete next[id];
   return next;
 }
+
+/**
+ * Whether a settled gesture actually moved the step.
+ *
+ * A drag taken out and brought back lands on the position it started from.
+ * Committing that would mark the automation dirty and spend a save on a step
+ * that is exactly where it was, which is a write the creator did not ask for
+ * and cannot see the result of.
+ */
+export function moved(before: Point | undefined, after: Point): boolean {
+  if (!before) return true;
+  return before.x !== after.x || before.y !== after.y;
+}

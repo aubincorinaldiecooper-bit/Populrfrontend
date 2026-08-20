@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { NodeChange } from '@xyflow/react';
-import { readDrag, releaseDrag } from '../lib/nodeDrag';
+import { moved, readDrag, releaseDrag } from '../lib/nodeDrag';
 
 /* Dragging a step, when the canvas is controlled.
  *
@@ -80,5 +80,22 @@ describe('releasing', () => {
     // builds the node list, on every change React Flow reports.
     const held = { a: { x: 1, y: 1 } };
     expect(releaseDrag(held, [])).toBe(held);
+  });
+});
+
+describe('a gesture that changed nothing', () => {
+  it('is not written down', () => {
+    // Dragged out and brought back. Committing would mark the automation
+    // dirty and spend a save on a step that is exactly where it was.
+    expect(moved({ x: 40, y: 10 }, { x: 40, y: 10 })).toBe(false);
+  });
+
+  it('is written down when either axis actually changed', () => {
+    expect(moved({ x: 40, y: 10 }, { x: 41, y: 10 })).toBe(true);
+    expect(moved({ x: 40, y: 10 }, { x: 40, y: 11 })).toBe(true);
+  });
+
+  it('is written down when the step had no position to compare against', () => {
+    expect(moved(undefined, { x: 0, y: 0 })).toBe(true);
   });
 });

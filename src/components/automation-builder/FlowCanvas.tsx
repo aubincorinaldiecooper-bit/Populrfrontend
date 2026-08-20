@@ -14,7 +14,7 @@ import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayo
 import { pickEditorSide } from '../../lib/editorPlacement';
 import { relativeTo } from '../../lib/notePlacement';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
-import { readDrag, releaseDrag } from '../../lib/nodeDrag';
+import { moved, readDrag, releaseDrag } from '../../lib/nodeDrag';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
 
@@ -282,8 +282,12 @@ function CanvasInner({
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     const { live, settled } = readDrag(changes);
-    // Only the settled position reaches the graph — see `dragging` above.
-    for (const done of settled) onMove(done.id, done.position);
+    // Only the settled position reaches the graph — see `dragging` above —
+    // and only when it is a position the step was not already at.
+    for (const done of settled) {
+      const before = graph.nodes.find(n => n.id === done.id)?.position;
+      if (moved(before, done.position)) onMove(done.id, done.position);
+    }
     if (Object.keys(live).length > 0) {
       setDragging(current => ({ ...current, ...live }));
     }
@@ -293,7 +297,7 @@ function CanvasInner({
       // old one for a frame on the way there.
       setDragging(current => releaseDrag(current, settled.map(d => d.id)));
     }
-  }, [onMove]);
+  }, [onMove, graph.nodes]);
 
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
@@ -385,6 +389,11 @@ function CanvasInner({
         setPaneMenu({ screen, world: screenToFlowPosition(screen) });
       }}
       proOptions={{ hideAttribution: true }}
+      // Three pixels before a gesture counts as a drag rather than React
+      // Flow's default of one. At one, a click with any tremor in it moves
+      // the step a pixel, which marks the automation dirty and spends a save
+      // on a change nobody can see.
+      nodeDragThreshold={3}
       nodesDraggable={!readOnly}
       nodesConnectable={!readOnly}
       elementsSelectable
