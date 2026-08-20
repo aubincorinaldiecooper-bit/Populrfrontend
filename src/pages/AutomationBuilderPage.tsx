@@ -282,6 +282,18 @@ export default function AutomationBuilderPage() {
     if (narrowEditor) setSelectedNodeId(null);
     placeNote(placement);
   }, [narrowEditor, placeNote, setSelectedNodeId]);
+  /* And the mirror: choosing a step is asking for the editor, so a note that
+     was open steps aside. Cleared rather than hidden — a note that came back
+     when the editor closed would be the ghost of a gesture the creator had
+     already finished with. Every path that selects a step goes through here,
+     which is the point of it being a function rather than three copies. */
+  const selectStep = useCallback((id: string | null) => {
+    setSelectedNodeId(id);
+    if (id && narrowEditor) {
+      setOpenNoteId(null);
+      cancelNote();
+    }
+  }, [narrowEditor, setSelectedNodeId, cancelNote]);
   // A const rather than `placing.at` read twice: what a note will be attached
   // to has to be said before a word is typed, and the same answer has to
   // label the sheet and head the composer inside it.
@@ -289,6 +301,13 @@ export default function AutomationBuilderPage() {
   const placingLabel = composingNote && 'nodeId' in composingNote
     ? stepLabel(composingNote.nodeId) ?? 'On a step'
     : 'On the canvas';
+  /* The bottom of a narrow screen holds exactly one thing, and these two are
+     the only claimants. Written as a pair so the exclusivity is a property of
+     the code rather than of every call site remembering to clear the other:
+     the step editor wins a tie, because reaching it means a step was selected,
+     and selecting a step is the more recent gesture. */
+  const stepSheet = narrowEditor && selectedNode !== null;
+  const noteSheet = narrowEditor && !stepSheet && (composingNote !== null || openNote !== null);
 
   /**
    * The question actually on screen.
@@ -447,7 +466,7 @@ export default function AutomationBuilderPage() {
   const openNotification = useCallback((notification: BuilderNotification) => {
     setHighlightId(notification.id);
     if (!notification.nodeId) return;
-    setSelectedNodeId(notification.nodeId);
+    selectStep(notification.nodeId);
     setFocus(current => ({ nodeId: notification.nodeId!, signal: current.signal + 1 }));
     setQuestion(
       notification.kind === 'question'
@@ -466,7 +485,7 @@ export default function AutomationBuilderPage() {
     // Otherwise the step wins: they clicked to go somewhere, and the place
     // they landed matters more than the list they left.
     if (!roomForBothColumns(sidebarWidth)) setPanel(null);
-  }, [setSelectedNodeId, sidebarWidth]);
+  }, [selectStep, sidebarWidth]);
 
   useEffect(() => {
     if (!bellAttention) return;
@@ -566,8 +585,8 @@ export default function AutomationBuilderPage() {
       kind: 'comment', allPosts: true, matchMode: 'any',
       accountId: firstConnected?.id ?? null, platform: firstConnected?.platform ?? null,
     });
-    setSelectedNodeId(id);
-  }, [addNode, accounts, setSelectedNodeId]);
+    selectStep(id);
+  }, [addNode, accounts, selectStep]);
 
   /** Remove a step, restorable from the toast. The snapshot is captured HERE
    *  and restored verbatim — the generic undo would pop whatever is newest on
@@ -826,7 +845,7 @@ export default function AutomationBuilderPage() {
           posts={posts}
           activePath={testResult?.steps.map(s => s.nodeId) ?? []}
           onSelect={id => {
-            setSelectedNodeId(id);
+            selectStep(id);
             setAddMenu(null);
             // The mirror of togglePanel: picking a step is choosing the other
             // context, so the whole-automation panel steps aside. The feed and
@@ -889,7 +908,7 @@ export default function AutomationBuilderPage() {
           // swaps the sheet, tapping empty canvas closes it. Base UI still
           // gives it Escape, focus return, and a real dialog role.
           modal={false}
-          open={narrowEditor && selectedNode !== null}
+          open={stepSheet}
           onOpenChange={next => { if (!next) setSelectedNodeId(null); }}
         >
           <SheetContent
@@ -911,7 +930,7 @@ export default function AutomationBuilderPage() {
             everything inside; only the container is different. */}
         <Sheet
           modal={false}
-          open={narrowEditor && (composingNote !== null || openNote !== null)}
+          open={noteSheet}
           onOpenChange={next => {
             if (next) return;
             setOpenNoteId(null);

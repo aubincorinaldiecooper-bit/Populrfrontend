@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { render } from './render';
@@ -133,6 +133,24 @@ describe('on a narrow screen', () => {
     const sheet = await screen.findByRole('dialog', { name: 'Note from Robin · Message' });
     expect(within(sheet).getByText(/This opens too abruptly/)).toBeInTheDocument();
     expect(within(sheet).getByLabelText('Reply to this note')).toBeInTheDocument();
+  });
+
+  it('gives the bottom back when a step is chosen, rather than stacking two sheets', async () => {
+    const user = userEvent.setup();
+    mountBuilder();
+    await waitFor(() => expect(screen.getByTestId('canvas')).toBeInTheDocument());
+    await openTheNote(user);
+    await screen.findByRole('dialog', { name: 'Note from Robin · Message' });
+
+    // The canvas stays live under a non-modal sheet, so a step can be tapped
+    // while a note is open. Two bottom sheets cannot share the bottom, and
+    // the step is the more recent thing asked for.
+    const onSelect = canvas.props?.onSelect as (id: string) => void;
+    act(() => onSelect('send'));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Note from Robin/ })).not.toBeInTheDocument());
+    expect(await screen.findByRole('dialog', { name: /Message settings/ })).toBeInTheDocument();
   });
 
   it('stops the canvas drawing a card there is no room for, and keeps the pins', async () => {
