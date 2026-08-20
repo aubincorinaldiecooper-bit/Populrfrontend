@@ -184,7 +184,10 @@ describe('the Team page', () => {
     expect(await screen.findByText(/email couldn't be sent/)).toBeInTheDocument();
     expect(screen.queryByText(/Invite sent to/)).not.toBeInTheDocument();
     // The pending row carries its delivery marker, consistent with the banner.
-    expect(screen.getByText(/Couldn't be emailed — try inviting again/)).toBeInTheDocument();
+    // It says "send it again" rather than "try inviting again" because there
+    // is a Resend beside it now — the old wording meant withdrawing the
+    // person and starting over, which was the only option at the time.
+    expect(screen.getByText(/Couldn't be emailed — send it again/)).toBeInTheDocument();
   });
 
   it('a junk address never reaches the server', async () => {

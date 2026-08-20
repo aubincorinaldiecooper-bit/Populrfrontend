@@ -3,12 +3,15 @@ import { Page } from '@/components/ui/page';
 import { useCallback, useEffect, useState } from 'react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { AlertCircle, Check, Loader2, Mail, RefreshCw, UserPlus, X } from 'lucide-react';
+import {
+  AlertCircle, Check, Copy, Loader2, Mail, RefreshCw, Send, SlidersHorizontal, UserPlus, X,
+} from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import { isOwnerView } from '../lib/access';
 import {
-  isBackendConfigured, fetchTeam, inviteTeammate, removeTeammate, revokeInvitation,
+  isBackendConfigured, fetchTeam, inviteTeammate, removeTeammate, resendInvitation,
+  revokeInvitation, updateTeammate,
   type TeamInvitation, type TeamMember, type TeamPermissions, type TeamPerson,
 } from '../lib/api';
 import Avatar from '../components/inbox/Avatar';
@@ -115,6 +118,23 @@ export default function TeamPage() {
   const [sent, setSent] = useState<{ email: string; delivered: boolean } | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
 
+  /**
+   * Which teammate's permissions are open for editing, and which row is
+   * mid-save.
+   *
+   * One row at a time: these are consequential switches, and two sets of them
+   * open at once invites the wrong one being flipped.
+   */
+  const [editingHandle, setEditingHandle] = useState<string | null>(null);
+  const [savingHandle, setSavingHandle] = useState<string | null>(null);
+
+  /** A resend in flight, and how the last one turned out. */
+  const [resending, setResending] = useState<string | null>(null);
+  const [resent, setResent] = useState<
+    { email: string; delivered: boolean; inviteUrl: string } | null
+  >(null);
+  const [copied, setCopied] = useState(false);
+
   const load = useCallback(() => {
     setLoading(true);
     setLoadError(null);
@@ -172,6 +192,86 @@ export default function TeamPage() {
       setActionError(err instanceof Error ? err.message : 'Could not withdraw that invite.');
     } finally {
       setRevoking(null);
+    }
+  };
+
+  /**
+   * Change what somebody can do, without removing them first.
+   *
+   * The only way to correct a mistaken permission used to be removing the
+   * person and inviting them again — which withdraws their invite, drops
+   * their place in the workspace, and asks them to accept a second time
+   * because you ticked the wrong box. The endpoint to do this in place has
+   * existed all along; nothing called it.
+   *
+   * Optimistic, and rolled back exactly if the server refuses: a switch that
+   * waits for a round trip before moving reads as broken, and one that stays
+   * moved after a refusal is a lie about who can do what.
+   */
+  const changePermissions = async (
+    target: TeamPerson,
+    next: TeamPermissions,
+    change: { editAutomations?: boolean; contactOutreach?: boolean; canEdit?: boolean },
+  ) => {
+    const handle = target.handle;
+    if (!handle || savingHandle) return;
+    const before = target.permissions;
+    const put = (permissions: TeamPermissions) =>
+      setPeople(prev => (prev ?? []).map(p => (p.handle === handle ? { ...p, permissions } : p)));
+
+    put(next);
+    setSavingHandle(handle);
+    try {
+      await updateTeammate(handle, change);
+      setActionError(null);
+    } catch (err) {
+      put(before);
+      setActionError(
+        err instanceof Error ? err.message : "Couldn't change what they can do just now.",
+      );
+    } finally {
+      setSavingHandle(null);
+    }
+  };
+
+  /**
+   * Send the invitation again — same person, same access, a fresh link.
+   *
+   * An invite that never arrives is common and was unrecoverable: the row
+   * said "couldn't be emailed" and the only control beside it was Withdraw.
+   * Reissuing rotates the token, so the old link stops working and there is
+   * never more than one live invitation per person.
+   */
+  const resend = async (invitation: TeamInvitation) => {
+    if (resending) return;
+    setResending(invitation.id);
+    setCopied(false);
+    try {
+      const result = await resendInvitation(invitation.id);
+      setInvitations(prev => prev.map(i => (i.id === invitation.id ? result.invitation : i)));
+      setResent({
+        email: invitation.email,
+        delivered: result.invitation.emailDelivery === 'sent',
+        inviteUrl: result.inviteUrl,
+      });
+      setActionError(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Couldn't send that invite again.");
+    } finally {
+      setResending(null);
+    }
+  };
+
+  const copyInviteLink = async () => {
+    if (!resent) return;
+    try {
+      await navigator.clipboard.writeText(resent.inviteUrl);
+      setCopied(true);
+    } catch {
+      // Some browsers refuse the clipboard without a gesture they recognise.
+      // The link is on screen either way, so this is a missing convenience
+      // rather than a missing capability.
+      setActionError('Copy the link below instead.');
     }
   };
 
@@ -276,6 +376,45 @@ export default function TeamPage() {
               </div>
             )}
 
+            {/* How the last resend went. Two outcomes, and the second is the
+                one that matters: the invitation is live either way, so an
+                email that didn't send is a delivery problem rather than a
+                failed action — and the link is the way round it. */}
+            {resent && resent.delivered && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl bg-[#FBFFF0] border border-[#C5FF3D] px-3 py-2.5">
+                <Mail size={14} className="text-[#3F5212] flex-shrink-0" />
+                <p className="text-[12.5px] text-[#111111]">
+                  Sent again to <span className="font-semibold">{resent.email}</span>. Their
+                  earlier link stopped working.
+                </p>
+              </div>
+            )}
+            {resent && !resent.delivered && (
+              <div className="mb-4 rounded-xl bg-[#FFF7ED] border border-[#FDBA74] px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={14} className="text-[#B45309] flex-shrink-0 mt-0.5" />
+                  <p className="text-[12.5px] text-[#111111]">
+                    The email to <span className="font-semibold">{resent.email}</span> still
+                    couldn&apos;t be sent. The invite works — send them this link yourself.
+                  </p>
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyInviteLink()}
+                    className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5')}
+                  >
+                    {copied ? <><Check size={12} />Link copied</> : <><Copy size={12} />Copy link</>}
+                  </button>
+                </div>
+                {/* On screen as well as on the clipboard: a browser can refuse
+                    the clipboard, and a link nobody can see is not a fallback. */}
+                <p className="mt-2 break-all rounded-lg bg-white/70 px-2.5 py-2 text-[10.5px] text-[#6B6B6B]">
+                  {resent.inviteUrl}
+                </p>
+              </div>
+            )}
+
             {inviting && (
               // noValidate: the form's own check runs instead of the browser's
               // tooltip, so a mistyped address gets the same creator-voice
@@ -364,44 +503,120 @@ export default function TeamPage() {
                   {people.map(entry => {
                     const name = displayName(entry.person);
                     const secondary = contactLine(entry.person);
+                    const open = editingHandle === entry.handle;
+                    const saving = savingHandle === entry.handle;
                     return (
-                      <div key={entry.handle ?? 'owner'} className="flex items-center gap-3 py-2.5">
-                        <Avatar
-                          handle={entry.person.email}
-                          name={entry.person.name}
-                          avatarUrl={entry.person.avatarUrl}
-                          size="sm"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] text-[#111111] truncate">
-                            {name}
-                            {entry.you && <span className="text-[#9B9B8F]"> · you</span>}
-                          </p>
-                          <p className="text-[11.5px] text-[#6B6B6B] truncate">
-                            {entry.role === 'owner'
-                              ? 'Owner · runs this workspace'
-                              : entry.automation
-                                ? <>Works on <span className="font-medium text-[#111111]">&ldquo;{entry.automation.name}&rdquo;</span> only</>
-                                : permissionSummary(entry.permissions)}
-                            {secondary && <span className="text-[#9B9B8F]"> · {secondary}</span>}
-                          </p>
+                      <div key={entry.handle ?? 'owner'} className="py-2.5">
+                        <div className="flex items-center gap-3">
+                          <Avatar
+                            handle={entry.person.email}
+                            name={entry.person.name}
+                            avatarUrl={entry.person.avatarUrl}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] text-[#111111] truncate">
+                              {name}
+                              {entry.you && <span className="text-[#9B9B8F]"> · you</span>}
+                            </p>
+                            <p className="text-[11.5px] text-[#6B6B6B] truncate">
+                              {entry.role === 'owner'
+                                ? 'Owner · runs this workspace'
+                                : entry.automation
+                                  ? <>
+                                      Works on <span className="font-medium text-[#111111]">&ldquo;{entry.automation.name}&rdquo;</span> only
+                                      {/* Now that this is changeable, the row has
+                                          to say which way it is set — a control
+                                          whose current state is invisible is a
+                                          guess with a switch attached. */}
+                                      {entry.permissions.editAutomations ? ' · can edit' : ' · view only'}
+                                    </>
+                                  : permissionSummary(entry.permissions)}
+                              {secondary && <span className="text-[#9B9B8F]"> · {secondary}</span>}
+                            </p>
+                          </div>
+                          {/* Withdrawing access is the owner's, and there is
+                              nothing to withdraw from the owner — which is why
+                              the handle's absence is the condition rather than
+                              a second check on the role. */}
+                          {ownerView && entry.handle && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setEditingHandle(open ? null : entry.handle)}
+                                aria-expanded={open}
+                                aria-label={`Change what ${name} can do`}
+                                className={cn(
+                                  buttonVariants({ variant: 'outline' }),
+                                  'text-[12px] py-1 px-2.5 flex-shrink-0',
+                                  open && 'border-[#111111]',
+                                )}
+                              >
+                                <SlidersHorizontal size={12} />Change
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRemoving(entry)}
+                                disabled={removingHandle === entry.handle}
+                                aria-label={`Remove ${name} from this workspace`}
+                                className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50')}
+                              >
+                                {removingHandle === entry.handle
+                                  ? <Loader2 size={12} className="animate-spin" />
+                                  : <><X size={12} />Remove</>}
+                              </button>
+                            </>
+                          )}
                         </div>
-                        {/* Withdrawing access is the owner's, and there is
-                            nothing to withdraw from the owner — which is why
-                            the handle's absence is the condition rather than
-                            a second check on the role. */}
-                        {ownerView && entry.handle && (
-                          <button
-                            type="button"
-                            onClick={() => setRemoving(entry)}
-                            disabled={removingHandle === entry.handle}
-                            aria-label={`Remove ${name} from this workspace`}
-                            className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50')}
-                          >
-                            {removingHandle === entry.handle
-                              ? <Loader2 size={12} className="animate-spin" />
-                              : <><X size={12} />Remove</>}
-                          </button>
+
+                        {/* Each switch saves on its own. There is no Save
+                            button because there is nothing to batch: one
+                            toggle is one change, and a form that collected
+                            them would add a step and a way to lose them. */}
+                        {open && entry.handle && (
+                          <div className="mt-2.5 ml-11 space-y-2">
+                            {entry.automation ? (
+                              <PermissionToggle
+                                label="Edit this automation"
+                                hint={`Off means they can open “${entry.automation.name}” and read it, but not change it.`}
+                                checked={entry.permissions.editAutomations}
+                                disabled={saving}
+                                onChange={next => void changePermissions(
+                                  entry,
+                                  { ...entry.permissions, editAutomations: next },
+                                  { canEdit: next },
+                                )}
+                              />
+                            ) : (
+                              <>
+                                <PermissionToggle
+                                  label="Edit automations"
+                                  hint="Build and change automations. Turning them on stays with you."
+                                  checked={entry.permissions.editAutomations}
+                                  disabled={saving}
+                                  onChange={next => void changePermissions(
+                                    entry,
+                                    { ...entry.permissions, editAutomations: next },
+                                    { editAutomations: next },
+                                  )}
+                                />
+                                <PermissionToggle
+                                  label="Contact outreach"
+                                  hint="Reply to people in the inbox on your behalf."
+                                  checked={entry.permissions.contactOutreach}
+                                  disabled={saving}
+                                  onChange={next => void changePermissions(
+                                    entry,
+                                    { ...entry.permissions, contactOutreach: next },
+                                    { contactOutreach: next },
+                                  )}
+                                />
+                              </>
+                            )}
+                            <p className="text-[11px] text-[#9B9B8F]">
+                              {saving ? 'Saving…' : 'Saved as you switch. They’re told what changed.'}
+                            </p>
+                          </div>
                         )}
                       </div>
                     );
@@ -449,11 +664,25 @@ export default function TeamPage() {
                           {invitation.automation
                             ? <>Works on <span className="font-medium text-[#111111]">&ldquo;{invitation.automation.name}&rdquo;</span> only</>
                             : permissionSummary(invitation.permissions)}
+                          {/* Points at the control beside it. This used to say
+                              "try inviting again", which meant withdrawing them
+                              and starting over — the dead end Resend removes. */}
                           {invitation.emailDelivery === 'failed' && (
-                            <span className="text-[#B45309]"> · Couldn&apos;t be emailed — try inviting again</span>
+                            <span className="text-[#B45309]"> · Couldn&apos;t be emailed — send it again</span>
                           )}
                         </p>
                       </div>
+                      {ownerView && <button
+                        type="button"
+                        onClick={() => void resend(invitation)}
+                        disabled={resending === invitation.id}
+                        aria-label={`Send the invite to ${invitation.email} again`}
+                        className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50')}
+                      >
+                        {resending === invitation.id
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <><Send size={12} />Resend</>}
+                      </button>}
                       {ownerView && <button
                         type="button"
                         onClick={() => withdraw(invitation)}
