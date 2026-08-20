@@ -200,6 +200,23 @@ describe('changing what a teammate can do', () => {
     expect(within(row).getByText(/view only/)).toBeInTheDocument();
   });
 
+  it('disables every row\'s switches while any one of them is saving', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => {};
+    mockUpdate.mockReturnValue(new Promise<void>(resolve => { release = () => resolve(); }));
+
+    mount({ people: [person(), person({ handle: 'h_ali', person: { name: 'Ali', email: 'ali@example.com', avatarUrl: null } })] });
+    await user.click(await screen.findByRole('button', { name: 'Change what Jo can do' }));
+    await user.click(screen.getByRole('switch', { name: /Edit automations/ }));
+
+    // changePermissions refuses while ANY save is in flight. If the disabled
+    // state were per-row, the other row's Change would look live and quietly
+    // do nothing — the guard and the disabled prop have to be one sentence.
+    expect(screen.getByRole('button', { name: 'Change what Ali can do' })).toBeDisabled();
+    for (const control of screen.getAllByRole('switch')) expect(control).toBeDisabled();
+    release();
+  });
+
   it('offers none of it to somebody who is not the owner', async () => {
     mockAccess = { ...OWNER_ACCESS, role: 'member' };
     mount({ people: [person()] });
@@ -242,6 +259,47 @@ describe('sending an invitation again', () => {
     expect(await screen.findByText(/send them this link yourself/)).toBeInTheDocument();
     expect(screen.getByText('https://app.example.com/invite/xyz789')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Copy link/ })).toBeInTheDocument();
+  });
+
+  it('disables every Resend while one is in flight', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => {};
+    mockResend.mockReturnValue(new Promise(resolve => { release = () => resolve({
+      invitation: invitation({ emailDelivery: 'sent' }),
+      inviteUrl: 'https://app.example.com/invite/abc',
+    }); }));
+
+    mount({ invitations: [invitation(), invitation({ id: 'inv_2', email: 'ash@example.com' })] });
+    await user.click(await screen.findByRole('button', { name: 'Send the invite to kit@example.com again' }));
+
+    // `resend` refuses while any resend is in flight. Leaving the other row's
+    // button enabled makes it a control that looks live and does nothing.
+    expect(screen.getByRole('button', { name: 'Send the invite to ash@example.com again' })).toBeDisabled();
+    release();
+  });
+
+  it('drops the previous result before asking again', async () => {
+    const user = userEvent.setup();
+    mockResend.mockResolvedValueOnce({
+      invitation: invitation({ emailDelivery: 'failed' }),
+      inviteUrl: 'https://app.example.com/invite/first',
+    });
+
+    mount({ invitations: [invitation()] });
+    const button = await screen.findByRole('button', { name: 'Send the invite to kit@example.com again' });
+    await user.click(button);
+    expect(await screen.findByText('https://app.example.com/invite/first')).toBeInTheDocument();
+
+    // The second attempt fails. The first attempt's link must not still be on
+    // screen: reissuing rotates the token, so once another resend has reached
+    // the server that link is dead — and a dead link offered as the way to
+    // reach somebody is worse than no link at all.
+    mockResend.mockRejectedValueOnce(new Error('Invites aren\'t set up on this server yet.'));
+    await user.click(button);
+
+    await waitFor(() =>
+      expect(screen.queryByText('https://app.example.com/invite/first')).not.toBeInTheDocument());
+    expect(screen.getByText('Invites aren\'t set up on this server yet.')).toBeInTheDocument();
   });
 
   it('stops telling the owner to start over', async () => {

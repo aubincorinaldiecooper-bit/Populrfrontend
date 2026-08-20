@@ -246,6 +246,13 @@ export default function TeamPage() {
     if (resending) return;
     setResending(invitation.id);
     setCopied(false);
+    // The previous result goes before the new one is asked for. Keeping it
+    // would leave a success banner sitting beside a fresh error, and in the
+    // delivery-failure case it would leave a LINK on screen: reissuing
+    // rotates the token, so as soon as another resend reaches the server the
+    // one displayed here is dead. A dead link presented as the way to reach
+    // somebody is worse than no link at all.
+    setResent(null);
     try {
       const result = await resendInvitation(invitation.id);
       setInvitations(prev => prev.map(i => (i.id === invitation.id ? result.invitation : i)));
@@ -504,6 +511,12 @@ export default function TeamPage() {
                     const name = displayName(entry.person);
                     const secondary = contactLine(entry.person);
                     const open = editingHandle === entry.handle;
+                    // `changePermissions` refuses while ANY save is in flight,
+                    // so every switch is disabled while any one of them is —
+                    // the guard and this condition are the same sentence, or
+                    // some other row's switches look live and quietly aren't.
+                    // Only the row actually saving says so, below.
+                    const busy = savingHandle !== null;
                     const saving = savingHandle === entry.handle;
                     return (
                       <div key={entry.handle ?? 'owner'} className="py-2.5">
@@ -544,6 +557,10 @@ export default function TeamPage() {
                               <button
                                 type="button"
                                 onClick={() => setEditingHandle(open ? null : entry.handle)}
+                                // Same reason: opening a row mid-save would
+                                // show a panel of switches that cannot be
+                                // used, with nothing saying why.
+                                disabled={busy}
                                 aria-expanded={open}
                                 aria-label={`Change what ${name} can do`}
                                 className={cn(
@@ -580,7 +597,7 @@ export default function TeamPage() {
                                 label="Edit this automation"
                                 hint={`Off means they can open “${entry.automation.name}” and read it, but not change it.`}
                                 checked={entry.permissions.editAutomations}
-                                disabled={saving}
+                                disabled={busy}
                                 onChange={next => void changePermissions(
                                   entry,
                                   { ...entry.permissions, editAutomations: next },
@@ -593,7 +610,7 @@ export default function TeamPage() {
                                   label="Edit automations"
                                   hint="Build and change automations. Turning them on stays with you."
                                   checked={entry.permissions.editAutomations}
-                                  disabled={saving}
+                                  disabled={busy}
                                   onChange={next => void changePermissions(
                                     entry,
                                     { ...entry.permissions, editAutomations: next },
@@ -604,7 +621,7 @@ export default function TeamPage() {
                                   label="Contact outreach"
                                   hint="Reply to people in the inbox on your behalf."
                                   checked={entry.permissions.contactOutreach}
-                                  disabled={saving}
+                                  disabled={busy}
                                   onChange={next => void changePermissions(
                                     entry,
                                     { ...entry.permissions, contactOutreach: next },
@@ -675,7 +692,12 @@ export default function TeamPage() {
                       {ownerView && <button
                         type="button"
                         onClick={() => void resend(invitation)}
-                        disabled={resending === invitation.id}
+                        // Every row, not just this one. `resend` refuses while
+                        // any resend is in flight, and a button that is
+                        // disallowed but not disabled is a control that looks
+                        // live and does nothing. The guard and this condition
+                        // have to be the same sentence.
+                        disabled={resending !== null}
                         aria-label={`Send the invite to ${invitation.email} again`}
                         className={cn(buttonVariants({ variant: 'outline' }), 'text-[12px] py-1 px-2.5 flex-shrink-0 disabled:opacity-50')}
                       >
