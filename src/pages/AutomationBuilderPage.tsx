@@ -8,7 +8,9 @@ import { isOwnerView, canEditAutomations } from '../lib/access';
 import ShareAutomation from '../components/automation-builder/ShareAutomation';
 import NotesIndex from '../components/automation-builder/NotesIndex';
 import CanvasNotesLayer from '../components/automation-builder/CanvasNotesLayer';
-import { useCanvasNotes, usePlacing } from '../components/automation-builder/useCanvasNotes';
+import NoteThread, { NoteComposer } from '../components/automation-builder/NoteThread';
+import { useCanvasNotes, usePlacing, type Placement } from '../components/automation-builder/useCanvasNotes';
+import { newNoteLabel, noteLabel, placeLabel } from '../lib/notePlacement';
 import CollaboratorFacepile from '../components/automation-builder/CollaboratorFacepile';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
@@ -165,6 +167,7 @@ export default function AutomationBuilderPage() {
     },
     [graph.nodes],
   );
+  const openNote = openNoteId ? notes.threads.find(t => t.id === openNoteId) ?? null : null;
   const [question, setQuestion] = useState<(BuilderQuestion & {
     id: string; nodeId: string; sourceMessage: string;
   }) | null>(null);
@@ -265,6 +268,27 @@ export default function AutomationBuilderPage() {
     // the sidebar's width plus a constant, so a stale query would be
     // watching a line that has moved.
   }, [sidebarWidth]);
+
+  /* Notes, on a screen too narrow to float a card beside a pin: the thread
+     arrives from the bottom instead. That is the same place the step editor
+     goes, and two sheets cannot share it — so opening or starting a note
+     stands the editor down. The note is the thing that was just asked for. */
+  const showNote = useCallback((id: string | null) => {
+    setOpenNoteId(id);
+    if (id && narrowEditor) setSelectedNodeId(null);
+  }, [narrowEditor, setSelectedNodeId]);
+  const startNote = useCallback((placement: Placement) => {
+    setOpenNoteId(null);
+    if (narrowEditor) setSelectedNodeId(null);
+    placeNote(placement);
+  }, [narrowEditor, placeNote, setSelectedNodeId]);
+  // A const rather than `placing.at` read twice: what a note will be attached
+  // to has to be said before a word is typed, and the same answer has to
+  // label the sheet and head the composer inside it.
+  const composingNote = placing.at;
+  const placingLabel = composingNote && 'nodeId' in composingNote
+    ? stepLabel(composingNote.nodeId) ?? 'On a step'
+    : 'On the canvas';
 
   /**
    * The question actually on screen.
@@ -734,9 +758,10 @@ export default function AutomationBuilderPage() {
               if (thread.nodeId) {
                 setFocus(current => ({ nodeId: thread.nodeId!, signal: current.signal + 1 }));
               }
-              setOpenNoteId(thread.id);
+              showNote(thread.id);
             }}
             onLeaveNote={armNote}
+            sheet={narrowEditor}
           />
 
           <div className="flex items-center gap-0.5 pl-1">
@@ -822,8 +847,9 @@ export default function AutomationBuilderPage() {
           // Leaving a note is NOT an editing power, so this is offered
           // whatever readOnly says — that is the whole point of a seat that
           // can look but not change.
-          onLeaveNoteAt={at => { setOpenNoteId(null); placeNote({ at }); }}
+          onLeaveNoteAt={at => startNote({ at })}
           notesArmed={placing.arming}
+          onLeaveNoteOnNode={(nodeId, at) => startNote({ nodeId, at })}
           notesLayer={
             <CanvasNotesLayer
               threads={notes.threads}
@@ -832,7 +858,7 @@ export default function AutomationBuilderPage() {
               composing={placing.at}
               stepLabel={stepLabel}
               maySettle={notes.maySettle}
-              onOpen={setOpenNoteId}
+              onOpen={showNote}
               onReply={notes.reply}
               onSettle={notes.settle}
               onDelete={notes.remove}
@@ -841,6 +867,10 @@ export default function AutomationBuilderPage() {
                 cancelNote();
               }}
               onCancelCompose={cancelNote}
+              // Narrow: the pins stay on the canvas, the conversation moves
+              // to a sheet. A 300px card floating beside a pin needs a canvas
+              // there is room to look at.
+              cards={!narrowEditor}
             />
           }
           fitSignal={fitSignal}
@@ -871,6 +901,59 @@ export default function AutomationBuilderPage() {
           >
             <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
             {editorFor('sheet')}
+          </SheetContent>
+        </Sheet>
+
+        {/* And the same for a note. The pin stays where the feedback was
+            left — that never changes — but the conversation comes to the
+            bottom of the screen instead of floating beside a pin on a canvas
+            there is no room to read. Same thread, same composer, same
+            everything inside; only the container is different. */}
+        <Sheet
+          modal={false}
+          open={narrowEditor && (composingNote !== null || openNote !== null)}
+          onOpenChange={next => {
+            if (next) return;
+            setOpenNoteId(null);
+            cancelNote();
+          }}
+        >
+          <SheetContent
+            side="bottom"
+            backdrop={false}
+            aria-label={
+              composingNote
+                ? newNoteLabel(placingLabel)
+                : openNote
+                  ? noteLabel(openNote, placeLabel(openNote, stepLabel))
+                  : 'Note'
+            }
+            className="z-40 rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]
+              shadow-[0_-8px_28px_rgba(17,17,17,0.14)]"
+          >
+            <div aria-hidden className="mx-auto my-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
+            {composingNote ? (
+              <NoteComposer
+                presentation="sheet"
+                where={placingLabel}
+                onSubmit={async body => {
+                  await notes.leave(composingNote, body);
+                  cancelNote();
+                }}
+                onCancel={cancelNote}
+              />
+            ) : openNote ? (
+              <NoteThread
+                presentation="sheet"
+                thread={openNote}
+                where={placeLabel(openNote, stepLabel)}
+                maySettle={notes.maySettle(openNote)}
+                onReply={body => notes.reply(openNote.id, body)}
+                onSettle={resolved => notes.settle(openNote.id, resolved)}
+                onDelete={notes.remove}
+                onClose={() => setOpenNoteId(null)}
+              />
+            ) : null}
           </SheetContent>
         </Sheet>
 

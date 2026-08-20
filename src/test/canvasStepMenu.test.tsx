@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { FlowNodeCard, type FlowNodeData } from '../components/automation-builder/FlowNodeCard';
 import type { FlowNode } from '../lib/flowSchema';
@@ -11,7 +11,8 @@ import type { FlowNode } from '../lib/flowSchema';
  * long-press this menu also answers to is the ONLY one. What it offers has
  * to agree with what the canvas would allow: no second step on a branch
  * that already has one, no removing the When step the automation starts
- * from, and nothing at all for someone who may only read.
+ * from, and — for someone who may only read — exactly one command, because
+ * saying something about a step is not changing it.
  */
 
 function stepOf(over: Partial<FlowNode> = {}): FlowNode {
@@ -41,6 +42,45 @@ async function openMenu(container: HTMLElement) {
   fireEvent.contextMenu(container.firstElementChild as HTMLElement);
   return screen.findByRole('menu');
 }
+
+describe('leaving a note on a step', () => {
+  it('offers it beside the things you do to a step', async () => {
+    const { container } = renderCard({ onLeaveNote: () => {} });
+    const menu = await openMenu(container);
+    expect(within(menu).getByRole('menuitem', { name: 'Leave a note' })).toBeInTheDocument();
+  });
+
+  it('reports the point that was actually right-clicked', async () => {
+    const onLeaveNote = vi.fn();
+    const { container } = renderCard({ onLeaveNote });
+    // The card records the pointer as the menu opens; by the time an item is
+    // clicked the event is long gone, and a note placed at "wherever the menu
+    // ended up" is not a note about the thing that was pointed at.
+    fireEvent.contextMenu(container.firstElementChild as HTMLElement, { clientX: 412, clientY: 233 });
+    const menu = await screen.findByRole('menu');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Leave a note' }));
+
+    expect(onLeaveNote).toHaveBeenCalledWith('send', { x: 412, y: 233 });
+  });
+
+  it('is the ONE thing a view-only guest is offered', async () => {
+    const { container } = renderCard({ readOnly: true, onLeaveNote: () => {} });
+    const menu = await openMenu(container);
+
+    // They used to get no menu at all — right, when every command in it
+    // would have been refused. One of them isn't.
+    expect(within(menu).getByRole('menuitem', { name: 'Leave a note' })).toBeInTheDocument();
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1);
+    expect(within(menu).queryByRole('menuitem', { name: /Remove this step/ })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /After this step/ })).not.toBeInTheDocument();
+  });
+
+  it('still gives a view-only guest nothing when notes are unavailable', async () => {
+    const { container } = renderCard({ readOnly: true });
+    fireEvent.contextMenu(container.firstElementChild as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+});
 
 describe('right-clicking a step', () => {
   it('offers the step it is on, and removes that step — not the selected one', async () => {

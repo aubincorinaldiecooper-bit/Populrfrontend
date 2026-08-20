@@ -5,10 +5,14 @@ import {
   type Edge, type Node, type NodeChange, type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { FlowNodeCard, type FlowNodeData } from './FlowNodeCard';
 import DrawnEdge, { type DrawnEdgeData } from './DrawnEdge';
 import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayout';
 import { pickEditorSide } from '../../lib/editorPlacement';
+import { relativeTo } from '../../lib/notePlacement';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
@@ -77,6 +81,12 @@ export interface FlowCanvasProps {
    * try the right mouse button.
    */
   notesArmed?: boolean;
+  /**
+   * Somebody right-clicked a STEP and wants to leave a note on it, at the
+   * point they pointed at. Given as a fraction of that step's card, which is
+   * what travels when the canvas is rearranged.
+   */
+  onLeaveNoteOnNode?: (nodeId: string, at: { relX: number; relY: number }) => void;
 }
 
 function CanvasInner({
@@ -86,6 +96,7 @@ function CanvasInner({
   notesLayer = null,
   onLeaveNoteAt,
   notesArmed = false,
+  onLeaveNoteOnNode,
 }: FlowCanvasProps) {
   const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
@@ -139,6 +150,35 @@ function CanvasInner({
     [graph.edges],
   );
 
+  /**
+   * A right-click on a step, turned into a placement on that step.
+   *
+   * The conversion happens here because this is the only place that knows
+   * the viewport — the card reports where the pointer was on SCREEN, and
+   * what gets stored is where that is on the CARD.
+   */
+  const leaveNoteOnNode = useCallback(
+    (nodeId: string, screen: { x: number; y: number }) => {
+      if (!onLeaveNoteOnNode) return;
+      const node = graph.nodes.find(n => n.id === nodeId);
+      if (!node) return;
+      const world = screenToFlowPosition(screen);
+      onLeaveNoteOnNode(nodeId, relativeTo(node.position, world));
+    },
+    [onLeaveNoteOnNode, graph.nodes, screenToFlowPosition],
+  );
+
+  /**
+   * The menu a right-click on empty canvas opens, and the spot it is about.
+   *
+   * Held in both coordinate systems on purpose: SCREEN is where the menu has
+   * to appear, WORLD is what a note stores. Both are taken at the moment of
+   * the click, which is the only moment the screen position means anything.
+   */
+  const [paneMenu, setPaneMenu] = useState<
+    { screen: { x: number; y: number }; world: { x: number; y: number } } | null
+  >(null);
+
   const nodes: Node[] = useMemo(
     () => graph.nodes.map(node => ({
       id: node.id,
@@ -162,10 +202,11 @@ function CanvasInner({
         onDeleteNode,
         hasOutgoing,
         readOnly,
+        onLeaveNote: onLeaveNoteOnNode ? leaveNoteOnNode : undefined,
       } satisfies FlowNodeData,
     })),
     [graph.nodes, selectedNodeId, highlighted, problemByNode, postById, onAddAfter, onDeleteNode, hasOutgoing,
-      readOnly, nodeDelays],
+      readOnly, nodeDelays, onLeaveNoteOnNode, leaveNoteOnNode],
   );
 
   const edges: Edge[] = useMemo(
@@ -305,14 +346,16 @@ function CanvasInner({
         }
         onSelect(null);
       }}
-      // Right-clicking empty canvas offers to leave a note THERE. The point
-      // is converted to world coordinates here, at the moment of the click,
-      // because that is the only moment the screen position means anything.
+      // Right-clicking empty canvas offers to leave a note THERE. A menu
+      // rather than a composer opening unannounced, and the same one for
+      // every seat — there is nothing else to do to a bare spot on a canvas,
+      // so an editor and a view-only guest are offered the same single line.
       onPaneContextMenu={event => {
         if (!onLeaveNoteAt) return;
         event.preventDefault();
         const e = event as unknown as { clientX: number; clientY: number };
-        onLeaveNoteAt(screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        const screen = { x: e.clientX, y: e.clientY };
+        setPaneMenu({ screen, world: screenToFlowPosition(screen) });
       }}
       proOptions={{ hideAttribution: true }}
       nodesDraggable={!readOnly}
@@ -343,8 +386,39 @@ function CanvasInner({
         </NodeToolbar>
       )}
     </ReactFlow>
+
+    {/* Anchored to the point that was clicked rather than to any element,
+        because the thing it is about is a place, not a control. */}
+    <DropdownMenu open={paneMenu !== null} onOpenChange={open => { if (!open) setPaneMenu(null); }}>
+      <DropdownMenuContent
+        anchor={paneMenu ? pointAnchor(paneMenu.screen) : undefined}
+        side="bottom"
+        align="start"
+        sideOffset={2}
+        aria-label="This spot on the canvas"
+      >
+        <DropdownMenuItem
+          onClick={() => {
+            if (paneMenu && onLeaveNoteAt) onLeaveNoteAt(paneMenu.world);
+            setPaneMenu(null);
+          }}
+        >
+          Leave a note here
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
     </div>
   );
+}
+
+/** A zero-sized rectangle at a point, for positioning against a place. */
+function pointAnchor(at: { x: number; y: number }) {
+  return {
+    getBoundingClientRect: () => ({
+      x: at.x, y: at.y, top: at.y, left: at.x, right: at.x, bottom: at.y,
+      width: 0, height: 0, toJSON: () => ({}),
+    }),
+  };
 }
 
 export default function FlowCanvas(props: FlowCanvasProps) {

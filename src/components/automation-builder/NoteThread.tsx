@@ -3,6 +3,7 @@ import { Check, Loader2, MapPin, RotateCcw, Trash2, X } from 'lucide-react';
 import Avatar from '../inbox/Avatar';
 import { displayName } from '../../lib/people';
 import { shortAgo } from '../../lib/builderNotifications';
+import { newNoteLabel, noteLabel } from '../../lib/notePlacement';
 import type { CanvasComment, CommentThread } from '../../lib/api';
 
 /**
@@ -15,9 +16,17 @@ import type { CanvasComment, CommentThread } from '../../lib/api';
  *
  * Resolve sits in the header rather than beside Reply, because resolving ends
  * the conversation — it is not one of the things you say in it.
+ *
+ * On a narrow screen the same thread arrives in a bottom sheet instead, which
+ * is what `presentation` selects. Only the container changes: a canvas a
+ * thumb can barely pan is no place to float a 300px card beside a pin, but
+ * the conversation inside it is the same object either way.
  */
 
 const MAX_LENGTH = 2000;
+
+/** Where a thread is drawn: beside its pin, or in a sheet from the bottom. */
+export type NotePresentation = 'floating' | 'sheet';
 
 function Said({ comment, onDelete, busy }: {
   comment: CanvasComment;
@@ -68,6 +77,7 @@ export default function NoteThread({
   onSettle,
   onDelete,
   onClose,
+  presentation = 'floating',
 }: {
   thread: CommentThread;
   /** What this note is about, in the builder's own words. */
@@ -77,6 +87,7 @@ export default function NoteThread({
   onSettle: (resolved: boolean) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
   onClose: () => void;
+  presentation?: NotePresentation;
 }) {
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -106,13 +117,19 @@ export default function NoteThread({
     }
   };
 
+  const floating = presentation === 'floating';
+
   return (
     <div
       ref={box}
-      role="dialog"
-      aria-label={`Note from ${thread.you ? 'you' : displayName(thread.by)} · ${where}`}
-      className="w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
-        shadow-[0_10px_34px_rgba(17,17,17,0.14)]"
+      // In a sheet the surface, the label and the dialog role all belong to
+      // the sheet — a second dialog inside the first would announce a room
+      // inside a room to anyone listening rather than looking.
+      {...(floating ? { role: 'dialog', 'aria-label': noteLabel(thread, where) } : {})}
+      className={floating
+        ? `w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
+           shadow-[0_10px_34px_rgba(17,17,17,0.14)]`
+        : 'w-full'}
     >
       <div className="flex items-center justify-between border-b border-[#F0EDE8] px-3 py-2">
         <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-[#6B6B6B]">
@@ -146,7 +163,7 @@ export default function NoteThread({
         </span>
       </div>
 
-      <div className="max-h-[280px] space-y-3 overflow-y-auto p-3">
+      <div className={`space-y-3 overflow-y-auto p-3 ${floating ? 'max-h-[280px]' : 'max-h-[42vh]'}`}>
         <Said
           comment={thread}
           busy={busy}
@@ -215,21 +232,24 @@ export default function NoteThread({
  * Same silhouette as a thread, opening at the place just chosen, so leaving a
  * note and reading one feel like the same object rather than two features.
  */
-export function NoteComposer({ where, onSubmit, onCancel }: {
+export function NoteComposer({ where, onSubmit, onCancel, presentation = 'floating' }: {
   where: string;
   onSubmit: (body: string) => Promise<void>;
   onCancel: () => void;
+  presentation?: NotePresentation;
 }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const floating = presentation === 'floating';
 
   return (
     <form
-      role="dialog"
-      aria-label={`New note · ${where}`}
-      className="w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
-        shadow-[0_10px_34px_rgba(17,17,17,0.14)]"
+      {...(floating ? { role: 'dialog', 'aria-label': newNoteLabel(where) } : {})}
+      className={floating
+        ? `w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
+           shadow-[0_10px_34px_rgba(17,17,17,0.14)]`
+        : 'w-full'}
       onSubmit={e => {
         e.preventDefault();
         const text = body.trim();

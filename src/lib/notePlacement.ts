@@ -1,4 +1,5 @@
 import { NODE_HEIGHT, NODE_WIDTH } from './flowLayout';
+import { displayName } from './people';
 import type { CommentThread, NoteAnchor } from './api';
 
 /**
@@ -181,4 +182,24 @@ export function placeLabel(
   if (thread.nodeId) return stepLabel(thread.nodeId) ?? 'On a step';
   if (thread.place && 'x' in (thread.place as NoteAnchor)) return 'On the canvas';
   return 'On the whole automation';
+}
+
+/**
+ * What a thread is called, wherever it is shown.
+ *
+ * Here rather than in the thread component because two containers announce
+ * the same conversation — the card floating at a pin, and the sheet it
+ * arrives in on a narrow screen — and a reader who hears two different names
+ * for one note has been told there are two notes.
+ */
+export function noteLabel(
+  thread: Pick<CommentThread, 'you' | 'by'>,
+  where: string,
+): string {
+  return `Note from ${thread.you ? 'you' : displayName(thread.by)} · ${where}`;
+}
+
+/** And the same for one nobody has written yet. */
+export function newNoteLabel(where: string): string {
+  return `New note · ${where}`;
 }

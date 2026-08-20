@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import {
   Zap, GitBranch, Send, Clock, Sparkles, Plus, MessageCircle, Bell, Tag, TrendingUp,
@@ -59,6 +59,15 @@ export interface FlowNodeData extends Record<string, unknown> {
   hasOutgoing: (nodeId: string, branch: 'next' | 'yes' | 'no') => boolean;
   /** View-only: the graph is theirs to read, not to grow. */
   readOnly?: boolean;
+  /**
+   * Leave a note on this step, at the point that was right-clicked.
+   *
+   * Screen coordinates, converted by the canvas — the only place that knows
+   * the viewport. Offered whatever readOnly says: saying something about a
+   * step is not changing it, and a seat that can look but not change exists
+   * precisely so somebody can do this.
+   */
+  onLeaveNote?: (nodeId: string, screen: { x: number; y: number }) => void;
 }
 
 /** The one-line description under the node's title. */
@@ -200,7 +209,12 @@ function AddButton({
 
 function FlowNodeCardInner({ data }: NodeProps) {
   const { node, selected, highlighted, problem, enterDelay, post, onAddAfter, onDeleteNode,
-    hasOutgoing, readOnly } = data as unknown as FlowNodeData;
+    hasOutgoing, readOnly, onLeaveNote } = data as unknown as FlowNodeData;
+  // Where the pointer was when the menu opened. Read at contextmenu time
+  // because by the time an item is clicked the event is long gone, and a
+  // note placed at "wherever the menu happens to be" is not a note about
+  // the thing that was pointed at.
+  const pointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [hovered, setHovered] = useState(false);
   const showControls = hovered || selected;
   const branches = branchesFor(node.type);
@@ -314,13 +328,46 @@ function FlowNodeCardInner({ data }: NodeProps) {
     </div>
   );
 
-  if (readOnly) return card;
+  const noteItem = onLeaveNote ? (
+    <ContextMenuItem onClick={() => onLeaveNote(node.id, pointer.current)}>
+      Leave a note
+    </ContextMenuItem>
+  ) : null;
+
+  /* Recorded on the trigger, which is the element the menu actually opens
+     from — the card sits inside it, so a right-click handled there never
+     reaches a handler on the card. Both events, because they are different
+     paths to the same menu: contextmenu is the mouse's, and pointerdown is
+     what a long-press on a phone leaves behind. The last one before the menu
+     opens is the one that opened it. */
+  const capture = (e: { clientX: number; clientY: number }) => {
+    pointer.current = { x: e.clientX, y: e.clientY };
+  };
+
+  // A view-only guest used to get no menu at all — the honest answer when
+  // every command in it would have been refused, and the wrong one now that
+  // one of them isn't. They get exactly that one.
+  if (readOnly) {
+    if (!noteItem) return card;
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger onContextMenu={capture} onPointerDown={capture}>
+          {card}
+        </ContextMenuTrigger>
+        <ContextMenuContent aria-label={`${NODE_LABEL[node.type]} step`}>
+          {noteItem}
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  }
 
   const openBranches = branches.filter(branch => !hasOutgoing(node.id, branch));
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>{card}</ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={capture} onPointerDown={capture}>
+        {card}
+      </ContextMenuTrigger>
       <ContextMenuContent aria-label={`${NODE_LABEL[node.type]} step`}>
         {openBranches.length > 0 && (
           // The label names the group it heads, which is what makes it a
@@ -334,11 +381,20 @@ function FlowNodeCardInner({ data }: NodeProps) {
             ))}
           </ContextMenuGroup>
         )}
+        {/* Saying something about a step sits with the things you DO to it,
+            and above the one that destroys it. */}
+        {noteItem && (
+          <>
+            {openBranches.length > 0 && <ContextMenuSeparator />}
+            {noteItem}
+          </>
+        )}
+
         {/* The When step is the automation's reason to run — removing it
             would leave a flow nothing could start. */}
         {node.type !== 'trigger' && (
           <>
-            {openBranches.length > 0 && <ContextMenuSeparator />}
+            {(openBranches.length > 0 || noteItem) && <ContextMenuSeparator />}
             <ContextMenuItem destructive onClick={() => onDeleteNode(node.id)}>
               Remove this step
             </ContextMenuItem>
