@@ -315,7 +315,11 @@ export default function ContactsPage() {
                         />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-[13px] font-semibold text-[#111111] truncate">{contact.handle ? `@${contact.handle}` : contact.name || 'Unknown'}</p>
+                            {/* "Someone", not "Unknown": the Inbox has always
+                                used the first for a person we cannot name, and
+                                the second reads like a failed lookup rather
+                                than a person who never told us their name. */}
+                            <p className="text-[13px] font-semibold text-[#111111] truncate">{contact.handle ? `@${contact.handle}` : contact.name || 'Someone'}</p>
                             <PlatformDot platform={contact.platform} size={6} />
                             {contact.needs_reply && (
                               // The same lime dot the Inbox list uses for

@@ -15,6 +15,7 @@ import AccountMenu from '../AccountMenu';
 import { navItems, isActivePath } from '../../lib/nav';
 import { useApp } from '../../context/AppContext';
 import { isGuestView, roleLabel } from '../../lib/access';
+import { workspaceName } from '../../lib/workspaceName';
 import { useInboxWaiting } from '../inbox/conversations';
 import { useCreateAutomation } from '../../context/CreateAutomationContext';
 
@@ -233,7 +234,10 @@ function WorkspaceStanding({ collapsed }: { collapsed: boolean }) {
   if (!isGuestView(workspaceAccess) || !workspaceAccess) return null;
 
   const standing = roleLabel(workspaceAccess);
-  const sentence = `${workspaceAccess.name}${standing ? ` · ${standing}` : ''}`;
+  // Through the guard: this block's whole job is telling somebody where they
+  // are, and it was answering with an internal id.
+  const where = workspaceName(workspaceAccess.name);
+  const sentence = `${where}${standing ? ` · ${standing}` : ''}`;
 
   if (collapsed) {
     return (
@@ -249,7 +253,7 @@ function WorkspaceStanding({ collapsed }: { collapsed: boolean }) {
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-muted
                 text-[13px] font-semibold text-sidebar-foreground"
             >
-              {workspaceAccess.name.trim().charAt(0).toUpperCase() || '·'}
+              {where.trim().charAt(0).toUpperCase() || '·'}
             </span>
           }
         />
@@ -264,7 +268,7 @@ function WorkspaceStanding({ collapsed }: { collapsed: boolean }) {
         You're in
       </p>
       <p className="truncate text-[13px] font-semibold text-sidebar-foreground">
-        {workspaceAccess.name}
+        {where}
       </p>
       {standing && (
         <p className="mt-0.5 text-[11.5px] text-sidebar-muted-foreground">{standing}</p>
