@@ -14,6 +14,7 @@ import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayo
 import { pickEditorSide } from '../../lib/editorPlacement';
 import { relativeTo } from '../../lib/notePlacement';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
+import { readDrag, releaseDrag } from '../../lib/nodeDrag';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
 
@@ -179,11 +180,32 @@ function CanvasInner({
     { screen: { x: number; y: number }; world: { x: number; y: number } } | null
   >(null);
 
+  /**
+   * Where a step is WHILE it is being dragged.
+   *
+   * React Flow owns a node's position during the gesture and the graph only
+   * learns it when the gesture ends — but `nodes` below is derived from the
+   * graph, so any re-render of the page mid-drag handed React Flow the step's
+   * OLD position back and the card snapped out from under the cursor. The
+   * builder re-renders often enough for that to be constant: the collaborator
+   * heartbeat every 20 seconds, the notes query, an autosave settling, the
+   * entrance timings. Holding the live position here means a re-render
+   * mid-drag reasserts where the step actually is.
+   *
+   * Committing every frame to the graph instead would be worse — it is a save
+   * per pointermove, and a drag is not an edit anybody wants in their history.
+   */
+  const [dragging, setDragging] = useState<Record<string, { x: number; y: number }>>({});
+
   const nodes: Node[] = useMemo(
     () => graph.nodes.map(node => ({
       id: node.id,
       type: 'step',
-      position: node.position,
+      // The live position while a gesture is in flight, the graph's otherwise.
+      position: dragging[node.id] ?? node.position,
+      // A step being dragged rides over its neighbours, so it is never
+      // half-behind the card it is being moved past.
+      zIndex: dragging[node.id] ? 10 : undefined,
       // React Flow needs the size up front to route edges before measuring;
       // without it the first paint shows edges converging on the origin.
       width: NODE_WIDTH,
@@ -206,7 +228,7 @@ function CanvasInner({
       } satisfies FlowNodeData,
     })),
     [graph.nodes, selectedNodeId, highlighted, problemByNode, postById, onAddAfter, onDeleteNode, hasOutgoing,
-      readOnly, nodeDelays, onLeaveNoteOnNode, leaveNoteOnNode],
+      readOnly, nodeDelays, onLeaveNoteOnNode, leaveNoteOnNode, dragging],
   );
 
   const edges: Edge[] = useMemo(
@@ -259,12 +281,17 @@ function CanvasInner({
   }, [focusSignal, focusNodeId, graph.nodes, setCenter]);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    for (const change of changes) {
-      // Only commit the final position. Committing every intermediate frame
-      // would push a save per pointermove.
-      if (change.type === 'position' && change.position && change.dragging === false) {
-        onMove(change.id, change.position);
-      }
+    const { live, settled } = readDrag(changes);
+    // Only the settled position reaches the graph — see `dragging` above.
+    for (const done of settled) onMove(done.id, done.position);
+    if (Object.keys(live).length > 0) {
+      setDragging(current => ({ ...current, ...live }));
+    }
+    if (settled.length > 0) {
+      // Released in the same batch as the commit above, so the next render
+      // reads the settled position from the graph rather than flashing the
+      // old one for a frame on the way there.
+      setDragging(current => releaseDrag(current, settled.map(d => d.id)));
     }
   }, [onMove]);
 

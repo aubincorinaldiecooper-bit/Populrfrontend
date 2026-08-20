@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, MapPin, RotateCcw, Trash2, X } from 'lucide-react';
+import { ArrowUp, Check, Loader2, MapPin, RotateCcw, Trash2, X } from 'lucide-react';
 import Avatar from '../inbox/Avatar';
 import { displayName } from '../../lib/people';
 import { shortAgo } from '../../lib/builderNotifications';
@@ -27,6 +27,54 @@ const MAX_LENGTH = 2000;
 
 /** Where a thread is drawn: beside its pin, or in a sheet from the bottom. */
 export type NotePresentation = 'floating' | 'sheet';
+
+/**
+ * The block you type into.
+ *
+ * The same shape the AI composer already uses: a filled, bordered field with
+ * its controls on a row inside it, rather than a bare textarea with a button
+ * floating underneath. Clicking anywhere in the block focuses the text, which
+ * is most of the difference between a control and a decorated box.
+ */
+function NoteField({ id, label, placeholder, value, rows, disabled, autoFocus, onChange, children }: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  rows: number;
+  disabled: boolean;
+  autoFocus?: boolean;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  const field = useRef<HTMLTextAreaElement>(null);
+  return (
+    <div
+      role="presentation"
+      onClick={() => field.current?.focus()}
+      className="cursor-text rounded-xl border border-[#E8E4DF] bg-[#FAF9F7] p-2
+        transition-[border-color,background-color] duration-150
+        focus-within:border-[#D8D3CC] focus-within:bg-white"
+    >
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <textarea
+        ref={field}
+        id={id}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        maxLength={MAX_LENGTH}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        className="block w-full resize-none border-0 bg-transparent p-0 text-[12.5px]
+          leading-relaxed text-[#111111] placeholder:text-[#A39E97]
+          focus:outline-none focus:ring-0 disabled:opacity-60"
+      />
+      <div className="mt-1.5 flex items-center justify-end gap-1.5">{children}</div>
+    </div>
+  );
+}
 
 function Said({ comment, onDelete, busy }: {
   comment: CanvasComment;
@@ -200,27 +248,30 @@ export default function NoteThread({
           });
         }}
       >
-        <label htmlFor={`reply-${thread.id}`} className="sr-only">Reply to this note</label>
-        <textarea
+        <NoteField
           id={`reply-${thread.id}`}
-          value={reply}
-          onChange={e => setReply(e.target.value)}
+          label="Reply to this note"
           placeholder="Reply…"
+          value={reply}
           rows={2}
-          maxLength={MAX_LENGTH}
           disabled={busy}
-          className="w-full resize-none text-[12.5px]"
-        />
-        <div className="mt-1.5 flex justify-end">
+          onChange={setReply}
+        >
+          {/* An arrow rather than a word: replying is the repeated action in
+              an open conversation, and by the second one nobody is reading
+              the button. Leaving a NEW note keeps its word — see below. */}
           <button
             type="submit"
             disabled={busy || reply.trim().length === 0}
-            className="rounded-lg bg-[#111111] px-2.5 py-1 text-[11.5px] font-medium text-white
-              disabled:opacity-40"
+            aria-label="Reply"
+            className="flex size-7 items-center justify-center rounded-lg bg-[#111111] text-white
+              transition-[background-color,color,transform] duration-200
+              enabled:active:scale-[0.96]
+              disabled:cursor-default disabled:bg-[#EDE9E4] disabled:text-[#B0AAA2]"
           >
-            Reply
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={14} strokeWidth={2.4} />}
           </button>
-        </div>
+        </NoteField>
       </form>
     </div>
   );
@@ -276,20 +327,20 @@ export function NoteComposer({ where, onSubmit, onCancel, presentation = 'floati
         </button>
       </div>
       <div className="p-2.5">
-        <label htmlFor="new-note" className="sr-only">Your note</label>
-        <textarea
+        <NoteField
           id="new-note"
-          value={body}
-          onChange={e => { setBody(e.target.value); setError(null); }}
+          label="Your note"
           placeholder="What about this?"
+          value={body}
           rows={3}
-          maxLength={MAX_LENGTH}
-          autoFocus
           disabled={busy}
-          className="w-full resize-none text-[12.5px]"
-        />
-        {error && <p className="mt-1.5 text-[11.5px] text-[#B45309]">{error}</p>}
-        <div className="mt-2 flex justify-end gap-1.5">
+          autoFocus
+          onChange={value => { setBody(value); setError(null); }}
+        >
+          {/* This one keeps its word. It is the first thing said rather than
+              the next thing, it commits a note that did not exist, and it
+              sits beside a Cancel — an arrow next to "Cancel" reads as a
+              direction rather than a decision. */}
           <button
             type="button"
             onClick={onCancel}
@@ -300,13 +351,15 @@ export function NoteComposer({ where, onSubmit, onCancel, presentation = 'floati
           <button
             type="submit"
             disabled={busy || body.trim().length === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#111111] px-2.5 py-1
-              text-[11.5px] font-medium text-white disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#111111] px-2.5 py-1.5
+              text-[11.5px] font-medium text-white transition-transform duration-200
+              enabled:active:scale-[0.96] disabled:bg-[#EDE9E4] disabled:text-[#B0AAA2]"
           >
             {busy && <Loader2 size={12} className="animate-spin" />}
             Leave note
           </button>
-        </div>
+        </NoteField>
+        {error && <p className="mt-1.5 text-[11.5px] text-[#B45309]">{error}</p>}
       </div>
     </form>
   );
