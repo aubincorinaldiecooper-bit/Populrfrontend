@@ -129,6 +129,7 @@ export default function AutomationBuilderPage() {
     saveState, savedAt, delegationWarning, composing, changeCard,
     editsSinceCard, activity, highlighted, history, historyHasMore, loadEarlierHistory,
     proposal, proposalTrace, committing, proposalError, confirmProposal, discardDraft,
+    conflict, takeTheirs, keepMine,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -824,6 +825,35 @@ export default function AutomationBuilderPage() {
           automation talks to. Not a toast: autosave fires on every pause in
           typing, and this is a condition that lasts until the edit is one
           Instagram will accept, not an event. */}
+      {/* Two versions of this automation have come apart, and until somebody
+          chooses, nothing this creator types is being saved. Not a toast —
+          a toast that scrolls away takes the only two ways out with it. */}
+      {conflict && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#F0D9A8]
+            bg-[#FEF7E6] px-4 md:px-6 py-2.5 text-[13px] text-[#7A5A12]"
+        >
+          <AlertTriangle size={15} className="flex-shrink-0 text-[#B8860B]" />
+          <p className="flex-1 min-w-[16rem]">{conflict}</p>
+          <span className="flex flex-shrink-0 items-center gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => void takeTheirs()}>
+              Load their version
+            </Button>
+            {/* Second, and quieter: it is the one that costs somebody else
+                their edit, so it should not be the easy one to hit. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void keepMine()}
+              className="text-[#7A5A12] hover:bg-[#F7ECD4]"
+            >
+              Keep mine
+            </Button>
+          </span>
+        </div>
+      )}
+
       {delegationWarning && (
         <div
           role="status"

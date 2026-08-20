@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { Zap, UsersRound, AlertTriangle, Bell, DoorOpen, Pencil } from 'lucide-react';
+import Avatar from '../inbox/Avatar';
 import { timeAgo } from '../../lib/timeAgo';
 import type { WorkspaceNotification } from '../../lib/api';
 
@@ -30,15 +31,36 @@ export default function NotificationRow({
 }) {
   const Icon = kindIcon[notification.kind] ?? Bell;
   const unread = notification.readAt === null;
+  const actor = notification.actor;
 
   const inner = (
     <>
-      <span
-        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted
-          text-muted-foreground"
-      >
-        <Icon size={15} strokeWidth={2} />
-      </span>
+      {/* Who, when a person did it. A row about a team is mostly about the
+          person in it, and a generic glyph gives that away for nothing —
+          the icon says the KIND, which the sentence beside it already says.
+          Nobody did an account falling out of authorisation, so those keep
+          the glyph rather than borrowing a face that would be a lie. */}
+      {actor ? (
+        <span className="relative mt-0.5 shrink-0">
+          <Avatar handle={actor.email} name={actor.name} avatarUrl={actor.avatarUrl} size="sm" />
+          {/* The kind, kept as a small mark on the corner rather than
+              dropped: it is what makes the feed scannable without reading. */}
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center
+              rounded-full bg-card text-muted-foreground ring-1 ring-border"
+          >
+            <Icon size={9} strokeWidth={2.5} />
+          </span>
+        </span>
+      ) : (
+        <span
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted
+            text-muted-foreground"
+        >
+          <Icon size={15} strokeWidth={2} />
+        </span>
+      )}
       <span className="min-w-0 flex-1">
         <span className={`block text-[13.5px] leading-snug ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}>
           {notification.title}

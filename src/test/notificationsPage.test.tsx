@@ -4,6 +4,7 @@ import { render } from './render';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import NotificationsPage from '../pages/NotificationsPage';
+import NotificationRow from '../components/app/NotificationRow';
 import { useNotifications, applyRead, applyAllRead } from '../components/app/useNotifications';
 import { focusManager } from '@tanstack/react-query';
 import { listenForCreatorsReturn } from '../lib/queryClient';
@@ -47,6 +48,7 @@ function notification(
     linkPath,
     createdAt: new Date().toISOString(),
     readAt: null,
+  actor: null,
   };
 }
 
@@ -295,5 +297,38 @@ describe('coming back to the app', () => {
     } finally {
       unsubscribe();
     }
+  });
+});
+
+describe('who did it', () => {
+  const row = (over: Partial<WorkspaceNotification> = {}): WorkspaceNotification => ({
+    id: 'n1', kind: 'automation_edited',
+    title: 'Robin edited Culture comments',
+    body: null, linkPath: '/automations/flow_1',
+    createdAt: new Date().toISOString(), readAt: null,
+    actor: { name: 'Robin', email: 'robin@example.com', avatarUrl: null },
+    ...over,
+  });
+
+  it('shows the person, not a generic glyph', () => {
+    render(<MemoryRouter><NotificationRow notification={row()} onOpen={vi.fn()} /></MemoryRouter>);
+    // The icon says the KIND, which the sentence beside it already says.
+    // Who did it is the part a face can carry and a sentence reads slower.
+    expect(screen.getByText('R')).toBeInTheDocument();
+  });
+
+  it('keeps the glyph when nobody did it', () => {
+    // An account falling out of authorisation is not somebody's doing, and
+    // borrowing a face for it would say something untrue.
+    const { container } = render(
+      <MemoryRouter>
+        <NotificationRow
+          notification={row({ kind: 'account_reconnect', title: 'Reconnect Instagram', actor: null })}
+          onOpen={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('R')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeTruthy();
   });
 });
