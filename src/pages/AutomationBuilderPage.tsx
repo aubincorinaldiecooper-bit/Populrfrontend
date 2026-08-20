@@ -6,6 +6,9 @@ import {
 import { useApp } from '../context/AppContext';
 import { isOwnerView, canEditAutomations } from '../lib/access';
 import ShareAutomation from '../components/automation-builder/ShareAutomation';
+import NotesIndex from '../components/automation-builder/NotesIndex';
+import CanvasNotesLayer from '../components/automation-builder/CanvasNotesLayer';
+import { useCanvasNotes, usePlacing } from '../components/automation-builder/useCanvasNotes';
 import CollaboratorFacepile from '../components/automation-builder/CollaboratorFacepile';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
@@ -146,6 +149,22 @@ export default function AutomationBuilderPage() {
   // Arriving at a step from a notification: which one to bring into view, and
   // what Populr is asking about it once we're there.
   const [focus, setFocus] = useState<{ nodeId: string; signal: number }>({ nodeId: '', signal: 0 });
+
+  /* ── Notes ──────────────────────────────────────────────────────────────
+     Collaboration metadata, laid over the work. Deliberately not part of
+     `panel`: the AI owns the right-hand column, and notes must never become
+     a second one — the index is a popover and a thread is an overlay, so
+     the canvas keeps its width whatever the notes are doing. */
+  const notes = useCanvasNotes(flowId);
+  const { placing, arm: armNote, place: placeNote, cancel: cancelNote } = usePlacing();
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const stepLabel = useCallback(
+    (id: string) => {
+      const node = graph.nodes.find(n => n.id === id);
+      return node ? NODE_LABEL[node.type] : null;
+    },
+    [graph.nodes],
+  );
   const [question, setQuestion] = useState<(BuilderQuestion & {
     id: string; nodeId: string; sourceMessage: string;
   }) | null>(null);
@@ -703,6 +722,23 @@ export default function AutomationBuilderPage() {
             <Eye size={14} /> <span className="hidden md:inline">Preview</span>
           </Button>
 
+          {/* Notes: navigation, not a panel. The popover closes the moment it
+              points somewhere, and what it points at opens on the canvas. */}
+          <NotesIndex
+            threads={notes.threads}
+            count={notes.open.length}
+            stepLabel={stepLabel}
+            onPick={thread => {
+              // Fly to the step it belongs to, then open it. A note on the
+              // canvas has no step to fly to and simply opens.
+              if (thread.nodeId) {
+                setFocus(current => ({ nodeId: thread.nodeId!, signal: current.signal + 1 }));
+              }
+              setOpenNoteId(thread.id);
+            }}
+            onLeaveNote={armNote}
+          />
+
           <div className="flex items-center gap-0.5 pl-1">
             <NotificationBell
               count={notifications.unresolvedCount}
@@ -783,6 +819,30 @@ export default function AutomationBuilderPage() {
           onAddAfter={mayEdit ? onAddAfter : () => {}}
           onDeleteNode={mayEdit ? deleteStep : () => {}}
           readOnly={!mayEdit}
+          // Leaving a note is NOT an editing power, so this is offered
+          // whatever readOnly says — that is the whole point of a seat that
+          // can look but not change.
+          onLeaveNoteAt={at => { setOpenNoteId(null); placeNote({ at }); }}
+          notesArmed={placing.arming}
+          notesLayer={
+            <CanvasNotesLayer
+              threads={notes.threads}
+              nodes={graph.nodes}
+              openId={openNoteId}
+              composing={placing.at}
+              stepLabel={stepLabel}
+              maySettle={notes.maySettle}
+              onOpen={setOpenNoteId}
+              onReply={notes.reply}
+              onSettle={notes.settle}
+              onDelete={notes.remove}
+              onLeave={async (placement, body) => {
+                await notes.leave(placement, body);
+                cancelNote();
+              }}
+              onCancelCompose={cancelNote}
+            />
+          }
           fitSignal={fitSignal}
           focusNodeId={focus.nodeId || null}
           focusSignal={focus.signal}

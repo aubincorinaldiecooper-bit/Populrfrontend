@@ -37,6 +37,11 @@ export function useLiveFeed(): void {
           // canvas this creator is looking at, if they are in a builder at
           // all, so the coarse key costs one refetch or none.
           void queryClient.invalidateQueries({ queryKey: queryKeys.allCollaborators });
+        } else if (topic === 'comments') {
+          // Somebody left a note, replied, or settled one. Same coarseness as
+          // presence and for the same reason: the only notes query mounted is
+          // the canvas this creator has open, if they are in a builder at all.
+          void queryClient.invalidateQueries({ queryKey: queryKeys.allComments });
         } else {
           void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
         }

@@ -54,12 +54,38 @@ export interface FlowCanvasProps {
    * of them.
    */
   editorSlot?: React.ReactNode;
+  /**
+   * Notes, as a layer over the canvas. The canvas hands it the live viewport
+   * and the node positions; the layer owns everything else. Nothing here is
+   * a column — the automation keeps its width whatever the notes are doing.
+   */
+  notesLayer?: React.ReactNode;
+  /**
+   * Somebody right-clicked empty canvas and wants to leave a note there.
+   * Given in WORLD coordinates, which is what a note stores: a place stays
+   * the place it was through every pan and zoom.
+   *
+   * Absent for a session that may not leave notes at all — but that is
+   * nobody, deliberately. Commenting is not an editing power.
+   */
+  onLeaveNoteAt?: (at: { x: number; y: number }) => void;
+  /**
+   * Placement mode: the next click chooses where a note goes.
+   *
+   * The path a touch screen has, since there is no right-click on a phone —
+   * and the discoverable one on a desktop, for anybody who never thinks to
+   * try the right mouse button.
+   */
+  notesArmed?: boolean;
 }
 
 function CanvasInner({
   graph, selectedNodeId, highlighted, problems, posts, activePath,
   onSelect, onMove, onConnect, onAddAfter, onDeleteNode, readOnly = false, fitSignal, focusNodeId = null, focusSignal = 0,
   editorSlot = null,
+  notesLayer = null,
+  onLeaveNoteAt,
+  notesArmed = false,
 }: FlowCanvasProps) {
   const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
@@ -271,7 +297,23 @@ function CanvasInner({
       onNodeClick={(_, node) => onSelect(node.id)}
       // Clicking empty canvas closes the inspector — the brief's rule that no
       // panel is permanently open.
-      onPaneClick={() => onSelect(null)}
+      onPaneClick={event => {
+        // Armed, this click is the placement rather than a deselect.
+        if (notesArmed && onLeaveNoteAt) {
+          onLeaveNoteAt(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+          return;
+        }
+        onSelect(null);
+      }}
+      // Right-clicking empty canvas offers to leave a note THERE. The point
+      // is converted to world coordinates here, at the moment of the click,
+      // because that is the only moment the screen position means anything.
+      onPaneContextMenu={event => {
+        if (!onLeaveNoteAt) return;
+        event.preventDefault();
+        const e = event as unknown as { clientX: number; clientY: number };
+        onLeaveNoteAt(screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+      }}
       proOptions={{ hideAttribution: true }}
       nodesDraggable={!readOnly}
       nodesConnectable={!readOnly}
@@ -281,9 +323,11 @@ function CanvasInner({
       minZoom={0.35}
       maxZoom={1.6}
       defaultEdgeOptions={{ type: 'drawn' }}
-      className="bg-[#F7F5F2]"
+      className={notesArmed ? 'bg-[#F7F5F2] cursor-crosshair' : 'bg-[#F7F5F2]'}
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />
+      {notesLayer}
+
       {editorSlot && selectedNodeId && (
         // React Flow's own anchored-element primitive: rendered in a portal
         // above the canvas, tracking the node through pan and drag WITHOUT

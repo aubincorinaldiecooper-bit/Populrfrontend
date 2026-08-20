@@ -1610,12 +1610,40 @@ export interface CanvasComment {
   at: string;
 }
 
+/**
+ * Where a note lives, as the canvas needs to draw it.
+ *
+ * A fraction of a step's card, or a point in the canvas's own coordinates.
+ * Which one it is, is told by `nodeId` rather than by a discriminator that
+ * could disagree with the numbers beside it.
+ */
+export type NoteAnchor =
+  | { relX: number; relY: number }
+  | { x: number; y: number };
+
+export function isOnNode(
+  anchor: NoteAnchor | null,
+): anchor is { relX: number; relY: number } {
+  return anchor !== null && 'relX' in anchor;
+}
+
 export interface CommentThread extends CanvasComment {
-  /** The step it is anchored to, or null for a comment about the whole
-   *  automation ("this opens too abruptly" is a real comment about no step). */
+  /** The step it belongs to. Null for a note about a place on the canvas —
+   *  and for a legacy note about the whole automation, which is told apart
+   *  by having no `at` either. Those can still be read; nothing creates them. */
   nodeId: string | null;
-  /** That step has since been deleted. The words stay; the anchor says so
-   *  rather than pointing at nothing. */
+  /**
+   * Where to draw it: a fraction of the step's card when nodeId is set,
+   * world coordinates when it isn't. Null only on a legacy note, which has
+   * no pin and lives in the index alone.
+   *
+   * Not `at` — that is inherited from CanvasComment and means WHEN it was
+   * said. One name for two facts cost a thread its timestamp.
+   */
+  place: NoteAnchor | null;
+  /** That step has since been deleted. Belt and braces: the server converts
+   *  such a note into a canvas note as the step goes, so this is only ever
+   *  true for a row orphaned outside that path. */
   nodeMissing: boolean;
   resolved: boolean;
   resolvedBy: Person | null;
@@ -1627,9 +1655,20 @@ export async function fetchComments(flowId: string): Promise<CommentThread[]> {
   return data.threads;
 }
 
+/**
+ * Leave a note, or reply to one.
+ *
+ * A new note carries where it goes; a reply carries only its parent and
+ * inherits the thread's place. There is no third shape — a note about the
+ * automation in general is refused, because a note nobody can find again is
+ * not feedback, it's a diary entry.
+ */
 export async function addComment(
   flowId: string,
-  input: { body: string; nodeId?: string | null; parentId?: string | null },
+  input:
+    | { body: string; nodeId: string; at: { relX: number; relY: number } }
+    | { body: string; at: { x: number; y: number } }
+    | { body: string; parentId: string },
 ): Promise<void> {
   await apiFetch(`/api/flows/${flowId}/comments`, { method: 'POST', body: input });
 }
