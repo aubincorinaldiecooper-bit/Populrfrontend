@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { isGuestView } from '../lib/access';
 import { resolveIdentity } from '../lib/identity';
+import { workspaceName } from '../lib/workspaceName';
 
 /**
  * The signed-in user's row in the sidebar, plus the menu its kebab opens.
@@ -54,7 +55,14 @@ export default function AccountMenu({
 
   // Whose workspace this is, when it isn't yours. Also the gate on Leave:
   // an owner has nothing to leave, and the server refuses it anyway.
-  const guestOf = isGuestView(workspaceAccess) ? workspaceAccess?.name ?? null : null;
+  //
+  // Through the name guard, and the gate is now the ROLE alone rather than
+  // the role and a non-empty name: whether somebody can leave a workspace has
+  // nothing to do with what it happens to be called, and hiding the way out
+  // because a label came back odd is the worst version of this bug.
+  const guestOf = isGuestView(workspaceAccess)
+    ? workspaceName(workspaceAccess?.name)
+    : null;
 
   const roleWord = (w: WorkspaceOption) =>
     w.role === 'owner' ? 'Yours' : w.role === 'canvas' ? 'Shared' : 'Joined';
@@ -157,7 +165,9 @@ export default function AccountMenu({
                   {/* A canvas grant is one automation, not a workspace — say
                       the automation's name, because that is the thing they
                       were given and the only thing they will find inside. */}
-                  {w.automation ? w.automation.name : w.name}
+                  {w.automation
+                    ? w.automation.name
+                    : workspaceName(w.name, { yours: w.role === 'owner' })}
                   {switching === keyOf(w) && ' …'}
                 </span>
                 <span className="font-label text-[10.5px] uppercase tracking-wider text-muted-foreground">
