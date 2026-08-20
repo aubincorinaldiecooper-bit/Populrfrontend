@@ -781,6 +781,7 @@ export default function AutomationBuilderPage() {
             }}
             onLeaveNote={armNote}
             sheet={narrowEditor}
+            loading={notes.loading}
           />
 
           <div className="flex items-center gap-0.5 pl-1">

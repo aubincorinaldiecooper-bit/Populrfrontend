@@ -31,6 +31,7 @@ export default function NotesIndex({
   onPick,
   onLeaveNote,
   sheet = false,
+  loading = false,
 }: {
   /** Unresolved first; resolved are behind the disclosure below. */
   threads: CommentThread[];
@@ -42,6 +43,8 @@ export default function NotesIndex({
   onLeaveNote: () => void;
   /** Narrow screens: from the bottom rather than out of the header. */
   sheet?: boolean;
+  /** The notes have not arrived yet — which is not the same as none. */
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
@@ -91,7 +94,19 @@ export default function NotesIndex({
         </button>
 
         <div className="max-h-[min(60vh,420px)] overflow-y-auto">
-          {shown.length === 0 ? (
+          {loading && shown.length === 0 ? (
+            /* "No notes yet" before they have arrived is a claim we cannot
+               make — and the one it makes is that nobody has said anything,
+               which is exactly the thing somebody opened this to find out. */
+            <div className="space-y-2 px-3 py-3" aria-busy="true" aria-label="Loading notes">
+              {[0, 1].map(row => (
+                <div key={row} className="space-y-1.5">
+                  <div className="h-2 w-24 rounded bg-[#F0EDE8]" />
+                  <div className="h-2 w-full rounded bg-[#F4F1EC]" />
+                </div>
+              ))}
+            </div>
+          ) : shown.length === 0 ? (
             <div className="px-3 py-6 text-center">
               <p className="text-[12.5px] font-medium text-[#111111]">No notes yet</p>
               <p className="mt-1 text-[11.5px] leading-relaxed text-[#6B6B6B]">

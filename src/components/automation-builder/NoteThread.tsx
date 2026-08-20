@@ -4,6 +4,7 @@ import Avatar from '../inbox/Avatar';
 import { displayName } from '../../lib/people';
 import { shortAgo } from '../../lib/builderNotifications';
 import { newNoteLabel, noteLabel } from '../../lib/notePlacement';
+import { GENERIC_ERROR, isCreatorSafe } from '../../lib/voice';
 import type { CanvasComment, CommentThread } from '../../lib/api';
 
 /**
@@ -139,6 +140,7 @@ export default function NoteThread({
 }) {
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   // Escape closes, like every other overlay in the builder. Bound on the card
@@ -156,10 +158,20 @@ export default function NoteThread({
     return () => el?.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  /**
+   * Every write in this thread goes through here, and every one of them can
+   * fail. Saying nothing was the old behaviour: the button un-pressed itself
+   * and the reply simply never appeared, which reads as the app losing what
+   * you said rather than the network refusing it.
+   */
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
+    setFailed(null);
     try {
       await action();
+    } catch (error) {
+      const said = error instanceof Error ? error.message : null;
+      setFailed(isCreatorSafe(said) ? said : GENERIC_ERROR);
     } finally {
       setBusy(false);
     }
@@ -236,6 +248,12 @@ export default function NoteThread({
         )}
       </div>
 
+      {failed && (
+        <p role="alert" className="border-t border-[#F0EDE8] px-3 py-2 text-[11.5px] text-[#B45309]">
+          {failed}
+        </p>
+      )}
+
       <form
         className="border-t border-[#F0EDE8] p-2.5"
         onSubmit={e => {
@@ -308,7 +326,10 @@ export function NoteComposer({ where, onSubmit, onCancel, presentation = 'floati
         setBusy(true);
         setError(null);
         onSubmit(text)
-          .catch(err => setError(err instanceof Error ? err.message : "Couldn't leave that note."))
+          .catch(err => {
+            const said = err instanceof Error ? err.message : null;
+            setError(isCreatorSafe(said) ? said : GENERIC_ERROR);
+          })
           .finally(() => setBusy(false));
       }}
     >
@@ -359,7 +380,7 @@ export function NoteComposer({ where, onSubmit, onCancel, presentation = 'floati
             Leave note
           </button>
         </NoteField>
-        {error && <p className="mt-1.5 text-[11.5px] text-[#B45309]">{error}</p>}
+        {error && <p role="alert" className="mt-1.5 text-[11.5px] text-[#B45309]">{error}</p>}
       </div>
     </form>
   );
