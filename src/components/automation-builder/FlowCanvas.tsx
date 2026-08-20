@@ -88,6 +88,20 @@ export interface FlowCanvasProps {
    * what travels when the canvas is rearranged.
    */
   onLeaveNoteOnNode?: (nodeId: string, at: { relX: number; relY: number }) => void;
+  /**
+   * Other people's pointers, drawn over the canvas. A layer rather than a
+   * prop-per-cursor for the same reason as the notes: the canvas supplies the
+   * viewport and owns nothing else about them.
+   */
+  cursorsLayer?: React.ReactNode;
+  /**
+   * Where this session's pointer is, in WORLD coordinates — converted here,
+   * because this is the only place that knows the viewport. Called on every
+   * pointer move; the throttle belongs to whoever is sending them.
+   */
+  onPointerAt?: (at: { x: number; y: number }) => void;
+  /** This session's pointer left the canvas. */
+  onPointerAway?: () => void;
 }
 
 function CanvasInner({
@@ -98,6 +112,9 @@ function CanvasInner({
   onLeaveNoteAt,
   notesArmed = false,
   onLeaveNoteOnNode,
+  cursorsLayer = null,
+  onPointerAt,
+  onPointerAway,
 }: FlowCanvasProps) {
   const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
@@ -356,8 +373,25 @@ function CanvasInner({
       current.position === position && current.align === align ? current : { position, align });
   }, [selectedNodeId, graph.nodes, viewportTick, flowToScreenPosition, screenToFlowPosition, getViewport]);
 
+  /**
+   * This session's pointer, in the canvas's own space.
+   *
+   * Converted here and nowhere else: a cursor has to mean a place on the
+   * automation rather than a place on somebody's screen, or two people at
+   * different zoom levels would disagree about where a third is pointing.
+   */
+  const reportPointer = useCallback((event: React.PointerEvent) => {
+    if (!onPointerAt) return;
+    onPointerAt(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  }, [onPointerAt, screenToFlowPosition]);
+
   return (
-    <div ref={host} className="h-full w-full">
+    <div
+      ref={host}
+      className="h-full w-full"
+      onPointerMove={onPointerAt ? reportPointer : undefined}
+      onPointerLeave={onPointerAway}
+    >
     <ReactFlow
       nodes={nodes}
       edges={edges}
@@ -406,6 +440,7 @@ function CanvasInner({
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />
       {notesLayer}
+      {cursorsLayer}
 
       {editorSlot && selectedNodeId && (
         // React Flow's own anchored-element primitive: rendered in a portal

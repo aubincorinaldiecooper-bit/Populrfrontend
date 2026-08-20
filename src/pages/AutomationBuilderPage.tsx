@@ -8,6 +8,8 @@ import { isOwnerView, canEditAutomations } from '../lib/access';
 import ShareAutomation from '../components/automation-builder/ShareAutomation';
 import NotesIndex from '../components/automation-builder/NotesIndex';
 import CanvasNotesLayer from '../components/automation-builder/CanvasNotesLayer';
+import CanvasCursorsLayer from '../components/automation-builder/CanvasCursorsLayer';
+import { useLiveCursors } from '../components/automation-builder/useLiveCursors';
 import NoteThread, { NoteComposer } from '../components/automation-builder/NoteThread';
 import { useCanvasNotes, usePlacing, type Placement } from '../components/automation-builder/useCanvasNotes';
 import { newNoteLabel, noteLabel, placeLabel } from '../lib/notePlacement';
@@ -158,6 +160,11 @@ export default function AutomationBuilderPage() {
      `panel`: the AI owns the right-hand column, and notes must never become
      a second one — the index is a popover and a thread is an overlay, so
      the canvas keeps its width whatever the notes are doing. */
+  /* Other people's pointers. Not part of `panel` or of notes: this is not a
+     surface a creator opens, it is the room being visibly occupied. Costs
+     nothing when nobody else is here, and nothing at all when the socket
+     cannot connect. */
+  const cursors = useLiveCursors(flowId);
   const notes = useCanvasNotes(flowId);
   const { placing, arm: armNote, place: placeNote, cancel: cancelNote } = usePlacing();
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
@@ -923,6 +930,9 @@ export default function AutomationBuilderPage() {
               cards={!narrowEditor}
             />
           }
+          cursorsLayer={<CanvasCursorsLayer cursors={cursors.cursors} />}
+          onPointerAt={cursors.report}
+          onPointerAway={cursors.leftCanvas}
           fitSignal={fitSignal}
           focusNodeId={focus.nodeId || null}
           focusSignal={focus.signal}
