@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   activateFlow, commitProposal, discardProposal, fetchActiveProposal, fetchFlow,
   fetchFlowAiMessages, fetchFlowValidation, pauseFlow, proposeFlow, updateFlow,
+  FlowConflictError,
   ApiError, FlowNotReadyError,
   type AutomationFlow, type ComposerProgressEvent, type FlowAiMessage, type FlowProblem,
   type FlowProposal,
@@ -86,6 +87,13 @@ export const HIGHLIGHT_MS = 2600;
 
 export function useFlowBuilder(flowId: string | null) {
   const [flow, setFlow] = useState<AutomationFlow | null>(null);
+  /**
+   * The version the server last confirmed, in a ref rather than read off
+   * `flow` at save time — the save loop drains a queue and would otherwise
+   * send the same stale number for every item in it, refusing its own writes
+   * from the second one onward.
+   */
+  const versionRef = useRef<number | null>(null);
   const [graph, setGraph] = useState<FlowGraph>(emptyGraph());
   const [name, setName] = useState('New automation');
   const [loading, setLoading] = useState(true);
@@ -93,6 +101,17 @@ export function useFlowBuilder(flowId: string | null) {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  /**
+   * Somebody else saved while this creator was working, and the server
+   * declined the write rather than letting it land on top.
+   *
+   * Held separately from saveState's 'error' because the two need different
+   * words and different offers: an error is "that didn't go through, it will
+   * try again", and this is "your version and theirs have come apart, pick
+   * one". Autosave stops while it is set — retrying would just be refused
+   * again, every few seconds, forever.
+   */
+  const [conflict, setConflict] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   /**
    * Set when the last save reached Populr but not Instagram — the automation
@@ -217,6 +236,7 @@ export function useFlowBuilder(flowId: string | null) {
       .then(loaded => {
         if (cancelled) return;
         setFlow(loaded);
+        versionRef.current = loaded.version;
         setName(loaded.name);
         // An imported or AI-built graph arrives with no meaningful positions;
         // laying it out on open is what makes it readable at a glance. A graph
@@ -266,6 +286,7 @@ export function useFlowBuilder(flowId: string | null) {
 
     saving.current = true;
     setSaveState('saving');
+    setConflict(null);
     let resolveRun: () => void = () => {};
     saveRun.current = new Promise<void>(resolve => { resolveRun = resolve; });
     // Drain rather than recurse: whatever arrived while a save was in flight
@@ -275,8 +296,16 @@ export function useFlowBuilder(flowId: string | null) {
     try {
       let warning: string | undefined;
       while (current) {
-        const updated = await updateFlow(flowId, { graph: current.graph, name: current.name });
+        // The version this client believes the server holds. Kept current by
+        // setFlow below on every accepted write, so a run of saves does not
+        // start refusing itself.
+        const updated = await updateFlow(flowId, {
+          graph: current.graph,
+          name: current.name,
+          expectedVersion: versionRef.current ?? undefined,
+        });
         setFlow(updated.flow);
+        versionRef.current = updated.flow.version;
         warning = updated.delegationWarning;
         current = pending.current;
         pending.current = null;
@@ -292,10 +321,19 @@ export function useFlowBuilder(flowId: string | null) {
       // asking any earlier would validate the previous graph.
       void refreshValidation();
     } catch (err) {
-      // Deliberately surfaced. "Autosaved just now" is a promise, and a failed
-      // save that shows nothing is the one way this UI can lie to a creator.
-      setSaveState('error');
-      console.error('[builder] autosave failed', err);
+      if (err instanceof FlowConflictError) {
+        // Not a failure — a refusal, and the right answer is a choice rather
+        // than a retry. Anything queued behind this save is dropped: it was
+        // written against a version the server has moved past.
+        pending.current = null;
+        setConflict(err.message);
+        setSaveState('idle');
+      } else {
+        // Deliberately surfaced. "Autosaved just now" is a promise, and a failed
+        // save that shows nothing is the one way this UI can lie to a creator.
+        setSaveState('error');
+        console.error('[builder] autosave failed', err);
+      }
     } finally {
       saving.current = false;
       saveRun.current = null;
@@ -304,13 +342,48 @@ export function useFlowBuilder(flowId: string | null) {
   }, [flowId, refreshValidation]);
 
   useEffect(() => {
-    if (!dirty.current || !flowId) return;
+    // Not while the versions are apart: every attempt would be refused again,
+    // once every few seconds, until somebody chose. The choice is the fix.
+    if (!dirty.current || !flowId || conflict) return;
     const timer = setTimeout(() => {
       dirty.current = false;
       void persist({ graph, name });
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [graph, name, flowId, persist]);
+  }, [graph, name, flowId, persist, conflict]);
+
+  /**
+   * Take their version. The local edits go — which is the honest cost of the
+   * choice, and why the other one exists.
+   */
+  const takeTheirs = useCallback(async () => {
+    if (!flowId) return;
+    const loaded = await fetchFlow(flowId);
+    setFlow(loaded);
+    versionRef.current = loaded.version;
+    setName(loaded.name);
+    setGraph(needsLayout(loaded.graph) ? layoutGraph(loaded.graph) : loaded.graph);
+    dirty.current = false;
+    setConflict(null);
+    setSaveState('idle');
+    void refreshValidation();
+  }, [flowId, refreshValidation]);
+
+  /**
+   * Keep mine, on top of theirs. Their edit is in the automation's history
+   * either way, and the next person to save will be told the same thing this
+   * creator was just told — which is the whole point of the guard.
+   */
+  const keepMine = useCallback(async () => {
+    if (!flowId) return;
+    // Ask the server what it holds now, then write against that, so this is
+    // a deliberate overwrite rather than another refusal.
+    const loaded = await fetchFlow(flowId);
+    versionRef.current = loaded.version;
+    setConflict(null);
+    dirty.current = false;
+    await persist({ graph, name });
+  }, [flowId, persist, graph, name]);
 
   // -------------------------------------------------------------- editing
   const pushUndo = useCallback((snapshot: { graph: FlowGraph; name: string }) => {
@@ -533,6 +606,7 @@ export function useFlowBuilder(flowId: string | null) {
       }
       pushUndo(before);
       setFlow(result.flow);
+      versionRef.current = result.flow.version;
       setName(result.flow.name);
       // The server saved this graph itself; the layout pass is the only
       // local change and must not mark the builder dirty.
@@ -618,6 +692,7 @@ export function useFlowBuilder(flowId: string | null) {
     try {
       const result = await activateFlow(flowId);
       setFlow(result.flow);
+      versionRef.current = result.flow.version;
       setProblems([]);
       // Activation registers the automation with the platform afresh, so any
       // earlier complaint — an edit that hadn't reached it, a pause it never
@@ -652,6 +727,7 @@ export function useFlowBuilder(flowId: string | null) {
     flow, graph, name, loading, loadError,
     selectedNodeId, setSelectedNodeId,
     saveState, savedAt, delegationWarning,
+    conflict, takeTheirs, keepMine,
     composing, changeCard, setChangeCard, editsSinceCard,
     activity, highlighted, history, historyHasMore, loadEarlierHistory,
     problems, refreshValidation,

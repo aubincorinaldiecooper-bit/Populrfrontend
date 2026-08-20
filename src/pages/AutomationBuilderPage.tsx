@@ -8,7 +8,11 @@ import { isOwnerView, canEditAutomations } from '../lib/access';
 import ShareAutomation from '../components/automation-builder/ShareAutomation';
 import NotesIndex from '../components/automation-builder/NotesIndex';
 import CanvasNotesLayer from '../components/automation-builder/CanvasNotesLayer';
-import { useCanvasNotes, usePlacing } from '../components/automation-builder/useCanvasNotes';
+import CanvasCursorsLayer from '../components/automation-builder/CanvasCursorsLayer';
+import { useLiveCursors } from '../components/automation-builder/useLiveCursors';
+import NoteThread, { NoteComposer } from '../components/automation-builder/NoteThread';
+import { useCanvasNotes, usePlacing, type Placement } from '../components/automation-builder/useCanvasNotes';
+import { newNoteLabel, noteLabel, placeLabel } from '../lib/notePlacement';
 import CollaboratorFacepile from '../components/automation-builder/CollaboratorFacepile';
 import { useFlowBuilder, type ChangeCard } from '../components/automation-builder/useFlowBuilder';
 import { useAccountPosts } from '../components/automation-builder/useAccountPosts';
@@ -127,6 +131,7 @@ export default function AutomationBuilderPage() {
     saveState, savedAt, delegationWarning, composing, changeCard,
     editsSinceCard, activity, highlighted, history, historyHasMore, loadEarlierHistory,
     proposal, proposalTrace, committing, proposalError, confirmProposal, discardDraft,
+    conflict, takeTheirs, keepMine,
     problems, refreshValidation, updateNodeConfig, moveNode, addNode, deleteNode,
     connectNodes, rename, compose, undo, canUndo, activate, pause, commitGraph,
   } = builder;
@@ -155,6 +160,11 @@ export default function AutomationBuilderPage() {
      `panel`: the AI owns the right-hand column, and notes must never become
      a second one — the index is a popover and a thread is an overlay, so
      the canvas keeps its width whatever the notes are doing. */
+  /* Other people's pointers. Not part of `panel` or of notes: this is not a
+     surface a creator opens, it is the room being visibly occupied. Costs
+     nothing when nobody else is here, and nothing at all when the socket
+     cannot connect. */
+  const cursors = useLiveCursors(flowId);
   const notes = useCanvasNotes(flowId);
   const { placing, arm: armNote, place: placeNote, cancel: cancelNote } = usePlacing();
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
@@ -165,6 +175,7 @@ export default function AutomationBuilderPage() {
     },
     [graph.nodes],
   );
+  const openNote = openNoteId ? notes.threads.find(t => t.id === openNoteId) ?? null : null;
   const [question, setQuestion] = useState<(BuilderQuestion & {
     id: string; nodeId: string; sourceMessage: string;
   }) | null>(null);
@@ -265,6 +276,46 @@ export default function AutomationBuilderPage() {
     // the sidebar's width plus a constant, so a stale query would be
     // watching a line that has moved.
   }, [sidebarWidth]);
+
+  /* Notes, on a screen too narrow to float a card beside a pin: the thread
+     arrives from the bottom instead. That is the same place the step editor
+     goes, and two sheets cannot share it — so opening or starting a note
+     stands the editor down. The note is the thing that was just asked for. */
+  const showNote = useCallback((id: string | null) => {
+    setOpenNoteId(id);
+    if (id && narrowEditor) setSelectedNodeId(null);
+  }, [narrowEditor, setSelectedNodeId]);
+  const startNote = useCallback((placement: Placement) => {
+    setOpenNoteId(null);
+    if (narrowEditor) setSelectedNodeId(null);
+    placeNote(placement);
+  }, [narrowEditor, placeNote, setSelectedNodeId]);
+  /* And the mirror: choosing a step is asking for the editor, so a note that
+     was open steps aside. Cleared rather than hidden — a note that came back
+     when the editor closed would be the ghost of a gesture the creator had
+     already finished with. Every path that selects a step goes through here,
+     which is the point of it being a function rather than three copies. */
+  const selectStep = useCallback((id: string | null) => {
+    setSelectedNodeId(id);
+    if (id && narrowEditor) {
+      setOpenNoteId(null);
+      cancelNote();
+    }
+  }, [narrowEditor, setSelectedNodeId, cancelNote]);
+  // A const rather than `placing.at` read twice: what a note will be attached
+  // to has to be said before a word is typed, and the same answer has to
+  // label the sheet and head the composer inside it.
+  const composingNote = placing.at;
+  const placingLabel = composingNote && 'nodeId' in composingNote
+    ? stepLabel(composingNote.nodeId) ?? 'On a step'
+    : 'On the canvas';
+  /* The bottom of a narrow screen holds exactly one thing, and these two are
+     the only claimants. Written as a pair so the exclusivity is a property of
+     the code rather than of every call site remembering to clear the other:
+     the step editor wins a tie, because reaching it means a step was selected,
+     and selecting a step is the more recent gesture. */
+  const stepSheet = narrowEditor && selectedNode !== null;
+  const noteSheet = narrowEditor && !stepSheet && (composingNote !== null || openNote !== null);
 
   /**
    * The question actually on screen.
@@ -423,7 +474,7 @@ export default function AutomationBuilderPage() {
   const openNotification = useCallback((notification: BuilderNotification) => {
     setHighlightId(notification.id);
     if (!notification.nodeId) return;
-    setSelectedNodeId(notification.nodeId);
+    selectStep(notification.nodeId);
     setFocus(current => ({ nodeId: notification.nodeId!, signal: current.signal + 1 }));
     setQuestion(
       notification.kind === 'question'
@@ -442,7 +493,7 @@ export default function AutomationBuilderPage() {
     // Otherwise the step wins: they clicked to go somewhere, and the place
     // they landed matters more than the list they left.
     if (!roomForBothColumns(sidebarWidth)) setPanel(null);
-  }, [setSelectedNodeId, sidebarWidth]);
+  }, [selectStep, sidebarWidth]);
 
   useEffect(() => {
     if (!bellAttention) return;
@@ -542,8 +593,8 @@ export default function AutomationBuilderPage() {
       kind: 'comment', allPosts: true, matchMode: 'any',
       accountId: firstConnected?.id ?? null, platform: firstConnected?.platform ?? null,
     });
-    setSelectedNodeId(id);
-  }, [addNode, accounts, setSelectedNodeId]);
+    selectStep(id);
+  }, [addNode, accounts, selectStep]);
 
   /** Remove a step, restorable from the toast. The snapshot is captured HERE
    *  and restored verbatim — the generic undo would pop whatever is newest on
@@ -734,9 +785,11 @@ export default function AutomationBuilderPage() {
               if (thread.nodeId) {
                 setFocus(current => ({ nodeId: thread.nodeId!, signal: current.signal + 1 }));
               }
-              setOpenNoteId(thread.id);
+              showNote(thread.id);
             }}
             onLeaveNote={armNote}
+            sheet={narrowEditor}
+            loading={notes.loading}
           />
 
           <div className="flex items-center gap-0.5 pl-1">
@@ -779,6 +832,35 @@ export default function AutomationBuilderPage() {
           automation talks to. Not a toast: autosave fires on every pause in
           typing, and this is a condition that lasts until the edit is one
           Instagram will accept, not an event. */}
+      {/* Two versions of this automation have come apart, and until somebody
+          chooses, nothing this creator types is being saved. Not a toast —
+          a toast that scrolls away takes the only two ways out with it. */}
+      {conflict && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#F0D9A8]
+            bg-[#FEF7E6] px-4 md:px-6 py-2.5 text-[13px] text-[#7A5A12]"
+        >
+          <AlertTriangle size={15} className="flex-shrink-0 text-[#B8860B]" />
+          <p className="flex-1 min-w-[16rem]">{conflict}</p>
+          <span className="flex flex-shrink-0 items-center gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => void takeTheirs()}>
+              Load their version
+            </Button>
+            {/* Second, and quieter: it is the one that costs somebody else
+                their edit, so it should not be the easy one to hit. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void keepMine()}
+              className="text-[#7A5A12] hover:bg-[#F7ECD4]"
+            >
+              Keep mine
+            </Button>
+          </span>
+        </div>
+      )}
+
       {delegationWarning && (
         <div
           role="status"
@@ -801,7 +883,7 @@ export default function AutomationBuilderPage() {
           posts={posts}
           activePath={testResult?.steps.map(s => s.nodeId) ?? []}
           onSelect={id => {
-            setSelectedNodeId(id);
+            selectStep(id);
             setAddMenu(null);
             // The mirror of togglePanel: picking a step is choosing the other
             // context, so the whole-automation panel steps aside. The feed and
@@ -822,8 +904,9 @@ export default function AutomationBuilderPage() {
           // Leaving a note is NOT an editing power, so this is offered
           // whatever readOnly says — that is the whole point of a seat that
           // can look but not change.
-          onLeaveNoteAt={at => { setOpenNoteId(null); placeNote({ at }); }}
+          onLeaveNoteAt={at => startNote({ at })}
           notesArmed={placing.arming}
+          onLeaveNoteOnNode={(nodeId, at) => startNote({ nodeId, at })}
           notesLayer={
             <CanvasNotesLayer
               threads={notes.threads}
@@ -832,7 +915,7 @@ export default function AutomationBuilderPage() {
               composing={placing.at}
               stepLabel={stepLabel}
               maySettle={notes.maySettle}
-              onOpen={setOpenNoteId}
+              onOpen={showNote}
               onReply={notes.reply}
               onSettle={notes.settle}
               onDelete={notes.remove}
@@ -841,8 +924,15 @@ export default function AutomationBuilderPage() {
                 cancelNote();
               }}
               onCancelCompose={cancelNote}
+              // Narrow: the pins stay on the canvas, the conversation moves
+              // to a sheet. A 300px card floating beside a pin needs a canvas
+              // there is room to look at.
+              cards={!narrowEditor}
             />
           }
+          cursorsLayer={<CanvasCursorsLayer cursors={cursors.cursors} />}
+          onPointerAt={cursors.report}
+          onPointerAway={cursors.leftCanvas}
           fitSignal={fitSignal}
           focusNodeId={focus.nodeId || null}
           focusSignal={focus.signal}
@@ -859,7 +949,7 @@ export default function AutomationBuilderPage() {
           // swaps the sheet, tapping empty canvas closes it. Base UI still
           // gives it Escape, focus return, and a real dialog role.
           modal={false}
-          open={narrowEditor && selectedNode !== null}
+          open={stepSheet}
           onOpenChange={next => { if (!next) setSelectedNodeId(null); }}
         >
           <SheetContent
@@ -871,6 +961,59 @@ export default function AutomationBuilderPage() {
           >
             <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
             {editorFor('sheet')}
+          </SheetContent>
+        </Sheet>
+
+        {/* And the same for a note. The pin stays where the feedback was
+            left — that never changes — but the conversation comes to the
+            bottom of the screen instead of floating beside a pin on a canvas
+            there is no room to read. Same thread, same composer, same
+            everything inside; only the container is different. */}
+        <Sheet
+          modal={false}
+          open={noteSheet}
+          onOpenChange={next => {
+            if (next) return;
+            setOpenNoteId(null);
+            cancelNote();
+          }}
+        >
+          <SheetContent
+            side="bottom"
+            backdrop={false}
+            aria-label={
+              composingNote
+                ? newNoteLabel(placingLabel)
+                : openNote
+                  ? noteLabel(openNote, placeLabel(openNote, stepLabel))
+                  : 'Note'
+            }
+            className="z-40 rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]
+              shadow-[0_-8px_28px_rgba(17,17,17,0.14)]"
+          >
+            <div aria-hidden className="mx-auto my-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
+            {composingNote ? (
+              <NoteComposer
+                presentation="sheet"
+                where={placingLabel}
+                onSubmit={async body => {
+                  await notes.leave(composingNote, body);
+                  cancelNote();
+                }}
+                onCancel={cancelNote}
+              />
+            ) : openNote ? (
+              <NoteThread
+                presentation="sheet"
+                thread={openNote}
+                where={placeLabel(openNote, stepLabel)}
+                maySettle={notes.maySettle(openNote)}
+                onReply={body => notes.reply(openNote.id, body)}
+                onSettle={resolved => notes.settle(openNote.id, resolved)}
+                onDelete={notes.remove}
+                onClose={() => setOpenNoteId(null)}
+              />
+            ) : null}
           </SheetContent>
         </Sheet>
 

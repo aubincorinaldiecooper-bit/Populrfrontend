@@ -26,6 +26,13 @@ const TECHNICAL =
  *  hint is Populr talking; POPULR_FRONTEND_URL never is. */
 const IDENTIFIER = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
 
+/** And a long bare run of capitals, which is the OTHER shape an error code
+ *  wears — ECONNREFUSED, ETIMEDOUT, ENOTFOUND carry no underscore and walked
+ *  straight through the rule above. Five is the threshold because the words
+ *  Populr actually shouts are short and real: DM, X, AI, URL. Nothing this
+ *  product says to a creator is five capitals in a row. */
+const SHOUTED_CODE = /\b[A-Z]{5,}\b/;
+
 /** The one sentence that stands in when a message can't be shown. */
 export const GENERIC_ERROR = "Couldn't finish that. Try again in a moment.";
 
@@ -39,6 +46,7 @@ export function isCreatorSafe(text: string | null | undefined): text is string {
     text.trim().length > 0 &&
     text.length <= 240 &&
     !TECHNICAL.test(text) &&
-    !IDENTIFIER.test(text)
+    !IDENTIFIER.test(text) &&
+    !SHOUTED_CODE.test(text)
   );
 }

@@ -64,10 +64,24 @@ describe('isCreatorSafe', () => {
     ]) {
       expect(isCreatorSafe(text), text).toBe(false);
     }
+    // The OTHER shape an error code wears: no underscore, so the rule above
+    // never saw it. These reached a creator's screen through both filters.
+    for (const text of [
+      'ECONNREFUSED 10.0.0.4:5432',
+      'ETIMEDOUT while reaching the service',
+      'ENOTFOUND',
+    ]) {
+      expect(isCreatorSafe(text), text).toBe(false);
+    }
     // The near-misses that must stay Populr's to say: a single all-caps
     // word is a word, and a lowercase template variable is a hint.
     for (const text of [
       'Reply sent on DM.',
+      // Short shouts are words this product actually says. The threshold is
+      // five, and these are the ones that have to stay under it.
+      "X doesn't support automated DMs.",
+      'Paste the URL here.',
+      'Ask AI to draft it.',
       'Use {first_name} to greet them by name.',
       "Invites aren't set up on this server yet.",
     ]) {

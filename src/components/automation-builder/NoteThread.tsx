@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, MapPin, RotateCcw, Trash2, X } from 'lucide-react';
+import { ArrowUp, Check, Loader2, MapPin, RotateCcw, Trash2, X } from 'lucide-react';
 import Avatar from '../inbox/Avatar';
 import { displayName } from '../../lib/people';
 import { shortAgo } from '../../lib/builderNotifications';
+import { newNoteLabel, noteLabel } from '../../lib/notePlacement';
+import { GENERIC_ERROR, isCreatorSafe } from '../../lib/voice';
 import type { CanvasComment, CommentThread } from '../../lib/api';
 
 /**
@@ -15,9 +17,65 @@ import type { CanvasComment, CommentThread } from '../../lib/api';
  *
  * Resolve sits in the header rather than beside Reply, because resolving ends
  * the conversation — it is not one of the things you say in it.
+ *
+ * On a narrow screen the same thread arrives in a bottom sheet instead, which
+ * is what `presentation` selects. Only the container changes: a canvas a
+ * thumb can barely pan is no place to float a 300px card beside a pin, but
+ * the conversation inside it is the same object either way.
  */
 
 const MAX_LENGTH = 2000;
+
+/** Where a thread is drawn: beside its pin, or in a sheet from the bottom. */
+export type NotePresentation = 'floating' | 'sheet';
+
+/**
+ * The block you type into.
+ *
+ * The same shape the AI composer already uses: a filled, bordered field with
+ * its controls on a row inside it, rather than a bare textarea with a button
+ * floating underneath. Clicking anywhere in the block focuses the text, which
+ * is most of the difference between a control and a decorated box.
+ */
+function NoteField({ id, label, placeholder, value, rows, disabled, autoFocus, onChange, children }: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  rows: number;
+  disabled: boolean;
+  autoFocus?: boolean;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  const field = useRef<HTMLTextAreaElement>(null);
+  return (
+    <div
+      role="presentation"
+      onClick={() => field.current?.focus()}
+      className="cursor-text rounded-xl border border-[#E8E4DF] bg-[#FAF9F7] p-2
+        transition-[border-color,background-color] duration-150
+        focus-within:border-[#D8D3CC] focus-within:bg-white"
+    >
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <textarea
+        ref={field}
+        id={id}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        maxLength={MAX_LENGTH}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        className="block w-full resize-none border-0 bg-transparent p-0 text-[12.5px]
+          leading-relaxed text-[#111111] placeholder:text-[#A39E97]
+          focus:outline-none focus:ring-0 disabled:opacity-60"
+      />
+      <div className="mt-1.5 flex items-center justify-end gap-1.5">{children}</div>
+    </div>
+  );
+}
 
 function Said({ comment, onDelete, busy }: {
   comment: CanvasComment;
@@ -68,6 +126,7 @@ export default function NoteThread({
   onSettle,
   onDelete,
   onClose,
+  presentation = 'floating',
 }: {
   thread: CommentThread;
   /** What this note is about, in the builder's own words. */
@@ -77,9 +136,11 @@ export default function NoteThread({
   onSettle: (resolved: boolean) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
   onClose: () => void;
+  presentation?: NotePresentation;
 }) {
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   // Escape closes, like every other overlay in the builder. Bound on the card
@@ -97,22 +158,38 @@ export default function NoteThread({
     return () => el?.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  /**
+   * Every write in this thread goes through here, and every one of them can
+   * fail. Saying nothing was the old behaviour: the button un-pressed itself
+   * and the reply simply never appeared, which reads as the app losing what
+   * you said rather than the network refusing it.
+   */
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
+    setFailed(null);
     try {
       await action();
+    } catch (error) {
+      const said = error instanceof Error ? error.message : null;
+      setFailed(isCreatorSafe(said) ? said : GENERIC_ERROR);
     } finally {
       setBusy(false);
     }
   };
 
+  const floating = presentation === 'floating';
+
   return (
     <div
       ref={box}
-      role="dialog"
-      aria-label={`Note from ${thread.you ? 'you' : displayName(thread.by)} · ${where}`}
-      className="w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
-        shadow-[0_10px_34px_rgba(17,17,17,0.14)]"
+      // In a sheet the surface, the label and the dialog role all belong to
+      // the sheet — a second dialog inside the first would announce a room
+      // inside a room to anyone listening rather than looking.
+      {...(floating ? { role: 'dialog', 'aria-label': noteLabel(thread, where) } : {})}
+      className={floating
+        ? `w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
+           shadow-[0_10px_34px_rgba(17,17,17,0.14)]`
+        : 'w-full'}
     >
       <div className="flex items-center justify-between border-b border-[#F0EDE8] px-3 py-2">
         <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-[#6B6B6B]">
@@ -146,7 +223,7 @@ export default function NoteThread({
         </span>
       </div>
 
-      <div className="max-h-[280px] space-y-3 overflow-y-auto p-3">
+      <div className={`space-y-3 overflow-y-auto p-3 ${floating ? 'max-h-[280px]' : 'max-h-[42vh]'}`}>
         <Said
           comment={thread}
           busy={busy}
@@ -171,6 +248,12 @@ export default function NoteThread({
         )}
       </div>
 
+      {failed && (
+        <p role="alert" className="border-t border-[#F0EDE8] px-3 py-2 text-[11.5px] text-[#B45309]">
+          {failed}
+        </p>
+      )}
+
       <form
         className="border-t border-[#F0EDE8] p-2.5"
         onSubmit={e => {
@@ -183,27 +266,30 @@ export default function NoteThread({
           });
         }}
       >
-        <label htmlFor={`reply-${thread.id}`} className="sr-only">Reply to this note</label>
-        <textarea
+        <NoteField
           id={`reply-${thread.id}`}
-          value={reply}
-          onChange={e => setReply(e.target.value)}
+          label="Reply to this note"
           placeholder="Reply…"
+          value={reply}
           rows={2}
-          maxLength={MAX_LENGTH}
           disabled={busy}
-          className="w-full resize-none text-[12.5px]"
-        />
-        <div className="mt-1.5 flex justify-end">
+          onChange={setReply}
+        >
+          {/* An arrow rather than a word: replying is the repeated action in
+              an open conversation, and by the second one nobody is reading
+              the button. Leaving a NEW note keeps its word — see below. */}
           <button
             type="submit"
             disabled={busy || reply.trim().length === 0}
-            className="rounded-lg bg-[#111111] px-2.5 py-1 text-[11.5px] font-medium text-white
-              disabled:opacity-40"
+            aria-label="Reply"
+            className="flex size-7 items-center justify-center rounded-lg bg-[#111111] text-white
+              transition-[background-color,color,transform] duration-200
+              enabled:active:scale-[0.96]
+              disabled:cursor-default disabled:bg-[#EDE9E4] disabled:text-[#B0AAA2]"
           >
-            Reply
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={14} strokeWidth={2.4} />}
           </button>
-        </div>
+        </NoteField>
       </form>
     </div>
   );
@@ -215,21 +301,24 @@ export default function NoteThread({
  * Same silhouette as a thread, opening at the place just chosen, so leaving a
  * note and reading one feel like the same object rather than two features.
  */
-export function NoteComposer({ where, onSubmit, onCancel }: {
+export function NoteComposer({ where, onSubmit, onCancel, presentation = 'floating' }: {
   where: string;
   onSubmit: (body: string) => Promise<void>;
   onCancel: () => void;
+  presentation?: NotePresentation;
 }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const floating = presentation === 'floating';
 
   return (
     <form
-      role="dialog"
-      aria-label={`New note · ${where}`}
-      className="w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
-        shadow-[0_10px_34px_rgba(17,17,17,0.14)]"
+      {...(floating ? { role: 'dialog', 'aria-label': newNoteLabel(where) } : {})}
+      className={floating
+        ? `w-[300px] overflow-hidden rounded-2xl border border-[#E8E4DF] bg-white
+           shadow-[0_10px_34px_rgba(17,17,17,0.14)]`
+        : 'w-full'}
       onSubmit={e => {
         e.preventDefault();
         const text = body.trim();
@@ -237,7 +326,10 @@ export function NoteComposer({ where, onSubmit, onCancel }: {
         setBusy(true);
         setError(null);
         onSubmit(text)
-          .catch(err => setError(err instanceof Error ? err.message : "Couldn't leave that note."))
+          .catch(err => {
+            const said = err instanceof Error ? err.message : null;
+            setError(isCreatorSafe(said) ? said : GENERIC_ERROR);
+          })
           .finally(() => setBusy(false));
       }}
     >
@@ -256,20 +348,20 @@ export function NoteComposer({ where, onSubmit, onCancel }: {
         </button>
       </div>
       <div className="p-2.5">
-        <label htmlFor="new-note" className="sr-only">Your note</label>
-        <textarea
+        <NoteField
           id="new-note"
-          value={body}
-          onChange={e => { setBody(e.target.value); setError(null); }}
+          label="Your note"
           placeholder="What about this?"
+          value={body}
           rows={3}
-          maxLength={MAX_LENGTH}
-          autoFocus
           disabled={busy}
-          className="w-full resize-none text-[12.5px]"
-        />
-        {error && <p className="mt-1.5 text-[11.5px] text-[#B45309]">{error}</p>}
-        <div className="mt-2 flex justify-end gap-1.5">
+          autoFocus
+          onChange={value => { setBody(value); setError(null); }}
+        >
+          {/* This one keeps its word. It is the first thing said rather than
+              the next thing, it commits a note that did not exist, and it
+              sits beside a Cancel — an arrow next to "Cancel" reads as a
+              direction rather than a decision. */}
           <button
             type="button"
             onClick={onCancel}
@@ -280,13 +372,15 @@ export function NoteComposer({ where, onSubmit, onCancel }: {
           <button
             type="submit"
             disabled={busy || body.trim().length === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#111111] px-2.5 py-1
-              text-[11.5px] font-medium text-white disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#111111] px-2.5 py-1.5
+              text-[11.5px] font-medium text-white transition-transform duration-200
+              enabled:active:scale-[0.96] disabled:bg-[#EDE9E4] disabled:text-[#B0AAA2]"
           >
             {busy && <Loader2 size={12} className="animate-spin" />}
             Leave note
           </button>
-        </div>
+        </NoteField>
+        {error && <p role="alert" className="mt-1.5 text-[11.5px] text-[#B45309]">{error}</p>}
       </div>
     </form>
   );

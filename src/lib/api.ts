@@ -1149,14 +1149,44 @@ export async function createFlow(input: { name?: string; graph?: FlowGraph; acco
  * has been told "Autosaved just now" will otherwise reasonably believe the
  * automation is now sending what they just typed.
  */
+/**
+ * A save the server is allowed to refuse.
+ *
+ * `expectedVersion` is the version this client believes the server holds. If
+ * somebody else saved in the meantime the server answers 409 rather than
+ * writing — see FlowConflictError. Without it the write is last-one-wins and
+ * the loser is never told, which is how two people improving the same message
+ * quietly delete each other's work.
+ */
 export async function updateFlow(
   id: string,
-  patch: { name?: string; graph?: FlowGraph },
+  patch: { name?: string; graph?: FlowGraph; expectedVersion?: number },
 ): Promise<{ flow: AutomationFlow; delegationWarning?: string }> {
-  return apiFetch<{ flow: AutomationFlow; delegationWarning?: string }>(
-    `/api/flows/${id}`,
-    { method: 'PATCH', body: patch },
-  );
+  try {
+    return await apiFetch<{ flow: AutomationFlow; delegationWarning?: string }>(
+      `/api/flows/${id}`,
+      { method: 'PATCH', body: patch },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409 && err.code === 'flow_changed') {
+      throw new FlowConflictError(err.message);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Somebody else changed this automation while you were working.
+ *
+ * Its own class because it is not a failure: nothing is broken, the save was
+ * declined on purpose, and the builder has to offer a choice rather than a
+ * retry. The message is the server's — it names who, when it can.
+ */
+export class FlowConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FlowConflictError';
+  }
 }
 
 /**
@@ -1848,6 +1878,11 @@ export interface WorkspaceNotification {
   linkPath: string | null;
   createdAt: string;
   readAt: string | null;
+  /**
+   * Who did the thing, when a person did it. Null for a row about the system
+   * — an account needing reconnection is nobody's doing.
+   */
+  actor: Person | null;
 }
 
 export async function fetchNotifications(): Promise<{

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapPin, MessageSquare, Plus } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { displayName } from '../../lib/people';
 import { shortAgo } from '../../lib/builderNotifications';
 import { placeLabel } from '../../lib/notePlacement';
@@ -18,6 +19,9 @@ import type { CommentThread } from '../../lib/api';
  * feedback is; picking a row here flies there and opens the thread. The only
  * thing you do from the index itself is start a new note, because that is the
  * one path a touch screen has — there is no right-click on a phone.
+ *
+ * On a narrow screen it arrives from the bottom instead of hanging off the
+ * header — same list, same rows, a container a thumb can reach.
  */
 
 export default function NotesIndex({
@@ -26,6 +30,8 @@ export default function NotesIndex({
   stepLabel,
   onPick,
   onLeaveNote,
+  sheet = false,
+  loading = false,
 }: {
   /** Unresolved first; resolved are behind the disclosure below. */
   threads: CommentThread[];
@@ -35,6 +41,10 @@ export default function NotesIndex({
   stepLabel: (id: string) => string | null;
   onPick: (thread: CommentThread) => void;
   onLeaveNote: () => void;
+  /** Narrow screens: from the bottom rather than out of the header. */
+  sheet?: boolean;
+  /** The notes have not arrived yet — which is not the same as none. */
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
@@ -50,32 +60,30 @@ export default function NotesIndex({
     onPick(thread);
   };
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5
-              text-[12.5px] font-medium text-[#111111] transition-colors
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]
-              ${open ? 'border-[#111111] bg-[#F7F5F2]' : 'border-[#E8E4DF] bg-white hover:border-[#D8D3CC]'}`}
-          >
-            <MessageSquare size={14} />
-            <span className="hidden md:inline">Notes</span>
-            {/* Only when there is something to count. At zero the control
-                stays — it is the way in, and on a touch screen the only one —
-                but a "0" would be a number nobody asked for. */}
-            {count > 0 && (
-              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full
-                bg-[#111111] px-1 text-[9.5px] font-semibold text-white">
-                {count}
-              </span>
-            )}
-          </button>
-        }
-      />
-      <PopoverContent sideOffset={8} align="end" className="w-[300px] p-0" aria-label="Notes">
+  const trigger = (
+    <button
+      type="button"
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5
+        text-[12.5px] font-medium text-[#111111] transition-colors
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5FF3D]
+        ${open ? 'border-[#111111] bg-[#F7F5F2]' : 'border-[#E8E4DF] bg-white hover:border-[#D8D3CC]'}`}
+    >
+      <MessageSquare size={14} />
+      <span className="hidden md:inline">Notes</span>
+      {/* Only when there is something to count. At zero the control
+          stays — it is the way in, and on a touch screen the only one —
+          but a "0" would be a number nobody asked for. */}
+      {count > 0 && (
+        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full
+          bg-[#111111] px-1 text-[9.5px] font-semibold text-white">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+
+  const body = (
+    <>
         <button
           type="button"
           onClick={() => { setOpen(false); onLeaveNote(); }}
@@ -86,7 +94,19 @@ export default function NotesIndex({
         </button>
 
         <div className="max-h-[min(60vh,420px)] overflow-y-auto">
-          {shown.length === 0 ? (
+          {loading && shown.length === 0 ? (
+            /* "No notes yet" before they have arrived is a claim we cannot
+               make — and the one it makes is that nobody has said anything,
+               which is exactly the thing somebody opened this to find out. */
+            <div className="space-y-2 px-3 py-3" aria-busy="true" aria-label="Loading notes">
+              {[0, 1].map(row => (
+                <div key={row} className="space-y-1.5">
+                  <div className="h-2 w-24 rounded bg-[#F0EDE8]" />
+                  <div className="h-2 w-full rounded bg-[#F4F1EC]" />
+                </div>
+              ))}
+            </div>
+          ) : shown.length === 0 ? (
             <div className="px-3 py-6 text-center">
               <p className="text-[12.5px] font-medium text-[#111111]">No notes yet</p>
               <p className="mt-1 text-[11.5px] leading-relaxed text-[#6B6B6B]">
@@ -139,6 +159,34 @@ export default function NotesIndex({
               : `Show ${resolved.length} resolved`}
           </button>
         )}
+    </>
+  );
+
+  // Same list, same rows, same closing-on-pick. Only the container differs,
+  // and it differs because a popover hanging off a header button is a hard
+  // thing to reach — and a hard thing to read — on a phone.
+  if (sheet) {
+    return (
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger render={trigger} />
+        <SheetContent
+          side="bottom"
+          aria-label="Notes"
+          className="max-h-[85vh] overflow-hidden rounded-t-2xl bg-white
+            pb-[env(safe-area-inset-bottom)]"
+        >
+          <div aria-hidden className="mx-auto my-2 h-1 w-9 rounded-full bg-[#E8E4DF]" />
+          {body}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={trigger} />
+      <PopoverContent sideOffset={8} align="end" className="w-[300px] p-0" aria-label="Notes">
+        {body}
       </PopoverContent>
     </Popover>
   );

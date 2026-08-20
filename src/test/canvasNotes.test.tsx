@@ -119,6 +119,21 @@ describe('the notes index', () => {
     expect(await screen.findByText('Settled point')).toBeInTheDocument();
   });
 
+  it('does not claim there are none before they have arrived', async () => {
+    const user = userEvent.setup();
+    render(
+      <NotesIndex threads={[]} count={0} loading stepLabel={stepLabel} onPick={vi.fn()} onLeaveNote={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Notes/ }));
+
+    // "No notes yet" is a claim, and whether anybody has said anything is
+    // exactly what somebody opened this to find out.
+    expect(await screen.findByLabelText('Loading notes')).toBeInTheDocument();
+    expect(screen.queryByText('No notes yet')).not.toBeInTheDocument();
+    // Leaving one is still offered — that never depended on the fetch.
+    expect(screen.getByRole('button', { name: /^Leave a note/ })).toBeInTheDocument();
+  });
+
   it('names a canvas note for what it is', async () => {
     const user = userEvent.setup();
     render(
@@ -180,6 +195,47 @@ describe('a thread', () => {
 
     await waitFor(() => expect(h.onReply).toHaveBeenCalledWith('Fair — rewriting it.'));
     await waitFor(() => expect(screen.getByLabelText('Reply to this note')).toHaveValue(''));
+  });
+
+  it('says so when a reply could not be sent, rather than swallowing it', async () => {
+    const user = userEvent.setup();
+    const h = handlers();
+    h.onReply.mockRejectedValue(new Error('The server is busy.'));
+    render(<NoteThread thread={thread()} where="Message" maySettle {...h} />);
+
+    await user.type(screen.getByLabelText('Reply to this note'), 'Fair — rewriting it.');
+    await user.click(screen.getByRole('button', { name: 'Reply' }));
+
+    // Silence here reads as the app losing what you said, rather than the
+    // network refusing it — and the words are still in the box either way.
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server is busy.');
+    expect(screen.getByLabelText('Reply to this note')).toHaveValue('Fair — rewriting it.');
+  });
+
+  it('says so when resolving could not be saved', async () => {
+    const user = userEvent.setup();
+    const h = handlers();
+    h.onSettle.mockRejectedValue(new Error('The server is busy.'));
+    render(<NoteThread thread={thread()} where="Message" maySettle {...h} />);
+
+    await user.click(screen.getByRole('button', { name: /Resolve/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server is busy.');
+    // Still open, because it was never settled.
+    expect(screen.getByRole('button', { name: /Resolve/ })).toBeInTheDocument();
+  });
+
+  it('keeps a technical failure to itself and says something a person can read', async () => {
+    const user = userEvent.setup();
+    const h = handlers();
+    h.onReply.mockRejectedValue(new Error('ECONNREFUSED 10.0.0.4:5432'));
+    render(<NoteThread thread={thread()} where="Message" maySettle {...h} />);
+
+    await user.type(screen.getByLabelText('Reply to this note'), 'Something');
+    await user.click(screen.getByRole('button', { name: 'Reply' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).not.toHaveTextContent('ECONNREFUSED');
+    expect(alert).toHaveTextContent(/Try again/);
   });
 
   it('says where it is, so a thread read from the index still has its place', () => {

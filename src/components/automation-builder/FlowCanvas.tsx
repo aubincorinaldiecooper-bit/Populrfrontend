@@ -5,11 +5,16 @@ import {
   type Edge, type Node, type NodeChange, type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { FlowNodeCard, type FlowNodeData } from './FlowNodeCard';
 import DrawnEdge, { type DrawnEdgeData } from './DrawnEdge';
 import { NODE_HEIGHT, NODE_WIDTH, viewportAfterResize } from '../../lib/flowLayout';
 import { pickEditorSide } from '../../lib/editorPlacement';
+import { relativeTo } from '../../lib/notePlacement';
 import { useNodeEntrance } from '../../lib/nodeEntrance';
+import { moved, readDrag, releaseDrag } from '../../lib/nodeDrag';
 import type { FlowGraph } from '../../lib/flowSchema';
 import type { FlowProblem, PostLibraryItem } from '../../lib/api';
 
@@ -77,6 +82,26 @@ export interface FlowCanvasProps {
    * try the right mouse button.
    */
   notesArmed?: boolean;
+  /**
+   * Somebody right-clicked a STEP and wants to leave a note on it, at the
+   * point they pointed at. Given as a fraction of that step's card, which is
+   * what travels when the canvas is rearranged.
+   */
+  onLeaveNoteOnNode?: (nodeId: string, at: { relX: number; relY: number }) => void;
+  /**
+   * Other people's pointers, drawn over the canvas. A layer rather than a
+   * prop-per-cursor for the same reason as the notes: the canvas supplies the
+   * viewport and owns nothing else about them.
+   */
+  cursorsLayer?: React.ReactNode;
+  /**
+   * Where this session's pointer is, in WORLD coordinates — converted here,
+   * because this is the only place that knows the viewport. Called on every
+   * pointer move; the throttle belongs to whoever is sending them.
+   */
+  onPointerAt?: (at: { x: number; y: number }) => void;
+  /** This session's pointer left the canvas. */
+  onPointerAway?: () => void;
 }
 
 function CanvasInner({
@@ -86,6 +111,10 @@ function CanvasInner({
   notesLayer = null,
   onLeaveNoteAt,
   notesArmed = false,
+  onLeaveNoteOnNode,
+  cursorsLayer = null,
+  onPointerAt,
+  onPointerAway,
 }: FlowCanvasProps) {
   const { fitView, setCenter, getViewport, setViewport, flowToScreenPosition, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
@@ -139,11 +168,61 @@ function CanvasInner({
     [graph.edges],
   );
 
+  /**
+   * A right-click on a step, turned into a placement on that step.
+   *
+   * The conversion happens here because this is the only place that knows
+   * the viewport — the card reports where the pointer was on SCREEN, and
+   * what gets stored is where that is on the CARD.
+   */
+  const leaveNoteOnNode = useCallback(
+    (nodeId: string, screen: { x: number; y: number }) => {
+      if (!onLeaveNoteOnNode) return;
+      const node = graph.nodes.find(n => n.id === nodeId);
+      if (!node) return;
+      const world = screenToFlowPosition(screen);
+      onLeaveNoteOnNode(nodeId, relativeTo(node.position, world));
+    },
+    [onLeaveNoteOnNode, graph.nodes, screenToFlowPosition],
+  );
+
+  /**
+   * The menu a right-click on empty canvas opens, and the spot it is about.
+   *
+   * Held in both coordinate systems on purpose: SCREEN is where the menu has
+   * to appear, WORLD is what a note stores. Both are taken at the moment of
+   * the click, which is the only moment the screen position means anything.
+   */
+  const [paneMenu, setPaneMenu] = useState<
+    { screen: { x: number; y: number }; world: { x: number; y: number } } | null
+  >(null);
+
+  /**
+   * Where a step is WHILE it is being dragged.
+   *
+   * React Flow owns a node's position during the gesture and the graph only
+   * learns it when the gesture ends — but `nodes` below is derived from the
+   * graph, so any re-render of the page mid-drag handed React Flow the step's
+   * OLD position back and the card snapped out from under the cursor. The
+   * builder re-renders often enough for that to be constant: the collaborator
+   * heartbeat every 20 seconds, the notes query, an autosave settling, the
+   * entrance timings. Holding the live position here means a re-render
+   * mid-drag reasserts where the step actually is.
+   *
+   * Committing every frame to the graph instead would be worse — it is a save
+   * per pointermove, and a drag is not an edit anybody wants in their history.
+   */
+  const [dragging, setDragging] = useState<Record<string, { x: number; y: number }>>({});
+
   const nodes: Node[] = useMemo(
     () => graph.nodes.map(node => ({
       id: node.id,
       type: 'step',
-      position: node.position,
+      // The live position while a gesture is in flight, the graph's otherwise.
+      position: dragging[node.id] ?? node.position,
+      // A step being dragged rides over its neighbours, so it is never
+      // half-behind the card it is being moved past.
+      zIndex: dragging[node.id] ? 10 : undefined,
       // React Flow needs the size up front to route edges before measuring;
       // without it the first paint shows edges converging on the origin.
       width: NODE_WIDTH,
@@ -162,10 +241,11 @@ function CanvasInner({
         onDeleteNode,
         hasOutgoing,
         readOnly,
+        onLeaveNote: onLeaveNoteOnNode ? leaveNoteOnNode : undefined,
       } satisfies FlowNodeData,
     })),
     [graph.nodes, selectedNodeId, highlighted, problemByNode, postById, onAddAfter, onDeleteNode, hasOutgoing,
-      readOnly, nodeDelays],
+      readOnly, nodeDelays, onLeaveNoteOnNode, leaveNoteOnNode, dragging],
   );
 
   const edges: Edge[] = useMemo(
@@ -218,14 +298,23 @@ function CanvasInner({
   }, [focusSignal, focusNodeId, graph.nodes, setCenter]);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    for (const change of changes) {
-      // Only commit the final position. Committing every intermediate frame
-      // would push a save per pointermove.
-      if (change.type === 'position' && change.position && change.dragging === false) {
-        onMove(change.id, change.position);
-      }
+    const { live, settled } = readDrag(changes);
+    // Only the settled position reaches the graph — see `dragging` above —
+    // and only when it is a position the step was not already at.
+    for (const done of settled) {
+      const before = graph.nodes.find(n => n.id === done.id)?.position;
+      if (moved(before, done.position)) onMove(done.id, done.position);
     }
-  }, [onMove]);
+    if (Object.keys(live).length > 0) {
+      setDragging(current => ({ ...current, ...live }));
+    }
+    if (settled.length > 0) {
+      // Released in the same batch as the commit above, so the next render
+      // reads the settled position from the graph rather than flashing the
+      // old one for a frame on the way there.
+      setDragging(current => releaseDrag(current, settled.map(d => d.id)));
+    }
+  }, [onMove, graph.nodes]);
 
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
@@ -284,8 +373,25 @@ function CanvasInner({
       current.position === position && current.align === align ? current : { position, align });
   }, [selectedNodeId, graph.nodes, viewportTick, flowToScreenPosition, screenToFlowPosition, getViewport]);
 
+  /**
+   * This session's pointer, in the canvas's own space.
+   *
+   * Converted here and nowhere else: a cursor has to mean a place on the
+   * automation rather than a place on somebody's screen, or two people at
+   * different zoom levels would disagree about where a third is pointing.
+   */
+  const reportPointer = useCallback((event: React.PointerEvent) => {
+    if (!onPointerAt) return;
+    onPointerAt(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  }, [onPointerAt, screenToFlowPosition]);
+
   return (
-    <div ref={host} className="h-full w-full">
+    <div
+      ref={host}
+      className="h-full w-full"
+      onPointerMove={onPointerAt ? reportPointer : undefined}
+      onPointerLeave={onPointerAway}
+    >
     <ReactFlow
       nodes={nodes}
       edges={edges}
@@ -305,16 +411,23 @@ function CanvasInner({
         }
         onSelect(null);
       }}
-      // Right-clicking empty canvas offers to leave a note THERE. The point
-      // is converted to world coordinates here, at the moment of the click,
-      // because that is the only moment the screen position means anything.
+      // Right-clicking empty canvas offers to leave a note THERE. A menu
+      // rather than a composer opening unannounced, and the same one for
+      // every seat — there is nothing else to do to a bare spot on a canvas,
+      // so an editor and a view-only guest are offered the same single line.
       onPaneContextMenu={event => {
         if (!onLeaveNoteAt) return;
         event.preventDefault();
         const e = event as unknown as { clientX: number; clientY: number };
-        onLeaveNoteAt(screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        const screen = { x: e.clientX, y: e.clientY };
+        setPaneMenu({ screen, world: screenToFlowPosition(screen) });
       }}
       proOptions={{ hideAttribution: true }}
+      // Three pixels before a gesture counts as a drag rather than React
+      // Flow's default of one. At one, a click with any tremor in it moves
+      // the step a pixel, which marks the automation dirty and spends a save
+      // on a change nobody can see.
+      nodeDragThreshold={3}
       nodesDraggable={!readOnly}
       nodesConnectable={!readOnly}
       elementsSelectable
@@ -327,6 +440,7 @@ function CanvasInner({
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#DED9D2" />
       {notesLayer}
+      {cursorsLayer}
 
       {editorSlot && selectedNodeId && (
         // React Flow's own anchored-element primitive: rendered in a portal
@@ -343,8 +457,39 @@ function CanvasInner({
         </NodeToolbar>
       )}
     </ReactFlow>
+
+    {/* Anchored to the point that was clicked rather than to any element,
+        because the thing it is about is a place, not a control. */}
+    <DropdownMenu open={paneMenu !== null} onOpenChange={open => { if (!open) setPaneMenu(null); }}>
+      <DropdownMenuContent
+        anchor={paneMenu ? pointAnchor(paneMenu.screen) : undefined}
+        side="bottom"
+        align="start"
+        sideOffset={2}
+        aria-label="This spot on the canvas"
+      >
+        <DropdownMenuItem
+          onClick={() => {
+            if (paneMenu && onLeaveNoteAt) onLeaveNoteAt(paneMenu.world);
+            setPaneMenu(null);
+          }}
+        >
+          Leave a note here
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
     </div>
   );
+}
+
+/** A zero-sized rectangle at a point, for positioning against a place. */
+function pointAnchor(at: { x: number; y: number }) {
+  return {
+    getBoundingClientRect: () => ({
+      x: at.x, y: at.y, top: at.y, left: at.x, right: at.x, bottom: at.y,
+      width: 0, height: 0, toJSON: () => ({}),
+    }),
+  };
 }
 
 export default function FlowCanvas(props: FlowCanvasProps) {

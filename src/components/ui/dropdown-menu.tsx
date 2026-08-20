@@ -22,14 +22,26 @@ const DropdownMenuContent = React.forwardRef<
     side?: 'top' | 'bottom' | 'left' | 'right';
     align?: 'start' | 'center' | 'end';
     sideOffset?: number;
+    /**
+     * What to hang the menu off, when that is not the trigger — a point on a
+     * canvas, say. Anything Base UI accepts as an anchor, including a virtual
+     * element with only a getBoundingClientRect.
+     */
+    anchor?: React.ComponentPropsWithoutRef<typeof BaseMenu.Positioner>['anchor'];
   }
 >(function DropdownMenuContent(
-  { side = 'bottom', align = 'end', sideOffset = 4, className, children, ...props },
+  { side = 'bottom', align = 'end', sideOffset = 4, anchor, className, children, ...props },
   ref,
 ) {
   return (
     <BaseMenu.Portal>
-      <BaseMenu.Positioner side={side} align={align} sideOffset={sideOffset} className="z-[90]">
+      <BaseMenu.Positioner
+        side={side}
+        align={align}
+        sideOffset={sideOffset}
+        anchor={anchor}
+        className="z-[90]"
+      >
         <BaseMenu.Popup
           ref={ref}
           className={cn(

@@ -44,11 +44,19 @@ export interface CanvasNotesLayerProps {
   onDelete: (commentId: string) => Promise<void>;
   onLeave: (placement: Placement, body: string) => Promise<void>;
   onCancelCompose: () => void;
+  /**
+   * Whether the open thread and the composer are drawn HERE, beside the pin.
+   * False on a narrow screen, where the page puts the same thread in a sheet
+   * from the bottom instead — the pins stay either way, because a pin is
+   * where the feedback is and that does not change with the screen.
+   */
+  cards?: boolean;
 }
 
 export default function CanvasNotesLayer({
   threads, nodes, openId, composing, stepLabel, maySettle,
   onOpen, onReply, onSettle, onDelete, onLeave, onCancelCompose,
+  cards = true,
 }: CanvasNotesLayerProps) {
   // The live viewport, straight from React Flow's store: [x, y, zoom].
   // Subscribed rather than polled — this re-renders exactly when the canvas
@@ -139,7 +147,7 @@ export default function CanvasNotesLayer({
         );
       })}
 
-      {open && openPin && (
+      {cards && open && openPin && (
         <div
           className="pointer-events-auto absolute"
           style={cardFor(openPin)}
@@ -156,7 +164,7 @@ export default function CanvasNotesLayer({
         </div>
       )}
 
-      {composing && (
+      {cards && composing && (
         <div
           className="pointer-events-auto absolute"
           style={cardFor(placementWorld(composing, nodeAt))}
