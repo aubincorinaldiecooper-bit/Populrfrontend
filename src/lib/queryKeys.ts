@@ -26,4 +26,9 @@ export const queryKeys = {
   /** Every canvas being watched — someone arriving or leaving changes one of
    *  them, and the nudge doesn't say which. */
   allCollaborators: ['collaborators'] as const,
+  /** The notes left on one automation's canvas. */
+  comments: (flowId: string) => ['comments', flowId] as const,
+  /** Every canvas's notes — same reasoning as presence: the nudge says
+   *  somebody said something, not where, and only the open canvas is asking. */
+  allComments: ['comments'] as const,
 };
