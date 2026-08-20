@@ -57,7 +57,7 @@ describe('what is and is not a workspace name', () => {
     expect(looksInternal(EMAIL_NAME)).toBe(true);
   });
 
-  it('rejects an unfamiliar id by its shape alone', () => {
+  it('rejects an unfamiliar id by its scattered digits', () => {
     // Not tied to a known prefix: the whole lesson here is that the first
     // shape went unnoticed, so the next one should not need a code change.
     expect(looksInternal('Z7xKq2mBvN8pLr4TjW9cD')).toBe(true);
@@ -75,6 +75,16 @@ describe('what is and is not a workspace name', () => {
     expect(looksInternal('Acme')).toBe(false);
     expect(looksInternal('Studio 54')).toBe(false);
     expect(looksInternal('Populr2026')).toBe(false);
+  });
+
+  it('does not mistake a long unbroken brand for an id', () => {
+    // The first version of this guard was "long, no spaces, mixed case, has a
+    // digit", which ate every one of these. Review caught it. A name does not
+    // stop being a name at twenty characters, and erasing somebody's own
+    // words is the same bug the guard exists to prevent.
+    expect(looksInternal('Formula1RacingAcademy')).toBe(false);
+    expect(looksInternal('Populr2026Enterprise')).toBe(false);
+    expect(looksInternal('Route66Bar7Grill')).toBe(false);
   });
 
   it('falls back differently for your own workspace than for somebody else’s', () => {
