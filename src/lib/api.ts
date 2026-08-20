@@ -1543,8 +1543,18 @@ export async function updateTeammate(
   });
 }
 
-/** POST /api/team/invites/:id/resend — same person, same grant, new link. */
-export async function resendInvitation(id: string): Promise<{ inviteUrl: string }> {
+/**
+ * POST /api/team/invites/:id/resend — same person, same grant, new link.
+ *
+ * Answers 200 even when the email could not be delivered, because the
+ * invitation WAS reissued: the token is rotated, the old link is dead, and
+ * the new one works. `invitation.emailDelivery` carries whether it went out,
+ * exactly as the create path does — and `inviteUrl` is the link to hand over
+ * by some other means when it didn't.
+ */
+export async function resendInvitation(
+  id: string,
+): Promise<{ invitation: TeamInvitation; inviteUrl: string }> {
   return apiFetch(`/api/team/invites/${encodeURIComponent(id)}/resend`, { method: 'POST' });
 }
 
