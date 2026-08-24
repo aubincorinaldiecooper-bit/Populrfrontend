@@ -1911,3 +1911,83 @@ export async function markNotificationsRead(id?: string): Promise<{ marked: numb
     body: id ? { id } : {},
   });
 }
+
+// ============================================================
+// Integrations — third-party business apps via Composio
+//
+// A separate surface from Channels: those are creator socials via Zernio
+// (/api/connect, /api/accounts), these are the apps a workspace runs on —
+// Google Calendar, Calendly, Shopify and friends. Different provider,
+// different consent, different lifecycle, so they stay separate here too
+// rather than being blended into one "connections" list.
+// ============================================================
+
+/**
+ * What the workspace can do about an integration right now.
+ *
+ * 'reconnect_required' is deliberately distinct from 'disconnected': it
+ * means they DID authorize once and the grant lapsed or broke, which is a
+ * Reconnect button and a reason — not a card that looks like it was never
+ * set up.
+ */
+export type IntegrationStatus =
+  | 'connected'
+  | 'disconnected'
+  | 'reconnect_required'
+  | 'pending';
+
+export interface Integration {
+  slug: string;
+  name: string;
+  category: string;
+  blurb: string;
+  logoUrl: string | null;
+  status: IntegrationStatus;
+  connectionId: string | null;
+  connectedAt: string | null;
+}
+
+/** GET /api/integrations — every offered app with this workspace's state on it.
+ *  `configured` is false when the deployment has no Composio key, which lets
+ *  the page say so instead of showing Connect buttons that can only fail. */
+export async function fetchIntegrations(): Promise<{
+  configured: boolean;
+  integrations: Integration[];
+}> {
+  return apiFetch('/api/integrations');
+}
+
+/**
+ * POST /api/integrations/:slug/connect — returns the hosted auth URL to send
+ * the browser to. `to` is where the backend's callback returns the user once
+ * it has verified the connection with Composio; it must match an origin the
+ * backend allowlists or the request is refused rather than followed.
+ */
+export async function getIntegrationConnectUrl(slug: string, to: string): Promise<string> {
+  const data = await apiFetch<{ url: string }>(
+    `/api/integrations/${encodeURIComponent(slug)}/connect?to=${encodeURIComponent(to)}`,
+    { method: 'POST' },
+  );
+  return data.url;
+}
+
+/**
+ * POST /api/integrations/:id/disconnect — revokes at Composio, then marks it
+ * disconnected. Never simulated locally: if the revoke fails the caller sees
+ * the backend's real error and the app stays connected, which is what
+ * actually happened.
+ */
+export async function disconnectIntegration(connectionId: string): Promise<void> {
+  await apiFetch(`/api/integrations/${encodeURIComponent(connectionId)}/disconnect`, {
+    method: 'POST',
+  });
+}
+
+/** POST /api/integrations/sync — re-read status from Composio, so a grant
+ *  revoked or expired elsewhere stops reading as connected here. */
+export async function syncIntegrations(): Promise<{
+  synced: number;
+  integrations: Integration[];
+}> {
+  return apiFetch('/api/integrations/sync', { method: 'POST' });
+}
