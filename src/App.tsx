@@ -14,6 +14,7 @@ import SubscriptionModal from './components/SubscriptionModal';
 
 // MVP pages
 import ChannelsPage from './pages/ChannelsPage';
+import IntegrationsPage from './pages/IntegrationsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import InboxPage from './pages/InboxPage';
@@ -127,6 +128,7 @@ function AppContent() {
         <Route path="/opportunities" element={<Navigate to="/contacts" replace />} />
         <Route path="/connect" element={<Navigate to={`/channels${location.search}`} replace />} />
         <Route path="/channels" element={<ChannelsPage />} />
+        <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/connections" element={<Navigate to={`/channels${location.search}`} replace />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
         <Route path="/campaigns/new" element={<CampaignBuilderPage />} />
