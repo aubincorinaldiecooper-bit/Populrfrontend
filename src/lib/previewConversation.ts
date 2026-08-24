@@ -76,6 +76,11 @@ function actionNote(node: FlowNode): string | null {
       return cfg.stage ? `Populr moves them to ${cfg.stage}` : null;
     case 'notify_creator':
       return 'Populr flags them for you';
+    case 'run_integration':
+      // Named, not performed: preview never reaches outside Populr, and the
+      // note has to make that obvious rather than reading like it booked
+      // something.
+      return cfg.toolkitSlug ? `Populr would use ${cfg.toolkitSlug}` : null;
     default:
       return null;
   }

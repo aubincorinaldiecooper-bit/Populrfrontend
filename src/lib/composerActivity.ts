@@ -63,6 +63,7 @@ function describeCreate(op: Extract<FlowOperation, { op: 'create_node' }>): stri
       if (kind === 'add_tag') return 'Added a tag step';
       if (kind === 'remove_tag') return 'Added a step that removes a tag';
       if (kind === 'set_stage') return 'Added a step that moves them along';
+      if (kind === 'run_integration') return 'Added a step that uses a connected app';
       return 'Added a heads-up for you';
   }
 }

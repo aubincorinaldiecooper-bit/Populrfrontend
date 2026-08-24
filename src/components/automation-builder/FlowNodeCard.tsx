@@ -1,8 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import {
-  Zap, GitBranch, Send, Clock, Sparkles, Plus, MessageCircle, Bell, Tag, TrendingUp,
-} from 'lucide-react';
+  Zap, GitBranch, Send, Clock, Sparkles, Plus, MessageCircle, Bell, Tag, TrendingUp, Plug } from 'lucide-react';
 import {
   NODE_LABEL, branchesFor, describeDuration,
   readAction, readCondition, readSend, readTrigger, readWait,
@@ -42,6 +41,7 @@ const ACTION_ICONS: Record<string, typeof Zap> = {
   remove_tag: Tag,
   set_stage: TrendingUp,
   notify_creator: Bell,
+  run_integration: Plug,
 };
 
 export interface FlowNodeData extends Record<string, unknown> {
@@ -103,6 +103,12 @@ function summarize(node: FlowNode): string {
       if (cfg.kind === 'add_tag') return cfg.tag ? `Add tag: ${cfg.tag}` : 'Add a tag';
       if (cfg.kind === 'remove_tag') return cfg.tag ? `Remove tag: ${cfg.tag}` : 'Remove a tag';
       if (cfg.kind === 'set_stage') return cfg.stage ? `Stage: ${cfg.stage}` : 'Set the stage';
+      if (cfg.kind === 'run_integration') {
+        // The app is the recognisable half — a creator scanning the canvas
+        // is looking for "Google Calendar", not GOOGLECALENDAR_CREATE_EVENT.
+        if (!cfg.toolkitSlug) return 'Use a connected app';
+        return cfg.toolSlug ? `${cfg.toolkitSlug}: ${cfg.toolSlug}` : `Use ${cfg.toolkitSlug}`;
+      }
       return 'Notify me';
     }
   }

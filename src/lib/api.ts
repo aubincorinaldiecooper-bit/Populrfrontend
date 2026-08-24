@@ -106,6 +106,16 @@ async function apiFetch<T>(
      * request goes out regardless.
      */
     keepalive?: boolean;
+    /**
+     * Abort the request when the caller no longer wants the answer.
+     *
+     * Used by search-as-you-type: without it, a slow response for "ca" can
+     * land after the response for "cale" and repaint the older results over
+     * the newer ones. An aborted fetch rejects, which callers must
+     * distinguish from a real failure (see isAbortError) rather than
+     * showing an error for a request they cancelled themselves.
+     */
+    signal?: AbortSignal;
   },
 ): Promise<T> {
   // populrbackend verifies the caller via this JWT (see
@@ -129,6 +139,7 @@ async function apiFetch<T>(
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: init?.body ? JSON.stringify(init.body) : undefined,
       ...(init?.keepalive ? { keepalive: true } : {}),
+      ...(init?.signal ? { signal: init.signal } : {}),
     });
   } catch (err) {
     console.warn(`[api] ${path} unreachable`, err);
@@ -1936,25 +1947,74 @@ export type IntegrationStatus =
   | 'reconnect_required'
   | 'pending';
 
+/** An app this workspace has actually connected. */
 export interface Integration {
   slug: string;
   name: string;
-  category: string;
-  blurb: string;
+  /** Populr's line about the app where we have one, otherwise Composio's
+   *  own description, otherwise null — render without it. */
+  blurb: string | null;
   logoUrl: string | null;
   status: IntegrationStatus;
   connectionId: string | null;
   connectedAt: string | null;
 }
 
-/** GET /api/integrations — every offered app with this workspace's state on it.
+/** One searchable app in the picker. */
+export interface CatalogToolkit {
+  slug: string;
+  name: string;
+  blurb: string | null;
+  logoUrl: string | null;
+  categories: string[];
+  /** Already live in this workspace, so the picker offers "Connected"
+   *  rather than a Connect that would just create a second grant. */
+  connected: boolean;
+}
+
+/** GET /api/integrations — what this workspace has connected, in any state.
+ *  NOT the catalog: that is searched separately, because "what have I wired
+ *  up" and "what could I wire up" are different questions.
  *  `configured` is false when the deployment has no Composio key, which lets
- *  the page say so instead of showing Connect buttons that can only fail. */
+ *  the page say so instead of showing buttons that can only fail. */
 export async function fetchIntegrations(): Promise<{
   configured: boolean;
   integrations: Integration[];
 }> {
   return apiFetch('/api/integrations');
+}
+
+/**
+ * GET /api/integrations/catalog — the app picker.
+ *
+ * With no query the backend answers with Populr's featured apps; with one it
+ * searches Composio's real catalog. Either way the results are pre-filtered
+ * to toolkits whose auth the connect flow can actually complete, so every
+ * entry shown has a Connect that can succeed.
+ */
+/**
+ * Did this rejection come from the caller aborting, rather than a failure?
+ *
+ * An abort surfaces as a DOMException named AbortError, and apiFetch's
+ * unreachable-network branch turns it into an ApiError with status 0 — so
+ * both shapes are checked. A cancelled search must not paint an error.
+ */
+export function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  return err instanceof Error && err.name === 'AbortError';
+}
+
+export async function searchIntegrationCatalog(
+  query: string,
+  signal?: AbortSignal,
+): Promise<CatalogToolkit[]> {
+  const qs = new URLSearchParams();
+  if (query.trim()) qs.set('q', query.trim());
+  const data = await apiFetch<{ toolkits: CatalogToolkit[] }>(
+    `/api/integrations/catalog${qs.toString() ? `?${qs.toString()}` : ''}`,
+    { signal },
+  );
+  return data.toolkits;
 }
 
 /**
@@ -1983,10 +2043,43 @@ export async function disconnectIntegration(connectionId: string): Promise<void>
   });
 }
 
+/** One action a connected app exposes, as an automation step can run it. */
+export interface IntegrationTool {
+  slug: string;
+  name: string;
+  description: string | null;
+  parameters: Array<{
+    name: string;
+    type: string;
+    description: string | null;
+    required: boolean;
+  }>;
+}
+
+/**
+ * GET /api/integrations/:toolkit/tools — the actions a connected app exposes,
+ * for the automation builder's step editor.
+ *
+ * Scoped server-side to apps this workspace has actually connected: offering
+ * the actions of an app nobody authorized would build a step that can only
+ * fail. 404 means exactly that — connect it first.
+ */
+export async function fetchIntegrationTools(
+  toolkitSlug: string,
+  query?: string,
+): Promise<IntegrationTool[]> {
+  const qs = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+  const data = await apiFetch<{ tools: IntegrationTool[] }>(
+    `/api/integrations/${encodeURIComponent(toolkitSlug)}/tools${qs}`,
+  );
+  return data.tools;
+}
+
 /** POST /api/integrations/sync — re-read status from Composio, so a grant
  *  revoked or expired elsewhere stops reading as connected here. */
 export async function syncIntegrations(): Promise<{
   synced: number;
+  revoked: number;
   integrations: Integration[];
 }> {
   return apiFetch('/api/integrations/sync', { method: 'POST' });

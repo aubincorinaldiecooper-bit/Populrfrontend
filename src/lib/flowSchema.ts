@@ -66,7 +66,7 @@ export const NODE_KINDS = {
   condition: ['text_contains', 'replied', 'has_tag'],
   send: ['dm', 'comment_reply'],
   wait: ['duration'],
-  action: ['add_tag', 'remove_tag', 'set_stage', 'notify_creator'],
+  action: ['add_tag', 'remove_tag', 'set_stage', 'notify_creator', 'run_integration'],
 } as const satisfies Record<FlowNodeType, readonly string[]>;
 
 export const LEAD_STAGES = ['cold', 'interested', 'warm', 'hot', 'converted'] as const;
@@ -110,10 +110,17 @@ export interface WaitConfig {
 }
 
 export interface ActionConfig {
-  kind: 'add_tag' | 'remove_tag' | 'set_stage' | 'notify_creator';
+  kind: 'add_tag' | 'remove_tag' | 'set_stage' | 'notify_creator' | 'run_integration';
   tag: string | null;
   stage: string | null;
   note: string | null;
+  /** For kind='run_integration': which connected app, and which of its
+   *  actions — e.g. 'googlecalendar' / 'GOOGLECALENDAR_CREATE_EVENT'. */
+  toolkitSlug: string | null;
+  toolSlug: string | null;
+  /** Arguments as the creator typed them. String values may contain
+   *  {{contact.name}} placeholders, resolved server-side at run time. */
+  toolArguments: Record<string, unknown>;
 }
 
 function str(v: unknown): string | null {
@@ -183,6 +190,12 @@ export function readAction(node: FlowNode): ActionConfig {
     tag: str(c.tag),
     stage: str(c.stage),
     note: str(c.note),
+    toolkitSlug: str(c.toolkitSlug)?.toLowerCase() ?? null,
+    toolSlug: str(c.toolSlug),
+    toolArguments:
+      c.toolArguments && typeof c.toolArguments === 'object' && !Array.isArray(c.toolArguments)
+        ? (c.toolArguments as Record<string, unknown>)
+        : {},
   };
 }
 
@@ -237,7 +250,7 @@ export const STEP_OPTIONS: { type: FlowNodeType; label: string; hint: string }[]
   { type: 'send', label: 'Message', hint: 'Reply to them' },
   { type: 'wait', label: 'Wait', hint: 'Pause before the next step' },
   { type: 'condition', label: 'If', hint: 'Choose what happens based on their reply' },
-  { type: 'action', label: 'Do something', hint: 'Tag them, update them, or notify you' },
+  { type: 'action', label: 'Do something', hint: 'Tag them, update them, notify you, or use a connected app' },
 ];
 
 /**
@@ -267,6 +280,11 @@ export const ACTION_OPTIONS: { value: string; label: string; description: string
     value: 'notify_creator',
     label: 'Tell me about them',
     description: 'Puts them in Needs Reply so you can follow up personally.',
+  },
+  {
+    value: 'run_integration',
+    label: 'Use a connected app',
+    description: 'Books the call, looks up the order, logs the lead — in an app you\'ve connected.',
   },
 ];
 
