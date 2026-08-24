@@ -60,6 +60,8 @@ function describeStep(node: FlowNode): string | null {
       if (cfg.kind === 'add_tag') return cfg.tag ? `tags them ${cfg.tag}` : 'tags them';
       if (cfg.kind === 'remove_tag') return 'removes a tag';
       if (cfg.kind === 'set_stage') return 'moves them along';
+      if (cfg.kind === 'run_integration')
+        return cfg.toolkitSlug ? `uses ${cfg.toolkitSlug}` : 'uses a connected app';
       return 'tells you about them';
     }
     default:

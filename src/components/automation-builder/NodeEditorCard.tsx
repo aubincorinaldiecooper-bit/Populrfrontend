@@ -11,7 +11,12 @@ import KeywordInput from '../automation-wizard/KeywordInput';
 import PostPicker from '../automation-wizard/PostPicker';
 import Select from './Select';
 import TagCombobox from './TagCombobox';
-import { declareOtherAccountsOnPlatform } from '../../lib/api';
+import {
+  declareOtherAccountsOnPlatform,
+  fetchIntegrations,
+  fetchIntegrationTools,
+} from '../../lib/api';
+import type { Integration, IntegrationTool } from '../../lib/api';
 import type { ConnectedAccount, PlatformCapabilities, PostLibraryItem } from '../../lib/api';
 
 /**
@@ -609,6 +614,15 @@ function ActionEditor({
         </Section>
       )}
 
+      {cfg.kind === 'run_integration' && (
+        <IntegrationStepFields
+          toolkitSlug={cfg.toolkitSlug}
+          toolSlug={cfg.toolSlug}
+          toolArguments={cfg.toolArguments}
+          onChange={onChange}
+        />
+      )}
+
       {cfg.kind === 'notify_creator' && (
         <Section>
           <Label hint="They'll appear in Needs Reply with this note.">Note to yourself</Label>
@@ -897,6 +911,185 @@ function TriggerEditor({
               />
             </>
           )}
+        </Section>
+      )}
+    </>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Use a connected app — pick the app, pick the action, fill its arguments
+// ---------------------------------------------------------------------------
+
+/**
+ * The step editor for "Use a connected app".
+ *
+ * Three questions in the order a person actually answers them: which app,
+ * which of its actions, and what to pass it. Each one only appears once the
+ * previous is answered — an argument list for an action nobody has chosen is
+ * noise, and the whole card is meant to be readable without being taught.
+ *
+ * Only apps this workspace has genuinely connected are offered. The list
+ * comes from the same endpoint the Integrations page reads, so an app whose
+ * grant has lapsed shows there as needing reconnection and is not offered
+ * here as though it worked.
+ */
+function IntegrationStepFields({
+  toolkitSlug,
+  toolSlug,
+  toolArguments,
+  onChange,
+}: {
+  toolkitSlug: string | null;
+  toolSlug: string | null;
+  toolArguments: Record<string, unknown>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const [apps, setApps] = useState<Integration[] | null>(null);
+  /**
+   * The loaded actions, TAGGED with the app they belong to.
+   *
+   * Keeping the slug alongside the list is what removes the need to clear
+   * state when the app changes: "loading" is simply the tag not matching the
+   * current selection, which is derived below. Resetting instead meant three
+   * synchronous setState calls inside an effect, and a window where the
+   * previous app's actions were still on screen under the new app's name.
+   */
+  const [loaded, setLoaded] = useState<{
+    slug: string;
+    tools: IntegrationTool[];
+    error: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetchIntegrations()
+      .then(data => {
+        if (!live) return;
+        // Only what can actually run. A lapsed grant is surfaced on the
+        // Integrations page as "Needs reconnecting"; offering it here would
+        // build a step that fails the first time it fires.
+        setApps(data.integrations.filter(i => i.status === 'connected'));
+      })
+      .catch(() => {
+        if (live) setApps([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toolkitSlug) return;
+    let live = true;
+    fetchIntegrationTools(toolkitSlug)
+      .then(list => {
+        if (live) setLoaded({ slug: toolkitSlug, tools: list, error: null });
+      })
+      .catch((err: unknown) => {
+        if (!live) return;
+        setLoaded({
+          slug: toolkitSlug,
+          tools: [],
+          error: err instanceof Error ? err.message : 'Couldn’t load this app’s actions.',
+        });
+      });
+    return () => {
+      live = false;
+    };
+  }, [toolkitSlug]);
+
+  // Only trust a result that belongs to the app currently selected; anything
+  // else is a response for a previous choice and reads as still loading.
+  const current = loaded && loaded.slug === toolkitSlug ? loaded : null;
+  const tools = current?.tools ?? null;
+  const toolsError = current?.error ?? null;
+  const selectedTool = tools?.find(t => t.slug === toolSlug) ?? null;
+
+  if (apps !== null && apps.length === 0) {
+    return (
+      <Section>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          No apps are connected yet. Connect one on the{' '}
+          <a href="/integrations" className="underline underline-offset-2">
+            Integrations
+          </a>{' '}
+          page and it&apos;ll show up here.
+        </p>
+      </Section>
+    );
+  }
+
+  return (
+    <>
+      <Section field="toolkitSlug">
+        <Label>App</Label>
+        <Select
+          value={toolkitSlug ?? ''}
+          placeholder={apps === null ? 'Loading apps…' : 'Choose an app…'}
+          ariaLabel="App"
+          options={(apps ?? []).map(a => ({ value: a.slug, label: a.name, description: a.blurb ?? undefined }))}
+          // Changing the app invalidates both the action and its arguments:
+          // a Shopify action and its fields mean nothing to Google Calendar,
+          // and leaving them would send the old action's arguments to the new
+          // app's call.
+          onChange={slug => onChange({ toolkitSlug: slug, toolSlug: null, toolArguments: {} })}
+        />
+      </Section>
+
+      {toolkitSlug && (
+        <Section field="toolSlug">
+          <Label>Action</Label>
+          {toolsError ? (
+            <p className="text-[12px] leading-relaxed text-destructive">{toolsError}</p>
+          ) : (
+            <Select
+              value={toolSlug ?? ''}
+              placeholder={tools === null ? 'Loading actions…' : 'Choose an action…'}
+              ariaLabel="Action"
+              options={(tools ?? []).map(t => ({
+                value: t.slug,
+                label: t.name,
+                description: t.description ?? undefined,
+              }))}
+              onChange={slug => onChange({ toolSlug: slug, toolArguments: {} })}
+            />
+          )}
+        </Section>
+      )}
+
+      {selectedTool && selectedTool.parameters.length > 0 && (
+        <Section>
+          <Label hint="Use {{contact.name}} or {{contact.handle}} to fill in the person this run is about.">
+            Details
+          </Label>
+          <div className="space-y-2">
+            {/* Required first: the fields that decide whether this step can
+                run at all shouldn't be below the optional ones. */}
+            {[...selectedTool.parameters]
+              .sort((a, b) => Number(b.required) - Number(a.required))
+              .map(param => (
+                <div key={param.name}>
+                  <input
+                    value={String(toolArguments[param.name] ?? '')}
+                    onChange={e =>
+                      onChange({
+                        toolArguments: { ...toolArguments, [param.name]: e.target.value },
+                      })
+                    }
+                    placeholder={param.required ? `${param.name} (required)` : param.name}
+                    aria-label={param.name}
+                    className={FIELD}
+                  />
+                  {param.description && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      {param.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+          </div>
         </Section>
       )}
     </>

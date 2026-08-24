@@ -2043,6 +2043,38 @@ export async function disconnectIntegration(connectionId: string): Promise<void>
   });
 }
 
+/** One action a connected app exposes, as an automation step can run it. */
+export interface IntegrationTool {
+  slug: string;
+  name: string;
+  description: string | null;
+  parameters: Array<{
+    name: string;
+    type: string;
+    description: string | null;
+    required: boolean;
+  }>;
+}
+
+/**
+ * GET /api/integrations/:toolkit/tools — the actions a connected app exposes,
+ * for the automation builder's step editor.
+ *
+ * Scoped server-side to apps this workspace has actually connected: offering
+ * the actions of an app nobody authorized would build a step that can only
+ * fail. 404 means exactly that — connect it first.
+ */
+export async function fetchIntegrationTools(
+  toolkitSlug: string,
+  query?: string,
+): Promise<IntegrationTool[]> {
+  const qs = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+  const data = await apiFetch<{ tools: IntegrationTool[] }>(
+    `/api/integrations/${encodeURIComponent(toolkitSlug)}/tools${qs}`,
+  );
+  return data.tools;
+}
+
 /** POST /api/integrations/sync — re-read status from Composio, so a grant
  *  revoked or expired elsewhere stops reading as connected here. */
 export async function syncIntegrations(): Promise<{
