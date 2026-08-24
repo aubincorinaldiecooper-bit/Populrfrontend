@@ -17,6 +17,13 @@ import {
   fetchIntegrationTools,
 } from '../../lib/api';
 import type { Integration, IntegrationTool } from '../../lib/api';
+import {
+  coerceArgument,
+  displayArgument,
+  isBooleanParam,
+  isNumericParam,
+  placeholderFor,
+} from '../../lib/toolArguments';
 import type { ConnectedAccount, PlatformCapabilities, PostLibraryItem } from '../../lib/api';
 
 /**
@@ -947,6 +954,7 @@ function IntegrationStepFields({
   onChange: (patch: Record<string, unknown>) => void;
 }) {
   const [apps, setApps] = useState<Integration[] | null>(null);
+  const [appsError, setAppsError] = useState<string | null>(null);
   /**
    * The loaded actions, TAGGED with the app they belong to.
    *
@@ -971,9 +979,15 @@ function IntegrationStepFields({
         // Integrations page as "Needs reconnecting"; offering it here would
         // build a step that fails the first time it fires.
         setApps(data.integrations.filter(i => i.status === 'connected'));
+        setAppsError(null);
       })
-      .catch(() => {
-        if (live) setApps([]);
+      .catch((err: unknown) => {
+        if (!live) return;
+        // NOT an empty list. "We couldn't ask" and "you have connected
+        // nothing" render identically if both end up as [], and the first
+        // one would tell a creator their apps are gone, hide the step they
+        // already configured, and offer no way to try again.
+        setAppsError(err instanceof Error ? err.message : 'Couldn’t load your connected apps.');
       });
     return () => {
       live = false;
@@ -1007,6 +1021,32 @@ function IntegrationStepFields({
   const toolsError = current?.error ?? null;
   const selectedTool = tools?.find(t => t.slug === toolSlug) ?? null;
 
+  if (appsError) {
+    return (
+      <Section>
+        <p className="text-[12px] leading-relaxed text-destructive">{appsError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setAppsError(null);
+            setApps(null);
+            fetchIntegrations()
+              .then(data => {
+                setApps(data.integrations.filter(i => i.status === 'connected'));
+              })
+              .catch((err: unknown) => {
+                setAppsError(err instanceof Error ? err.message : 'Couldn’t load your connected apps.');
+              });
+          }}
+          className="mt-2 text-[12px] underline underline-offset-2"
+        >
+          Try again
+        </button>
+      </Section>
+    );
+  }
+
+  // Only after a SUCCESSFUL read: an empty list means an empty workspace.
   if (apps !== null && apps.length === 0) {
     return (
       <Section>
@@ -1071,17 +1111,38 @@ function IntegrationStepFields({
               .sort((a, b) => Number(b.required) - Number(a.required))
               .map(param => (
                 <div key={param.name}>
-                  <input
-                    value={String(toolArguments[param.name] ?? '')}
-                    onChange={e =>
-                      onChange({
-                        toolArguments: { ...toolArguments, [param.name]: e.target.value },
-                      })
-                    }
-                    placeholder={param.required ? `${param.name} (required)` : param.name}
-                    aria-label={param.name}
-                    className={FIELD}
-                  />
+                  {isBooleanParam(param.type) ? (
+                    // A yes/no argument is a checkbox, not the string "true".
+                    <label className="flex items-center gap-2 text-[13px] text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={toolArguments[param.name] === true}
+                        onChange={e =>
+                          onChange({
+                            toolArguments: { ...toolArguments, [param.name]: e.target.checked },
+                          })
+                        }
+                        aria-label={param.name}
+                      />
+                      {param.name}
+                    </label>
+                  ) : (
+                    <input
+                      value={displayArgument(toolArguments[param.name])}
+                      inputMode={isNumericParam(param.type) ? 'decimal' : undefined}
+                      onChange={e =>
+                        onChange({
+                          toolArguments: {
+                            ...toolArguments,
+                            [param.name]: coerceArgument(e.target.value, param.type),
+                          },
+                        })
+                      }
+                      placeholder={placeholderFor(param)}
+                      aria-label={param.name}
+                      className={FIELD}
+                    />
+                  )}
                   {param.description && (
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                       {param.description}

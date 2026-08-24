@@ -360,9 +360,18 @@ export default function IntegrationsPage() {
                               'Reconnect'
                             )}
                           </Button>
-                          <Button variant="outline" onClick={() => setConfirmOff(integration)}>
-                            Disconnect
-                          </Button>
+                          {/* Only where there is something to disconnect.
+                              An already-disconnected row keeps Reconnect as
+                              its way back, but offering Disconnect on it
+                              asks a destructive question about a grant that
+                              is already gone — and the revoke behind it
+                              would fail at the provider, surfacing an error
+                              for an action that had nothing to do. */}
+                          {integration.status !== 'disconnected' && (
+                            <Button variant="outline" onClick={() => setConfirmOff(integration)}>
+                              Disconnect
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>

@@ -175,6 +175,19 @@ describe('IntegrationsPage', () => {
     expect(screen.getByText('Connected')).toBeInTheDocument();
   });
 
+  it('offers no Disconnect for an app that is already disconnected', async () => {
+    mockFetchIntegrations.mockResolvedValue({
+      configured: true,
+      integrations: [integration({ status: 'disconnected' })],
+    });
+    renderPage();
+    expect(await screen.findByText('Shopify')).toBeInTheDocument();
+    // Reconnect is the way back; asking a destructive question about a grant
+    // that is already gone would fail at the provider for no reason.
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+  });
+
   it('explains itself when the deployment has no Composio key instead of offering dead buttons', async () => {
     mockFetchIntegrations.mockResolvedValue({ configured: false, integrations: [] });
     renderPage();
