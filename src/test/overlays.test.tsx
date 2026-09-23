@@ -4,14 +4,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ConfirmDialog from '../components/app/ConfirmDialog';
 import SubscriptionModal from '../components/SubscriptionModal';
+import { Dialog, DialogContent } from '../components/ui/dialog';
 
 /* The overlay contracts the pages now stand on.
  *
  * window.confirm blocked the tab and wore the browser's face; the shared
  * ConfirmDialog replaces it everywhere. These tests pin what every caller
  * relies on: nothing happens until the deliberate button, Cancel and
- * Escape are the same safe exit, and a persistent dialog stays put when
- * the backdrop is clicked.
+ * Escape are the same safe exit, a persistent dialog stays put when the
+ * backdrop is clicked, and a dialog stays on screen whatever class its
+ * caller passes.
  */
 
 vi.mock('../lib/api', async () => {
@@ -88,5 +90,21 @@ describe('SubscriptionModal (persistent dialog)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Not now' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DialogContent', () => {
+  it('stays fixed to the viewport even when the caller passes a position class', async () => {
+    // Both connect dialogs passed `relative` for their close button; merged
+    // over `fixed`, it dropped them below the page, half off screen.
+    render(
+      <Dialog open>
+        <DialogContent className="relative">Connect another Instagram account</DialogContent>
+      </Dialog>,
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveClass('fixed', 'left-1/2', 'top-1/2');
+    expect(dialog).not.toHaveClass('relative');
   });
 });

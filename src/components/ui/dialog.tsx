@@ -55,12 +55,18 @@ const DialogContent = React.forwardRef<
       <BaseDialog.Popup
         ref={ref}
         className={cn(
-          `fixed left-1/2 top-1/2 z-[80] w-[calc(100vw-2rem)] max-w-[440px]
+          `left-1/2 top-1/2 z-[80] w-[calc(100vw-2rem)] max-w-[440px]
            -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl
            outline-none transition-[opacity,transform] duration-150
            data-[starting-style]:opacity-0 data-[starting-style]:scale-[0.97]
            data-[ending-style]:opacity-0`,
           className,
+          // Last, so a caller's class can't take it away: `cn` keeps the
+          // later of two conflicting utilities, and a `relative` passed to
+          // anchor a close button used to replace `fixed` — the card then
+          // sat in the page flow below everything, half off screen. The
+          // popup already anchors absolutely positioned children itself.
+          'fixed',
         )}
         {...props}
       >
