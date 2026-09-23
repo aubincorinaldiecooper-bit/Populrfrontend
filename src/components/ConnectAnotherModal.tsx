@@ -246,7 +246,7 @@ export default function ConnectAnotherModal({ platform, platformName, initialMod
 
   return (
     <Dialog open onOpenChange={next => { if (!next) onClose(); }}>
-      <DialogContent className="relative" aria-label={`Connect another ${platformName} account`}>
+      <DialogContent aria-label={`Connect another ${platformName} account`}>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-[#9B9B8F] hover:text-[#111111] hover:bg-[#FAFAF8] rounded-lg transition-all"

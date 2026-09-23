@@ -50,7 +50,7 @@ export default function SubscriptionModal({
 
   return (
     <Dialog open onOpenChange={next => { if (!next) onClose(); }} disablePointerDismissal>
-      <DialogContent className="relative">
+      <DialogContent>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-[#9B9B8F] hover:text-[#111111] hover:bg-[#FAFAF8] rounded-lg transition-all"
