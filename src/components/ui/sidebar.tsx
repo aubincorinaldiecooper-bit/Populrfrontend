@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 
 /** The two widths, exported because layout maths elsewhere depends on
  *  which one is showing — see the automation builder's thresholds. */
-export const SIDEBAR_WIDTH = 280;
+export const SIDEBAR_WIDTH = 248;
 export const SIDEBAR_RAIL_WIDTH = 72;
 
 /**
@@ -116,9 +116,9 @@ function Sidebar({ className, children }: { className?: string; children: React.
         style={{ width: collapsed ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH }}
         className={cn(
           `hidden md:flex fixed left-0 top-0 z-50 h-screen flex-col
-           border-r border-sidebar-border bg-transparent
+           border-r border-sidebar-border bg-sidebar
            transition-[width] duration-200 ease-out`,
-          collapsed ? 'items-center gap-4 px-2 py-6' : 'gap-7 p-6',
+          collapsed ? 'items-center gap-4 px-2 py-6' : 'gap-6 px-3 py-5',
           className,
         )}
       >
@@ -130,8 +130,8 @@ function Sidebar({ className, children }: { className?: string; children: React.
         <SheetContent
           side="left"
           aria-label="Main menu"
-          className="md:hidden flex w-[280px] flex-col gap-7 overflow-y-auto p-6
-            pt-[calc(1.5rem+env(safe-area-inset-top))]"
+          className="md:hidden flex w-[248px] flex-col gap-6 overflow-y-auto px-3 py-5
+            pt-[calc(1.25rem+env(safe-area-inset-top))]"
         >
           {/* Always full: a drawer the creator deliberately opened has no
               reason to hide the labels they opened it to read. */}
@@ -212,7 +212,7 @@ function SidebarFooter({ className, children }: { className?: string; children: 
 
 function SidebarMenu({ className, children, ...props }: React.ComponentPropsWithoutRef<'nav'>) {
   return (
-    <nav className={cn('mt-2 flex flex-1 flex-col gap-1.5', className)} {...props}>
+    <nav className={cn('mt-2 flex flex-1 flex-col gap-0.5', className)} {...props}>
       {children}
     </nav>
   );
@@ -226,15 +226,15 @@ function SidebarMenu({ className, children, ...props }: React.ComponentPropsWith
 function sidebarMenuButtonClass(active: boolean, collapsed = false, className?: string): string {
   return cn(
     'group relative flex items-center transition-colors duration-200',
-    // Both widths keep the pill and its colours; only the geometry changes.
-    // A rail that swapped the shape for a square tile would be the drift
-    // this component exists to prevent, one property at a time.
+    // Both widths keep the same active treatment; only the geometry changes.
+    // A rail that changed the item's visual language would be the drift this
+    // component exists to prevent, one property at a time.
     collapsed
-      ? 'h-11 w-11 justify-center rounded-2xl'
-      : 'gap-3 rounded-full px-4 py-3',
+      ? 'h-10 w-10 justify-center rounded-xl'
+      : 'h-9 gap-2.5 rounded-lg px-2.5 text-[14px]',
     active
-      ? 'bg-sidebar-accent font-semibold text-sidebar-accent-foreground'
-      : 'text-sidebar-muted-foreground hover:bg-sidebar-muted hover:text-sidebar-foreground',
+      ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-xs ring-1 ring-sidebar-border'
+      : 'text-sidebar-muted-foreground hover:bg-sidebar-muted/70 hover:text-sidebar-foreground',
     className,
   );
 }

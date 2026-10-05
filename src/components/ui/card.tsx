@@ -21,17 +21,17 @@ import { cn } from '@/lib/utils';
  * buttonVariants — one definition, worn by whatever element the meaning
  * requires.
  */
-const cardVariants = cva('rounded-2xl border bg-card', {
+const cardVariants = cva('rounded-2xl border bg-card shadow-card', {
   variants: {
     interactive: {
       true: `transition-[transform,box-shadow,border-color] duration-200 ease-out
-             hover:shadow-card motion-safe:hover:-translate-y-px
+             hover:shadow-card-hover motion-safe:hover:-translate-y-px
              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/50`,
       false: '',
     },
     selected: {
       true: 'border-chartreuse ring-2 ring-chartreuse/25',
-      false: 'border-border',
+      false: 'border-border/80',
     },
   },
   compoundVariants: [

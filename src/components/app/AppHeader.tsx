@@ -49,8 +49,8 @@ export default function AppHeader() {
       className="fixed top-0 left-0 right-0 z-[55] flex items-center gap-1.5
         h-[calc(4rem+env(safe-area-inset-top))] border-b border-sidebar-border
         bg-sidebar/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md
-        md:static md:z-auto md:h-14 md:gap-3 md:border-sidebar-border
-        md:bg-background md:px-6 md:pt-0 md:backdrop-blur-none"
+        md:sticky md:top-0 md:z-40 md:h-14 md:gap-3 md:border-border/70
+        md:bg-background/80 md:px-6 md:pt-0 md:backdrop-blur-md"
     >
       <SidebarTrigger />
       {/* The page's own words, when it has any. On a phone the wordmark

@@ -18,10 +18,14 @@ export default function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <h1 className="text-[29px] font-normal leading-9 text-foreground">{title}</h1>
-        {subtitle && <p className="text-sm leading-5 text-muted-foreground">{subtitle}</p>}
+    <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-col">
+        <h1 className="text-[28px] font-semibold leading-9 tracking-[-0.02em] text-foreground">
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="mt-0.5 text-[14px] leading-5 text-muted-foreground">{subtitle}</p>
+        )}
       </div>
       {action && <div className="flex flex-wrap items-center gap-3">{action}</div>}
     </div>

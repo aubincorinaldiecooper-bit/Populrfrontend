@@ -34,7 +34,7 @@ import { useCreateAutomation } from '../../context/CreateAutomationContext';
  * So the rail is a WIDTH here, not a component. Every difference between
  * the two is stated in one place — a ternary, next to the thing it changes
  * — which is what makes drift visible in review instead of discoverable in
- * a screenshot six weeks later. Colours, the active pill, the badge, the
+ * a screenshot six weeks later. Colours, the active chip, the badge, the
  * icon metrics and the focus ring are shared outright.
  *
  * Collapsing is offered on every route and remembered (see the provider).
@@ -82,7 +82,7 @@ function AppSidebarBody() {
       <SidebarHeader className={collapsed ? 'items-center gap-3' : undefined}>
         <div
           className={cn(
-            collapsed ? 'flex flex-col items-center gap-3' : 'flex items-start justify-between px-4',
+            collapsed ? 'flex flex-col items-center gap-3' : 'flex items-start justify-between px-2.5',
           )}
         >
           {/* The mark at rail width: the word cannot fit, and the P is what
@@ -95,10 +95,10 @@ function AppSidebarBody() {
             </span>
           ) : (
             <div>
-              <h1 className="font-display text-[26px] font-bold text-sidebar-foreground tracking-tight leading-none">
+              <h1 className="font-display text-[20px] font-semibold tracking-[-0.02em] text-sidebar-foreground leading-none">
                 Populr
               </h1>
-              <p className="font-label text-[11px] text-sidebar-muted-foreground uppercase tracking-widest mt-1.5">
+              <p className="font-label text-[10px] text-sidebar-muted-foreground uppercase tracking-widest mt-1">
                 Creator Suite
               </p>
             </div>
@@ -148,12 +148,14 @@ function AppSidebarBody() {
               }}
               aria-label={collapsed ? 'Create' : undefined}
               className={cn(
-                'flex items-center justify-center bg-sidebar-accent font-semibold text-foreground',
-                'transition-colors hover:bg-secondary-fixed-dim',
-                collapsed ? 'h-11 w-11 rounded-2xl' : 'mx-1 gap-2 rounded-full px-6 py-3.5',
+                'flex items-center justify-center bg-primary text-primary-foreground shadow-xs',
+                'text-[14px] font-semibold transition-colors hover:bg-chartreuse-hover',
+                collapsed
+                  ? 'h-10 w-10 rounded-xl'
+                  : 'mx-0 h-10 w-full gap-2 rounded-xl px-4',
               )}
             >
-              <Plus size={18} strokeWidth={2.5} />
+              <Plus size={16} strokeWidth={2.5} />
               {!collapsed && 'Create'}
             </button>
           </Labelled>
@@ -185,14 +187,13 @@ function AppSidebarBody() {
                 className={sidebarMenuButtonClass(active, collapsed)}
               >
                 <Icon
-                  size={20}
-                  strokeWidth={active ? 2.4 : 2}
-                  className="transition-transform group-hover:scale-110"
+                  size={18}
+                  strokeWidth={active ? 2.2 : 1.9}
                 />
-                {!collapsed && <span className="text-[15px]">{item.label}</span>}
+                {!collapsed && <span>{item.label}</span>}
                 {waiting > 0 && (
                   // Same lime pill either way — only where it sits changes,
-                  // because at 44px there is no row to sit at the end of.
+                  // because at 40px there is no row to sit at the end of.
                   // aria-hidden because the link above already says it.
                   <span
                     aria-hidden="true"
@@ -263,7 +264,7 @@ function WorkspaceStanding({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div role="note" className="mx-1 rounded-2xl bg-sidebar-muted px-3.5 py-2.5">
+    <div role="note" className="mx-0 rounded-xl bg-card ring-1 ring-sidebar-border px-3 py-2">
       <p className="font-label text-[10px] uppercase tracking-widest text-sidebar-muted-foreground">
         You're in
       </p>
