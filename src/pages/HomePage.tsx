@@ -72,7 +72,7 @@ function AutomationRow({ row }: { row: DashboardData['automationPerformance'][nu
     >
       <div className={cn(
         'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
-        row.status === 'live' ? 'bg-chartreuse/20 text-primary' : 'bg-muted text-muted-foreground',
+        row.status === 'live' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
       )}>
         {row.status === 'live' ? <Zap size={16} /> : <Pause size={15} />}
       </div>

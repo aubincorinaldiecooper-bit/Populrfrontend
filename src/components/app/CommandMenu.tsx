@@ -209,7 +209,7 @@ export default function CommandMenu() {
         }}
       >
         <DialogContent
-          className="top-[12vh] max-w-[560px] p-0 -translate-y-0"
+          className="top-[12vh] z-[80] max-w-[560px] bg-card p-0 -translate-y-0"
         >
           <DialogTitle className="sr-only">Search Populr</DialogTitle>
           <DialogDescription className="sr-only">
@@ -231,7 +231,10 @@ export default function CommandMenu() {
               role="combobox"
               aria-expanded="true"
               aria-controls="command-results"
-              className="h-11 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              className="h-11 border-0 bg-transparent px-0 shadow-none ring-0
+                focus:border-0 focus:shadow-none focus:ring-0
+                focus-visible:border-0 focus-visible:shadow-none focus-visible:ring-0
+                focus-visible:ring-offset-0"
             />
             <kbd className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
               Esc

@@ -421,17 +421,22 @@ export default function IntegrationsPage() {
   };
 
   const canManage = ownerView && configured && backendConfigured;
+  const connectedCount = integrations.filter(
+    integration => integration.status === 'connected',
+  ).length;
+  const needsAttentionCount = integrations.filter(
+    integration => integration.status === 'reconnect_required',
+  ).length;
+  const pendingCount = integrations.filter(
+    integration => integration.status === 'pending',
+  ).length;
   const summaryParts = [
-    `${integrations.length} tools`,
-    ...(integrations.filter(integration => integration.status === 'connected').length
-      ? [`${integrations.filter(integration => integration.status === 'connected').length} connected`]
+    `${integrations.length} ${integrations.length === 1 ? 'tool' : 'tools'}`,
+    ...(connectedCount ? [`${connectedCount} connected`] : []),
+    ...(needsAttentionCount
+      ? [`${needsAttentionCount} ${needsAttentionCount === 1 ? 'needs' : 'need'} attention`]
       : []),
-    ...(integrations.filter(integration => integration.status === 'reconnect_required').length
-      ? [`${integrations.filter(integration => integration.status === 'reconnect_required').length} need attention`]
-      : []),
-    ...(integrations.filter(integration => integration.status === 'pending').length
-      ? [`${integrations.filter(integration => integration.status === 'pending').length} finishing up`]
-      : []),
+    ...(pendingCount ? [`${pendingCount} finishing up`] : []),
   ];
   const brokenIntegrations = integrations.filter(
     integration => integration.status === 'reconnect_required',

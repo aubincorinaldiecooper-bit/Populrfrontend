@@ -271,6 +271,7 @@ describe('performance, honestly', () => {
     const rowA = screen.getByText('Booking inquiries').closest('a')!;
     expect(within(rowA).getByText(/Instagram · @aubin/)).toBeInTheDocument();
     expect(within(rowA).getByText('Live')).toBeInTheDocument();
+    expect(rowA.querySelector(':scope > div')).toHaveClass('bg-primary', 'text-primary-foreground');
     expect(within(rowA).getByText('1,240')).toBeInTheDocument();
     expect(within(rowA).getByText(/34% replied/)).toBeInTheDocument();
     expect(within(rowA).getByText(/71% read/)).toBeInTheDocument();

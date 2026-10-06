@@ -155,6 +155,7 @@ describe('IntegrationsPage', () => {
     renderPage();
     expect(await screen.findByText('Needs reconnecting')).toBeInTheDocument();
     expect(screen.getByText(/Shopify stopped working/)).toBeInTheDocument();
+    expect(screen.getByText('1 tool · 1 needs attention')).toBeInTheDocument();
     expect(screen.queryByText('Not connected')).not.toBeInTheDocument();
   });
 
@@ -258,11 +259,12 @@ describe('IntegrationsPage', () => {
     renderPage();
     await openPicker();
     await screen.findByText('Calendly');
-    await user.click(screen.getByRole('button', { name: 'ecommerce' }));
+    expect(screen.getByRole('button', { name: 'Scheduling' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ecommerce' }));
 
     expect(screen.getByText('Shopify')).toBeInTheDocument();
     expect(screen.queryByText('Calendly')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'ecommerce' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Ecommerce' })).toHaveAttribute('aria-pressed', 'true');
 
     await user.type(screen.getByRole('textbox', { name: 'Search apps' }), 'calendar');
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
