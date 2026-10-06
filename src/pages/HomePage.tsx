@@ -16,7 +16,7 @@ import type { DashboardData } from '../lib/api';
 import { platformMeta } from '../lib/platformMeta';
 import { useCreateAutomation } from '../context/CreateAutomationContext';
 import { useAuth } from '../context/AuthContext';
-import { useConversationsQuery } from '../components/inbox/conversations';
+import { useConversationsQuery, useInboxWaiting } from '../components/inbox/conversations';
 import { timeAgo } from '../lib/timeAgo';
 
 /**
@@ -128,6 +128,7 @@ export default function HomePage() {
   const { beginCreateAutomation } = useCreateAutomation();
   const { user } = useAuth();
   const conversationsQuery = useConversationsQuery('');
+  const { count: inboxWaitingCount } = useInboxWaiting();
   const backendConfigured = isBackendConfigured();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(backendConfigured);
@@ -167,7 +168,6 @@ export default function HomePage() {
   }
 
   const totals = data?.totals;
-  const needsReply = totals?.needsReply ?? 0;
   const now = new Date();
   const hour = now.getHours();
   const firstName = user?.name?.trim().split(/\s+/)[0];
@@ -175,10 +175,7 @@ export default function HomePage() {
   const waitingConversations = (conversationsQuery.data?.conversations ?? [])
     .filter(conversation => conversation.waiting > 0)
     .slice(0, 3);
-  const showWaitingRows =
-    !conversationsQuery.isLoading &&
-    !conversationsQuery.isError &&
-    waitingConversations.length > 0;
+  const showWaitingSection = conversationsQuery.data !== undefined && inboxWaitingCount > 0;
   // Nothing is set up or happening yet: lead with getting started rather
   // than a wall of zeros pretending to be analytics.
   const gettingStarted = !!data && totals!.activeAutomations === 0 && totals!.contacts === 0;
@@ -196,11 +193,13 @@ export default function HomePage() {
         <h1 className="mt-1 text-[28px] font-semibold leading-9 tracking-[-0.02em] text-foreground">
           {firstName ? `${greeting}, ${firstName}` : 'Welcome back'}
         </h1>
-        <p className="mt-1 text-[14px] text-muted-foreground">
-          {needsReply > 0
-            ? "Here's who's waiting on you, and how your automations are doing."
-            : "Nothing is waiting on you. Here's how your automations are doing."}
-        </p>
+        {conversationsQuery.data && (
+          <p className="mt-1 text-[14px] text-muted-foreground">
+            {inboxWaitingCount > 0
+              ? "Here's who's waiting on you, and how your automations are doing."
+              : "Nothing is waiting on you. Here's how your automations are doing."}
+          </p>
+        )}
       </div>
 
       {loading && (
@@ -248,13 +247,13 @@ export default function HomePage() {
             </Card>
           )}
 
-          {needsReply > 0 && (
+          {showWaitingSection && (
             <section className="space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-[16px] font-semibold text-foreground">
                     <Link to="/inbox?f=needs-you" className="hover:underline">
-                      {needsReply} conversation{needsReply === 1 ? '' : 's'} need{needsReply === 1 ? 's' : ''} you
+                      {inboxWaitingCount} conversation{inboxWaitingCount === 1 ? '' : 's'} need{inboxWaitingCount === 1 ? 's' : ''} you
                     </Link>
                   </h2>
                   <p className="mt-1 text-[12px] text-muted-foreground">
@@ -268,49 +267,47 @@ export default function HomePage() {
                   Open inbox →
                 </Link>
               </div>
-              {showWaitingRows && (
-                <Card className="divide-y divide-border px-4">
-                  {waitingConversations.map(conversation => {
-                    const name = conversation.name ?? conversation.handle ?? 'Someone';
-                    return (
-                      <div key={conversation.contactId} className="flex items-center gap-3 py-3">
-                        {conversation.avatarUrl ? (
-                          <img
-                            src={conversation.avatarUrl}
-                            alt=""
-                            className="h-9 w-9 shrink-0 rounded-full object-cover"
-                          />
-                        ) : (
-                          <span
-                            aria-hidden="true"
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted
-                              text-[13px] font-semibold text-muted-foreground"
-                          >
-                            {name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-medium text-foreground">{name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {platformMeta(conversation.platform).name} · {timeAgo(conversation.lastMessage.at)}
-                          </p>
-                          {conversation.lastMessage.text && (
-                            <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                              {conversation.lastMessage.text}
-                            </p>
-                          )}
-                        </div>
-                        <Link
-                          to={`/inbox?c=${encodeURIComponent(conversation.contactId)}`}
-                          className={cn(buttonVariants({ size: 'sm' }), 'shrink-0')}
+              <Card className="divide-y divide-border px-4">
+                {waitingConversations.map(conversation => {
+                  const name = conversation.name ?? conversation.handle ?? 'Someone';
+                  return (
+                    <div key={conversation.contactId} className="flex items-center gap-3 py-3">
+                      {conversation.avatarUrl ? (
+                        <img
+                          src={conversation.avatarUrl}
+                          alt=""
+                          className="h-9 w-9 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted
+                            text-[13px] font-semibold text-muted-foreground"
                         >
-                          Reply
-                        </Link>
+                          {name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium text-foreground">{name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {platformMeta(conversation.platform).name} · {timeAgo(conversation.lastMessage.at)}
+                        </p>
+                        {conversation.lastMessage.text && (
+                          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                            {conversation.lastMessage.text}
+                          </p>
+                        )}
                       </div>
-                    );
-                  })}
-                </Card>
-              )}
+                      <Link
+                        to={`/inbox?c=${encodeURIComponent(conversation.contactId)}`}
+                        className={cn(buttonVariants({ size: 'sm' }), 'shrink-0')}
+                      >
+                        Reply
+                      </Link>
+                    </div>
+                  );
+                })}
+              </Card>
             </section>
           )}
 

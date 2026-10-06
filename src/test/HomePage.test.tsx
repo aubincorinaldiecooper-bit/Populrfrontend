@@ -43,7 +43,13 @@ vi.mock('../context/AuthContext', () => ({
 }));
 
 vi.mock('../components/inbox/conversations', () => ({
-  useInboxWaiting: () => ({ count: 0, refresh: () => {} }),
+  useInboxWaiting: () => {
+    const conversations = mockUseConversationsQuery('').data?.conversations as Conversation[] | undefined;
+    return {
+      count: conversations?.filter(conversation => conversation.waiting > 0).length ?? 0,
+      refresh: () => {},
+    };
+  },
   useConversationsQuery: (search: string) => mockUseConversationsQuery(search),
 }));
 
@@ -71,6 +77,24 @@ function dashboard(overrides: Partial<DashboardData> = {}): DashboardData {
     recentActivity: [],
     ...overrides,
   };
+}
+
+function waitingConversations(count: number): Conversation[] {
+  return Array.from({ length: count }, (_, index) => ({
+    contactId: `contact-${index + 1}`,
+    handle: `person${index + 1}`,
+    name: `Person ${index + 1}`,
+    avatarUrl: null,
+    platform: 'instagram',
+    lastMessage: {
+      text: `Question ${index + 1}`,
+      direction: 'inbound',
+      channel: 'dm',
+      at: new Date().toISOString(),
+    },
+    waiting: 1,
+    latestInboxItemId: `item-${index + 1}`,
+  }));
 }
 
 const mockFetchDashboard = vi.fn();
@@ -169,21 +193,29 @@ describe('the north-star action', () => {
 });
 
 describe('attention', () => {
-  it('the count appears once, and its banner opens Inbox filtered to needs-you', async () => {
+  it('uses the Inbox waiting count instead of dashboard totals and links to needs-you', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard({
-      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 40, activeAutomations: 3 },
+      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 7, activeAutomations: 3 },
     }));
+    mockUseConversationsQuery.mockReturnValue({
+      data: { conversations: waitingConversations(3) },
+      isLoading: false,
+      isError: false,
+    });
     const user = userEvent.setup();
     renderHome();
 
-    await waitFor(() => expect(screen.getByText('40 conversations need you')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('3 conversations need you')).toBeInTheDocument());
+    expect(screen.queryByText('7 conversations need you')).not.toBeInTheDocument();
+    expect(screen.getByText("Here's who's waiting on you, and how your automations are doing."))
+      .toBeInTheDocument();
     expect(screen.getByText('Questions your automations handed over to you.')).toBeInTheDocument();
     // The duplicate metric card is gone: the attention count exists exactly
     // once, and no tile re-states it under another name.
     expect(screen.queryByText('Need your reply')).not.toBeInTheDocument();
     expect(screen.getAllByText(/conversations need you/)).toHaveLength(1);
 
-    await user.click(screen.getByText('40 conversations need you'));
+    await user.click(screen.getByText('3 conversations need you'));
     expect(screen.getByText(/INBOX PAGE/)).toHaveTextContent('?f=needs-you');
   });
 
@@ -191,23 +223,8 @@ describe('attention', () => {
     mockFetchDashboard.mockResolvedValue(dashboard({
       totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 5, activeAutomations: 3 },
     }));
-    const conversations: Conversation[] = Array.from({ length: 5 }, (_, index) => ({
-      contactId: `contact-${index + 1}`,
-      handle: `person${index + 1}`,
-      name: `Person ${index + 1}`,
-      avatarUrl: null,
-      platform: 'instagram',
-      lastMessage: {
-        text: `Question ${index + 1}`,
-        direction: 'inbound',
-        channel: 'dm',
-        at: new Date().toISOString(),
-      },
-      waiting: 1,
-      latestInboxItemId: `item-${index + 1}`,
-    }));
     mockUseConversationsQuery.mockReturnValue({
-      data: { conversations },
+      data: { conversations: waitingConversations(5) },
       isLoading: false,
       isError: false,
     });
@@ -221,6 +238,22 @@ describe('attention', () => {
     expect(screen.queryByText('Person 4')).not.toBeInTheDocument();
     expect(screen.getByText('Question 1')).toBeInTheDocument();
     expect(mockUseConversationsQuery).toHaveBeenCalledWith('');
+  });
+
+  it('keeps the waiting section and subtitle hidden until conversations load', async () => {
+    mockFetchDashboard.mockResolvedValue(dashboard({
+      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 7, activeAutomations: 3 },
+    }));
+    mockUseConversationsQuery.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
+    expect(screen.queryByText(/conversations need you/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/waiting on you/)).not.toBeInTheDocument();
   });
 });
 

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import IntegrationsPage from '../pages/IntegrationsPage';
 import { render } from './render';
 import { appContext } from './appContext.mock';
-import type { AutomationFlow, Integration, CatalogToolkit, IntegrationTool } from '../lib/api';
+import type { Integration, CatalogToolkit } from '../lib/api';
 
 /* Integrations — the third-party apps surface (Composio).
  *
@@ -24,8 +24,6 @@ const mockConnectUrl = vi.fn();
 const mockDisconnect = vi.fn();
 const mockSearchCatalog = vi.fn();
 const mockShowToast = vi.fn();
-const mockFetchFlows = vi.fn();
-const mockFetchIntegrationTools = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
   useApp: () => appContext({ showToast: mockShowToast }),
@@ -37,8 +35,6 @@ vi.mock('../lib/api', async () => {
     ...actual,
     isBackendConfigured: () => true,
     fetchIntegrations: () => mockFetchIntegrations(),
-    fetchFlows: () => mockFetchFlows(),
-    fetchIntegrationTools: (slug: string) => mockFetchIntegrationTools(slug),
     getIntegrationConnectUrl: (slug: string, to: string) => mockConnectUrl(slug, to),
     disconnectIntegration: (id: string) => mockDisconnect(id),
     searchIntegrationCatalog: (q: string, signal?: AbortSignal) => mockSearchCatalog(q, signal),
@@ -71,35 +67,6 @@ function toolkit(over: Partial<CatalogToolkit> = {}): CatalogToolkit {
   };
 }
 
-function automationFlow(slug = 'shopify', id = 'f1', name = 'Free guide DM'): AutomationFlow {
-  return {
-    id,
-    name,
-    status: 'live',
-    accountId: null,
-    platform: 'instagram',
-    graph: {
-      schemaVersion: 1,
-      nodes: [{
-        id: 'action-1',
-        type: 'action',
-        position: { x: 0, y: 0 },
-        config: { kind: 'run_integration', toolkitSlug: slug },
-      }],
-      edges: [],
-    },
-    version: 1,
-    legacyAutomationId: null,
-    activatedAt: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-  };
-}
-
-function integrationTool(slug: string, name: string): IntegrationTool {
-  return { slug, name, description: null, parameters: [] };
-}
-
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/integrations']}>
@@ -117,8 +84,6 @@ describe('IntegrationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchCatalog.mockResolvedValue([]);
-    mockFetchFlows.mockResolvedValue([]);
-    mockFetchIntegrationTools.mockResolvedValue([]);
     // jsdom refuses a real assignment to window.location; the page only ever
     // sets .href, so that one property is made writable for the assertions.
     Object.defineProperty(window, 'location', {
@@ -155,6 +120,7 @@ describe('IntegrationsPage', () => {
     renderPage();
     expect(await screen.findByText('Needs reconnecting')).toBeInTheDocument();
     expect(screen.getByText(/Shopify stopped working/)).toBeInTheDocument();
+    expect(screen.getByText(/Reconnect it so your automations keep running/)).toBeInTheDocument();
     expect(screen.getByText('1 tool · 1 needs attention')).toBeInTheDocument();
     expect(screen.queryByText('Not connected')).not.toBeInTheDocument();
   });
@@ -270,30 +236,47 @@ describe('IntegrationsPage', () => {
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('shows integration actions, available tool chips, and automations using the tool', async () => {
+  it('lists connections in a simple table with the existing actions', async () => {
     mockFetchIntegrations.mockResolvedValue({
       configured: true,
-      integrations: [integration()],
+      integrations: [
+        integration({ connectedAt: '2025-09-15T12:00:00.000Z' }),
+        integration({
+          slug: 'notion',
+          name: 'Notion',
+          status: 'reconnect_required',
+          connectionId: 'ca_2',
+        }),
+      ],
     });
-    mockFetchFlows.mockResolvedValue([automationFlow()]);
-    mockFetchIntegrationTools.mockResolvedValue([
-      integrationTool('find_order', 'Find order'),
-      integrationTool('create_customer', 'Create customer'),
-      integrationTool('update_order', 'Update order'),
-      integrationTool('cancel_order', 'Cancel order'),
-    ]);
     renderPage();
 
-    expect(await screen.findByText('What Populr can do')).toBeInTheDocument();
-    expect(screen.getByText('Find order')).toBeInTheDocument();
-    expect(screen.getByText('Create customer')).toBeInTheDocument();
-    expect(screen.getByText('Update order')).toBeInTheDocument();
-    expect(screen.getByText('+1 more')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Free guide DM' })).toHaveAttribute(
-      'href',
-      '/automations/f1',
-    );
-
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Tool' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Connected' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    expect(within(table).getByText('Sep 15')).toBeInTheDocument();
+    expect(screen.queryByText('What Populr can do')).not.toBeInTheDocument();
+    expect(screen.queryByText('Used in')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'More actions for Shopify' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+  });
+
+  it('summarizes multiple broken tools without naming automations', async () => {
+    mockFetchIntegrations.mockResolvedValue({
+      configured: true,
+      integrations: [
+        integration({ status: 'reconnect_required' }),
+        integration({ slug: 'notion', name: 'Notion', status: 'reconnect_required', connectionId: 'ca_2' }),
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findAllByText(/2 tools stopped working/)).toHaveLength(2);
+    const table = await screen.findByRole('table');
+    expect(within(table).getAllByRole('button', { name: 'Reconnect' })).toHaveLength(2);
+    expect(screen.queryByText(/Free guide DM/)).not.toBeInTheDocument();
   });
 });

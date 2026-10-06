@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { Card, cardVariants } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Page } from '@/components/ui/page';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -28,18 +27,14 @@ import {
 } from '../components/ui/dropdown-menu';
 import { useApp } from '../context/AppContext';
 import { isOwnerView } from '../lib/access';
-import { queryKeys } from '../lib/queryKeys';
-import { automationsUsingToolkit } from '../lib/flowSummary';
 import {
   isBackendConfigured,
-  fetchFlows,
-  fetchIntegrationTools,
   fetchIntegrations,
   getIntegrationConnectUrl,
   disconnectIntegration,
   syncIntegrations,
 } from '../lib/api';
-import type { AutomationFlow, Integration, IntegrationStatus } from '../lib/api';
+import type { Integration, IntegrationStatus } from '../lib/api';
 
 /**
  * The apps a workspace has connected through Composio, and the door to
@@ -88,7 +83,7 @@ function IntegrationMark({ integration }: { integration: Integration }) {
   const [failed, setFailed] = useState(false);
   const showLogo = integration.logoUrl && !failed;
   return (
-    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted sm:h-10 sm:w-10 sm:rounded-xl">
       {showLogo ? (
         <img
           src={integration.logoUrl!}
@@ -103,38 +98,27 @@ function IntegrationMark({ integration }: { integration: Integration }) {
   );
 }
 
-function IntegrationCard({
+function IntegrationRow({
   integration,
   canManage,
   busy,
-  flows,
-  flowsReady,
   onReconnect,
   onDisconnect,
 }: {
   integration: Integration;
   canManage: boolean;
   busy: boolean;
-  flows: AutomationFlow[];
-  flowsReady: boolean;
   onReconnect: (integration: Integration) => void;
   onDisconnect: (integration: Integration) => void;
 }) {
   const pill = statusPillProps(integration.status);
   const needsReconnect = integration.status === 'reconnect_required';
-  const toolsQuery = useQuery({
-    queryKey: ['integrationTools', integration.slug],
-    queryFn: () => fetchIntegrationTools(integration.slug),
-    enabled: integration.status === 'connected',
-    staleTime: 5 * 60 * 1000,
-  });
-  const usedIn = flowsReady ? automationsUsingToolkit(flows, integration.slug) : [];
   const connectedDate = integration.connectedAt ? new Date(integration.connectedAt) : null;
   const connectedAtLabel =
     connectedDate && Number.isFinite(connectedDate.getTime())
-      ? `Connected ${connectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
-      : 'Connected';
-  const statusLine =
+      ? connectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      : '—';
+  const connectedColumn =
     integration.status === 'connected'
       ? connectedAtLabel
       : integration.status === 'reconnect_required'
@@ -150,7 +134,7 @@ function IntegrationCard({
           <button
             type="button"
             aria-label={`More actions for ${integration.name}`}
-            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'h-9 w-9')}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'h-8 w-8 sm:h-9 sm:w-9')}
           >
             <MoreHorizontal size={17} />
           </button>
@@ -171,102 +155,78 @@ function IntegrationCard({
   );
 
   return (
-    <Card
-      className={cn(
-        'flex flex-col rounded-2xl p-4',
-        needsReconnect && 'ring-2 ring-destructive/30',
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <IntegrationMark integration={integration} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[14px] font-semibold text-foreground">{integration.name}</span>
-            <StatusPill status={pill.status} label={pill.label} />
-          </div>
-          {integration.blurb && (
-            <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
-              {integration.blurb}
+    <tr className={cn('transition-colors hover:bg-muted/40', needsReconnect && 'bg-destructive/5')}>
+      <td className="w-[40%] px-2 py-3 sm:w-[40%] sm:px-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <IntegrationMark integration={integration} />
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-foreground sm:text-[14px]">
+              {integration.name}
             </p>
-          )}
+            {integration.blurb && (
+              <p className="truncate text-[11px] text-muted-foreground sm:text-[12px]">
+                {integration.blurb}
+              </p>
+            )}
+          </div>
         </div>
+      </td>
+      <td className="w-[28%] px-1 py-3 sm:w-[24%] sm:px-4">
+        <StatusPill
+          status={pill.status}
+          label={pill.label}
+          className="max-w-full whitespace-normal px-1.5 text-[10px] sm:whitespace-nowrap sm:px-2 sm:text-xs"
+        />
+      </td>
+      <td className="hidden px-4 py-3 text-[12px] text-muted-foreground sm:table-cell sm:w-[20%]">
+        {connectedColumn}
+      </td>
+      <td className="w-[32%] px-2 py-3 text-right sm:w-[16%] sm:px-4">
         {canManage && (
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end sm:gap-1.5">
             {busy ? (
-              <Button variant="secondary" disabled>
-                <Loader2 size={14} className="animate-spin" /> Working…
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 whitespace-nowrap px-1.5 text-[11px] sm:h-9 sm:px-3 sm:text-[13px]"
+                disabled
+              >
+                <Loader2 size={13} className="animate-spin" /> Working…
               </Button>
             ) : integration.status === 'connected' ? (
               moreActions(true)
             ) : integration.status === 'reconnect_required' ? (
               <>
-                <Button onClick={() => onReconnect(integration)}>
-                  <RefreshCw size={14} /> Reconnect
+                <Button
+                  size="sm"
+                  className="h-8 whitespace-nowrap px-1.5 text-[11px] sm:h-9 sm:px-3 sm:text-[13px]"
+                  onClick={() => onReconnect(integration)}
+                >
+                  <RefreshCw size={13} /> Reconnect
                 </Button>
                 {moreActions(false)}
               </>
             ) : integration.status === 'pending' ? (
-              <Button onClick={() => onReconnect(integration)}>Finish connecting</Button>
+              <Button
+                size="sm"
+                className="h-8 whitespace-nowrap px-1.5 text-[10px] sm:h-9 sm:px-3 sm:text-[13px]"
+                onClick={() => onReconnect(integration)}
+              >
+                Finish connecting
+              </Button>
             ) : (
-              <Button onClick={() => onReconnect(integration)}>Reconnect</Button>
+              <Button
+                size="sm"
+                className="h-8 whitespace-nowrap px-1.5 text-[11px] sm:h-9 sm:px-3 sm:text-[13px]"
+                onClick={() => onReconnect(integration)}
+              >
+                <RefreshCw size={13} /> Reconnect
+              </Button>
             )}
           </div>
         )}
-      </div>
-
-      {integration.status === 'connected' && toolsQuery.isSuccess && toolsQuery.data.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-2 text-[11px] font-medium text-muted-foreground">What Populr can do</p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {toolsQuery.data.slice(0, 3).map(tool => (
-              <span
-                key={tool.slug}
-                className="rounded-md bg-chartreuse/20 px-2 py-1 text-[10.5px] font-medium text-foreground"
-              >
-                {tool.name}
-              </span>
-            ))}
-            {toolsQuery.data.length > 3 && (
-              <span className="text-[10.5px] text-muted-foreground">
-                +{toolsQuery.data.length - 3} more
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {flowsReady && (
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {usedIn.length > 0 ? (
-              <>
-                <span className="mr-0.5 text-[11px] text-muted-foreground">Used in</span>
-                {usedIn.slice(0, 3).map(flow => (
-                  <Link
-                    key={flow.id}
-                    to={`/automations/${flow.id}`}
-                    className="max-w-[140px] truncate rounded-md bg-muted px-2 py-1 text-[10.5px]
-                      font-medium text-foreground hover:bg-muted/70"
-                  >
-                    {flow.name}
-                  </Link>
-                ))}
-                {usedIn.length > 3 && (
-                  <span className="text-[10.5px] text-muted-foreground">+{usedIn.length - 3}</span>
-                )}
-              </>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">
-                Not used in an automation yet
-              </span>
-            )}
-          </div>
-          <span className="shrink-0 text-right text-[10.5px] text-muted-foreground">
-            {statusLine}
-          </span>
-        </div>
-      )}
-    </Card>
+      </td>
+    </tr>
   );
 }
 
@@ -275,12 +235,6 @@ export default function IntegrationsPage() {
   const ownerView = isOwnerView(workspaceAccess);
   const [searchParams] = useSearchParams();
   const backendConfigured = isBackendConfigured();
-  const flowsQuery = useQuery({
-    queryKey: queryKeys.flows,
-    queryFn: fetchFlows,
-    enabled: backendConfigured,
-    staleTime: 60_000,
-  });
 
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [configured, setConfigured] = useState(true);
@@ -533,9 +487,6 @@ export default function IntegrationsPage() {
         <>
           <div className="mb-4 space-y-2">
             {brokenIntegrations.map(integration => {
-              const used = flowsQuery.isSuccess
-                ? automationsUsingToolkit(flowsQuery.data, integration.slug).map(flow => flow.name)
-                : [];
               const busy = busySlug === integration.slug;
               return (
                 <div
@@ -546,11 +497,21 @@ export default function IntegrationsPage() {
                     <AlertTriangle size={17} />
                   </span>
                   <p className="min-w-0 flex-1 text-[12px] leading-relaxed">
-                    <strong className="font-semibold">{integration.name} stopped working</strong>
-                    {' · '}
-                    {used.length > 0
-                      ? `${used.join(', ')} can't use it until you reconnect it`
-                      : 'automations that use it will fail until you reconnect it'}
+                    {brokenIntegrations.length === 1 ? (
+                      <>
+                        <strong className="font-semibold">
+                          {integration.name} stopped working
+                        </strong>
+                        {' · '}Reconnect it so your automations keep running.
+                      </>
+                    ) : (
+                      <>
+                        <strong className="font-semibold">
+                          {brokenIntegrations.length} tools stopped working
+                        </strong>
+                        {' · '}Reconnect them so your automations keep running.
+                      </>
+                    )}
                   </p>
                   {canManage && (
                     <Button
@@ -567,40 +528,40 @@ export default function IntegrationsPage() {
             })}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {integrations.map(integration => (
-              <IntegrationCard
-                key={integration.slug}
-                integration={integration}
-                canManage={canManage}
-                busy={busySlug === integration.slug}
-                flows={flowsQuery.data ?? []}
-                flowsReady={flowsQuery.isSuccess}
-                onReconnect={target => void reconnect(target)}
-                onDisconnect={target => setConfirmOff(target)}
-              />
-            ))}
-            {canManage && (
-              <button
-                type="button"
-                onClick={() => setPicking(true)}
-                className={cn(
-                  cardVariants({ interactive: true }),
-                  'flex min-h-[164px] flex-col items-start justify-center gap-4 border-dashed p-5 text-left',
-                )}
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <Plus size={18} />
-                </span>
-                <span>
-                  <span className="block text-[14px] font-semibold text-foreground">Add a tool</span>
-                  <span className="mt-1 block text-[12px] text-muted-foreground">
-                    1,000+ apps: calendars, stores, CRMs…
-                  </span>
-                </span>
-              </button>
-            )}
-          </div>
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed text-left">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th scope="col" className="w-[40%] px-2 py-3 text-[11px] font-medium text-muted-foreground sm:px-4">
+                      Tool
+                    </th>
+                    <th scope="col" className="w-[28%] px-1 py-3 text-[11px] font-medium text-muted-foreground sm:w-[24%] sm:px-4">
+                      Status
+                    </th>
+                    <th scope="col" className="hidden px-4 py-3 text-[11px] font-medium text-muted-foreground sm:table-cell sm:w-[20%]">
+                      Connected
+                    </th>
+                    <th scope="col" className="w-[32%] px-2 py-3 text-right text-[11px] font-medium text-muted-foreground sm:w-[16%] sm:px-4">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {integrations.map(integration => (
+                    <IntegrationRow
+                      key={integration.slug}
+                      integration={integration}
+                      canManage={canManage}
+                      busy={busySlug === integration.slug}
+                      onReconnect={target => void reconnect(target)}
+                      onDisconnect={target => setConfirmOff(target)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </>
       )}
 
