@@ -293,14 +293,12 @@ describe('one context at a time', () => {
   });
 
   // "Beside" is a width claim, and the panels are real columns now — they take
-  // the width from the canvas rather than floating over it. Two of them plus
-  // the 280px sidebar is 920px of chrome, so below ~1400 the exception is off:
-  // keeping both would leave the creator seeing neither the list nor the step,
-  // which is the exact thing the exception exists to preserve.
+  // the width from the canvas rather than floating over it. Two 320px panels,
+  // the 248px sidebar, and the 480px minimum canvas need 1368px total.
   it.each([
     ['a phone', 390],
-    ['a small laptop, where two columns would leave 200px of canvas', 900],
-    ['one pixel below the threshold', 1399],
+    ['a small laptop, where two columns leave almost no canvas', 900],
+    ['one pixel below the threshold', 1367],
   ])('but not on %s', async (_label, width) => {
     setViewportWidth(width);
     const user = userEvent.setup();
