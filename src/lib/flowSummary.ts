@@ -22,7 +22,7 @@ import {
  * order is the order things actually happen.
  */
 
-export interface FlowSummary {
+interface FlowSummary {
   /** The line that starts the sentence: what has to happen first. */
   when: string;
   /** What Populr then does, or null when nothing has been added yet. */

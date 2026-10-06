@@ -13,7 +13,6 @@ import { cn } from '@/lib/utils';
  * of Populr's.
  */
 const AlertDialog = BaseAlertDialog.Root;
-const AlertDialogTrigger = BaseAlertDialog.Trigger;
 const AlertDialogCancel = BaseAlertDialog.Close;
 
 const AlertDialogTitle = React.forwardRef<
@@ -77,7 +76,6 @@ function AlertDialogFooter({ className, children }: { className?: string; childr
 
 export {
   AlertDialog,
-  AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogTitle,
   AlertDialogDescription,

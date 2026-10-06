@@ -18,17 +18,3 @@ export const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-[#F3F4F6] text-[#6B7280]',
   uploading: 'bg-[#FFF3E0] text-[#D97706]',
 };
-
-interface PostTiming {
-  status: string;
-  scheduled_at: string | null;
-  published_at: string | null;
-  created_at: string;
-}
-
-export function timeLabel(post: PostTiming): string {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
-  if (post.status === 'scheduled' && post.scheduled_at) return `Scheduled for ${new Date(post.scheduled_at).toLocaleString(undefined, opts)}`;
-  if (post.published_at) return `Published ${new Date(post.published_at).toLocaleString(undefined, opts)}`;
-  return `Created ${new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-}

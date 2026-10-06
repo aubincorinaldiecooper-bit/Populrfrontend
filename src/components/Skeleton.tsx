@@ -81,31 +81,6 @@ export function TableSkeleton({ count = 6, label = 'Loading' }: { count?: number
   );
 }
 
-/** The wizard's post-selection grid — square thumbnail over a caption line. */
-export function PostGridSkeleton({ count = 6, label = 'Loading your posts' }: {
-  count?: number; label?: string;
-}) {
-  return (
-    <div
-      className="grid grid-cols-2 sm:grid-cols-3 gap-3"
-      role="status"
-      aria-busy="true"
-      aria-label={label}
-    >
-      {Array.from({ length: count }, (_, i) => (
-        <Card key={i} className="overflow-hidden">
-          <Skeleton className="w-full aspect-square rounded-none" />
-          <div className="p-2.5 space-y-1.5">
-            <Skeleton className="h-3 rounded w-[80%]" />
-            <Skeleton className="h-2.5 rounded w-[45%]" />
-          </div>
-        </Card>
-      ))}
-      <span className="sr-only">{label}</span>
-    </div>
-  );
-}
-
 /** Stat tiles on Home. */
 export function StatGridSkeleton({ count = 4, label = 'Loading your numbers' }: {
   count?: number; label?: string;

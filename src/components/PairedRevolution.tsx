@@ -11,9 +11,9 @@
  * ink on the canvas, lime on a dark surface. Nothing here hard-codes a hue.
  */
 
-export type LoaderSize = 'sm' | 'md' | 'lg' | 'xl';
+type LoaderSize = 'sm' | 'md' | 'lg' | 'xl';
 
-export interface PairedRevolutionProps {
+interface PairedRevolutionProps {
   size?: LoaderSize;
   className?: string;
   /** Announced to screen readers; the visual is decorative on its own. */

@@ -30,7 +30,7 @@ import type { Conversation, ContactDetail } from '../../lib/api';
  * of truth; keeping a copy beside it meant an effect to hold the two in step.
  */
 
-export interface ConversationsState {
+interface ConversationsState {
   conversations: Conversation[];
   loading: boolean;
   error: string | null;

@@ -15,17 +15,13 @@ import { pollRate } from '../../lib/pollRates';
  * updates everywhere.
  */
 
-export interface ConversationsData {
-  conversations: Conversation[];
-}
-
 /**
  * How many PEOPLE are waiting, not how many messages — one person with
  * three flagged messages is one conversation waiting, which is what the
  * Inbox itself says in its subtitle. Counted from the same rows the page
  * lists, so the two can't drift.
  */
-export function countWaiting(conversations: Conversation[]): number {
+function countWaiting(conversations: Conversation[]): number {
   return conversations.filter(c => c.waiting > 0).length;
 }
 

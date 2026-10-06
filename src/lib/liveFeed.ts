@@ -16,7 +16,7 @@ import { getApiAuthToken } from './authClient';
  * connection that never comes back costs lateness rather than silence.
  */
 
-export type FeedTopic = 'conversations' | 'notifications' | 'presence' | 'comments';
+type FeedTopic = 'conversations' | 'notifications' | 'presence' | 'comments';
 
 const TOPICS = new Set<string>(
   ['conversations', 'notifications', 'presence', 'comments'] satisfies FeedTopic[],

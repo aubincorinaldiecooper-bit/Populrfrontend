@@ -106,7 +106,7 @@ const oauthReturnInFlight = new Set<string>();
 
 const OAUTH_SYNC_MAX_ATTEMPTS = 8;
 const OAUTH_SYNC_RETRY_MS = 1000;
-export const OAUTH_SYNC_ERROR_MESSAGE =
+const OAUTH_SYNC_ERROR_MESSAGE =
   'Your account was authorized, but Populr could not finish syncing it. Try again.';
 // Deliberately generic: whatever the backend's own error text is (a Zernio
 // failure like "Zernio GET /connect/instagram failed with 500", a config

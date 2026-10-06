@@ -15,7 +15,7 @@ import { platformMeta } from '../../lib/platformMeta';
  * I know them from".
  */
 
-export interface AvatarProps {
+interface AvatarProps {
   handle: string | null;
   name?: string | null;
   avatarUrl?: string | null;

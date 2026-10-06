@@ -23,7 +23,7 @@ const URL_SHAPE: Record<string, (handle: string) => string> = {
   linkedin: h => `https://linkedin.com/in/${h}`,
 };
 
-export interface ExternalProfile {
+interface ExternalProfile {
   url: string;
   /** "View on Instagram" — the platform's display name, never its internal id. */
   label: string;

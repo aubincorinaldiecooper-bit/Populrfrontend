@@ -336,11 +336,11 @@ export interface PostMediaItem {
   fileSizeBytes?: number | null;
 }
 
-export type PostStatus =
+type PostStatus =
   | 'draft' | 'validating' | 'ready' | 'scheduled' | 'publishing'
   | 'partially_published' | 'published' | 'failed' | 'cancelled' | string;
 
-export type DestinationStatus =
+type DestinationStatus =
   | 'pending' | 'uploading' | 'publishing' | 'scheduled' | 'published' | 'failed' | 'cancelled' | string;
 
 export interface PostRecord {
@@ -384,7 +384,7 @@ export interface PostWithDetails {
   targets: PostDestination[];
 }
 
-export interface DraftInput {
+interface DraftInput {
   mediaType: PostMediaType;
   caption: string;
   mediaItems: PostMediaItem[];
@@ -433,16 +433,6 @@ export async function cancelScheduledPost(id: string): Promise<PostWithDetails> 
   return apiFetch(`/api/publish/${id}/cancel`, { method: 'POST' });
 }
 
-export type ContentTab = 'all' | 'draft' | 'scheduled' | 'published' | 'failed';
-
-/** GET /api/publish?tab=... — posts for the Content page / Home's recent posts. */
-export async function fetchPosts(tab: ContentTab = 'all', limit?: number): Promise<PostWithDetails[]> {
-  const qs = new URLSearchParams({ tab });
-  if (limit !== undefined) qs.set('limit', String(limit));
-  const data = await apiFetch<{ count: number; posts: PostWithDetails[] }>(`/api/publish?${qs.toString()}`);
-  return data.posts;
-}
-
 /** GET /api/publish/:id — a single post with its media items and per-platform destinations. */
 export async function fetchPost(id: string): Promise<PostWithDetails> {
   return apiFetch(`/api/publish/${id}`);
@@ -457,7 +447,7 @@ export async function fetchPost(id: string): Promise<PostWithDetails> {
 // endpoint, and is deliberately not something a creator can see or change.
 // ============================================================
 
-export interface WorkspaceSettings {
+interface WorkspaceSettings {
   /** True when this workspace's own automations are paused by its owner. */
   workspacePause: boolean;
   /** Whether the deployment has Smart Replies (OpenRouter) configured. */
@@ -576,44 +566,6 @@ export async function fetchDashboard(): Promise<DashboardData> {
 // was parked for review.
 // ============================================================
 
-export interface InboxItem {
-  id: string;
-  contact_id: string | null;
-  account_id: string | null;
-  platform: string;
-  channel: 'comment' | 'dm';
-  status: string;
-  needs_reply: boolean;
-  needs_reply_reason: string | null;
-  automation_status: string | null;
-  suggested_reply: string | null;
-  ai_intent: string | null;
-  ai_confidence: string | number | null;
-  created_at: string;
-  updated_at: string;
-  message_text: string | null;
-  message_direction: string | null;
-  contact_handle: string | null;
-  contact_name: string | null;
-  contact_avatar_url: string | null;
-  lead_score: number | null;
-  stage: string | null;
-  post_caption: string | null;
-  automation_name: string | null;
-}
-
-/** GET /api/inbox — this workspace's conversations. */
-export async function fetchInbox(filter: {
-  needsReply?: boolean; limit?: number; offset?: number;
-} = {}): Promise<{ count: number; items: InboxItem[] }> {
-  const params = new URLSearchParams();
-  if (filter.needsReply !== undefined) params.set('needsReply', String(filter.needsReply));
-  if (filter.limit) params.set('limit', String(filter.limit));
-  if (filter.offset) params.set('offset', String(filter.offset));
-  const qs = params.toString();
-  return apiFetch(`/api/inbox${qs ? `?${qs}` : ''}`);
-}
-
 /**
  * POST /api/inbox/:id/reply — send the creator's reply in-channel.
  * `useSuggested: true` sends the AI's parked draft as-is (one tap).
@@ -625,26 +577,12 @@ export async function sendInboxReply(
   return apiFetch(`/api/inbox/${id}/reply`, { method: 'POST', body: input });
 }
 
-/** POST /api/inbox/:id/needs-reply — resolve (or re-flag) without replying. */
-export async function setInboxNeedsReply(
-  id: string,
-  needsReply: boolean,
-): Promise<{ id: string; needsReply: boolean }> {
-  return apiFetch(`/api/inbox/${id}/needs-reply`, { method: 'POST', body: { needsReply } });
-}
-
 // ============================================================
 // Contacts — everyone who has engaged with a connected account
 // (who they are, how they found the creator, their tags/score/stage, and
 // their full conversation history). Talks to populrbackend's /api/contacts,
 // scoped server-side to the caller's own workspace exactly like automations.
 // ============================================================
-
-/** The real, backend-enforced lead stages (see config/leadscoring.ts) —
- *  distinct from the old prototype's invented discovered/engaged/interested
- *  pipeline, which the backend has never recognized. */
-export const CONTACT_STAGES = ['cold', 'interested', 'warm', 'hot', 'needs_reply', 'converted'] as const;
-export type ContactStage = (typeof CONTACT_STAGES)[number];
 
 /** The stored shape returned by the backend (snake_case — the raw contacts row). */
 export interface ContactRecord {
@@ -873,35 +811,11 @@ export async function updateContact(
   return data.contact;
 }
 
-/** POST /api/contacts/:id/tags — add (default) or remove a tag. Returns the contact's full tag list. */
-export async function setContactTag(id: string, tag: string, remove = false): Promise<string[]> {
-  const data = await apiFetch<{ contactId: string; tags: string[] }>(`/api/contacts/${id}/tags`, {
-    method: 'POST',
-    body: { tag, remove },
-  });
-  return data.tags;
-}
-
-/** POST /api/contacts/:id/score — manual lead-score adjustment (-100..100). Returns the new score. */
-export async function adjustContactScore(id: string, delta: number, note?: string): Promise<number> {
-  const data = await apiFetch<{ contactId: string; leadScore: number }>(`/api/contacts/${id}/score`, {
-    method: 'POST',
-    body: { delta, note },
-  });
-  return data.leadScore;
-}
-
-/** POST /api/contacts/:id/converted — marks the contact won (stage -> converted). */
-export async function markContactConverted(id: string): Promise<void> {
-  await apiFetch(`/api/contacts/${id}/converted`, { method: 'POST' });
-}
-
 // ============================================================
 // Posts library — the caller's own existing posts per connected account,
-// used to pick a specific post to attach an automation to. Distinct from
-// fetchPosts()/PostWithDetails above, which is the /api/publish drafting
-// flow's "what have I posted" list — this is populrbackend's /api/posts,
-// synced from Zernio and scoped server-side to the caller's own workspace.
+// used to pick a specific post to attach an automation to. These are synced
+// from Zernio through populrbackend's /api/posts and scoped server-side to
+// the caller's own workspace.
 // ============================================================
 
 export interface PostLibraryItem {
@@ -1329,7 +1243,7 @@ export interface FlowProposal {
   updatedAt: string;
 }
 
-export interface FlowProposeResult {
+interface FlowProposeResult {
   proposal: FlowProposal | null;
   /** The summary is a question — the agent needs one detail first. */
   clarification: boolean;
@@ -1370,24 +1284,6 @@ export async function commitProposal(
 /** POST …/discard — never mind; the draft goes away, the canvas never moved. */
 export async function discardProposal(id: string, proposalId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/flows/${id}/proposal/${proposalId}/discard`, { method: 'POST' });
-}
-
-export interface FlowActivityStep {
-  id: string;
-  run_id: string;
-  node_id: string;
-  node_type: string;
-  status: 'ok' | 'failed' | 'skipped';
-  detail: string | null;
-  branch: string | null;
-  contact_handle: string | null;
-  contact_name: string | null;
-  run_status: string;
-  created_at: string;
-}
-
-export async function fetchFlowActivity(id: string): Promise<{ steps: FlowActivityStep[] }> {
-  return apiFetch(`/api/flows/${id}/activity`);
 }
 
 /** Reference data the builder needs on open: whether the model-backed composer
@@ -1672,12 +1568,6 @@ export type NoteAnchor =
   | { relX: number; relY: number }
   | { x: number; y: number };
 
-export function isOnNode(
-  anchor: NoteAnchor | null,
-): anchor is { relX: number; relY: number } {
-  return anchor !== null && 'relX' in anchor;
-}
-
 export interface CommentThread extends CanvasComment {
   /** The step it belongs to. Null for a note about a place on the canvas —
    *  and for a legacy note about the whole automation, which is told apart
@@ -1737,25 +1627,6 @@ export async function resolveComment(
 
 export async function deleteComment(flowId: string, commentId: string): Promise<void> {
   await apiFetch(`/api/flows/${flowId}/comments/${commentId}`, { method: 'DELETE' });
-}
-
-// ---------------------------------------------------------------------------
-// Who changed an automation
-// ---------------------------------------------------------------------------
-
-export interface EditEntry {
-  id: string;
-  by: Person;
-  summary: string;
-  at: string;
-  /** When a collapsed session started, so "worked on this for an hour" is
-   *  legible rather than looking like a single instant. */
-  startedAt: string;
-}
-
-export async function fetchFlowHistory(flowId: string): Promise<EditEntry[]> {
-  const data = await apiFetch<{ history: EditEntry[] }>(`/api/flows/${flowId}/history`);
-  return data.history;
 }
 
 /** POST /api/team/invites — create and email an invitation. Pass
@@ -1850,7 +1721,7 @@ export interface WorkspaceOption {
 }
 
 /** Which of the options the session is acting in right now. */
-export interface CurrentWorkspace {
+interface CurrentWorkspace {
   id: string;
   automationId: string | null;
 }

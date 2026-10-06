@@ -13,7 +13,6 @@ import { cn } from '@/lib/utils';
  */
 const Popover = BasePopover.Root;
 const PopoverTrigger = BasePopover.Trigger;
-const PopoverClose = BasePopover.Close;
 
 const PopoverContent = React.forwardRef<
   HTMLDivElement,
@@ -47,4 +46,4 @@ const PopoverContent = React.forwardRef<
   );
 });
 
-export { Popover, PopoverTrigger, PopoverClose, PopoverContent };
+export { Popover, PopoverTrigger, PopoverContent };

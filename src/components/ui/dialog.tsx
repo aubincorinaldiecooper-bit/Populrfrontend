@@ -13,8 +13,6 @@ import { cn } from '@/lib/utils';
  * routed through onOpenChange like every other close.
  */
 const Dialog = BaseDialog.Root;
-const DialogTrigger = BaseDialog.Trigger;
-const DialogClose = BaseDialog.Close;
 
 const DialogTitle = React.forwardRef<
   HTMLHeadingElement,
@@ -76,4 +74,4 @@ const DialogContent = React.forwardRef<
   );
 });
 
-export { Dialog, DialogTrigger, DialogClose, DialogContent, DialogTitle, DialogDescription };
+export { Dialog, DialogContent, DialogTitle, DialogDescription };

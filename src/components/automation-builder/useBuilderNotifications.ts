@@ -19,7 +19,7 @@ import type { FlowGraph } from '../../lib/flowSchema';
 /** How many answered questions stay visible. Enough to feel acknowledged. */
 const RESOLVED_KEPT = 3;
 
-export interface BuilderNotifications {
+interface BuilderNotifications {
   /** Everything the panel shows, unresolved first. */
   feed: BuilderNotification[];
   /** What the badge counts — questions and warnings, never resolved items. */

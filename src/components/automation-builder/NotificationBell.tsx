@@ -18,7 +18,7 @@ import { ListChecks } from 'lucide-react';
  * never in the count: a number you can't clear is noise.
  */
 
-export interface NotificationBellProps {
+interface NotificationBellProps {
   count: number;
   open: boolean;
   /** Set briefly when a refused activation sent the creator here. */

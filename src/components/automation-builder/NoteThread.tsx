@@ -27,7 +27,7 @@ import type { CanvasComment, CommentThread } from '../../lib/api';
 const MAX_LENGTH = 2000;
 
 /** Where a thread is drawn: beside its pin, or in a sheet from the bottom. */
-export type NotePresentation = 'floating' | 'sheet';
+type NotePresentation = 'floating' | 'sheet';
 
 /**
  * The block you type into.

@@ -29,7 +29,7 @@ import type { CommentThread } from '../../lib/api';
 const THREAD_WIDTH = 300;
 const THREAD_HEIGHT = 260;
 
-export interface CanvasNotesLayerProps {
+interface CanvasNotesLayerProps {
   threads: CommentThread[];
   nodes: { id: string; position: { x: number; y: number } }[];
   /** The thread whose conversation is open, if any. */

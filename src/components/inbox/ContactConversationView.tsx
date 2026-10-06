@@ -28,7 +28,7 @@ import type { ContactDetail } from '../../lib/api';
  * everywhere.
  */
 
-export interface ContactConversationViewProps {
+interface ContactConversationViewProps {
   detail: ContactDetail;
   loading: boolean;
   sending: boolean;

@@ -17,7 +17,7 @@ import { normalizeTag } from '../../lib/tags';
  * chosen from the list are the same tag, not two.
  */
 
-export interface TagComboboxProps {
+interface TagComboboxProps {
   value: string | null;
   tags: string[];
   onChange: (tag: string) => void;

@@ -2,7 +2,7 @@ import { Heart, MessageCircle, Send, Bookmark, ThumbsUp, Repeat2, Share2 } from 
 import ProfileImage from '../ProfileImage';
 import type { PostMediaItem, PostMediaType } from '../../lib/api';
 
-export interface PreviewIdentity {
+interface PreviewIdentity {
   name: string;
   handle: string | null;
   avatarUrl: string | null;

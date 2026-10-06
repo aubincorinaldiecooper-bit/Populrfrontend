@@ -32,7 +32,7 @@ import type { ContactDetail, LeadStage } from '../../lib/api';
  *   runtime's diary.
  */
 
-export interface ContactPanelProps {
+interface ContactPanelProps {
   detail: ContactDetail;
   onClose: () => void;
   /**

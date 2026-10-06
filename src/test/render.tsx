@@ -16,7 +16,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
  * and background refetching is off so nothing fires between assertions that
  * the test didn't ask for.
  */
-export function createTestQueryClient(): QueryClient {
+function createTestQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: 0, gcTime: 0, refetchOnWindowFocus: false },

@@ -16,7 +16,7 @@ export interface AuthUser {
   image?: string | null;
 }
 
-export interface AuthSession {
+interface AuthSession {
   id: string;
   userId: string;
   expiresAt: string;

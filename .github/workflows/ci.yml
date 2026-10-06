@@ -21,7 +21,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            auth/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm run build
       - run: npm test
+      - run: npm ci
+        working-directory: auth
+      - run: npm run typecheck
+        working-directory: auth

@@ -14,7 +14,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
  * noticing the image didn't load, and stepping out of the way when it didn't.
  */
 
-export interface ProfileImageProps {
+interface ProfileImageProps {
   src: string | null | undefined;
   /** Shown when there is no src, or when the one we had fails to load. */
   fallback: ReactNode;

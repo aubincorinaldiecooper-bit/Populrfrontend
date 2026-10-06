@@ -30,7 +30,7 @@ import type { FlowProblem, PostLibraryItem } from '../../lib/api';
 const nodeTypes = { step: FlowNodeCard };
 const edgeTypes = { drawn: DrawnEdge };
 
-export interface FlowCanvasProps {
+interface FlowCanvasProps {
   graph: FlowGraph;
   selectedNodeId: string | null;
   highlighted: string[];

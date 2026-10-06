@@ -17,13 +17,13 @@ import XLogo from '../components/XLogo';
  * accounts); users only ever see the display name "X". Renaming the id
  * would mean a risky data migration for zero user-visible gain.
  */
-export type PlatformIcon = ComponentType<{
+type PlatformIcon = ComponentType<{
   size?: number;
   className?: string;
   style?: CSSProperties;
 }>;
 
-export interface PlatformMetaEntry {
+interface PlatformMetaEntry {
   name: string;
   icon: PlatformIcon;
   color: string;
@@ -36,7 +36,7 @@ export function isBetaPlatform(id: string): boolean {
   return (BETA_PLATFORMS as readonly string[]).includes(id);
 }
 
-export const PLATFORM_META: Record<string, PlatformMetaEntry> = {
+const PLATFORM_META: Record<string, PlatformMetaEntry> = {
   instagram: { name: 'Instagram', icon: Instagram, color: '#E4405F' },
   facebook: { name: 'Facebook', icon: Facebook, color: '#1877F2' },
   twitter: { name: 'X', icon: XLogo, color: '#000000' },
