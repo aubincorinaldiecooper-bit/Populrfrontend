@@ -12,9 +12,14 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import AccountMenu from '../AccountMenu';
-import { navItems, isActivePath } from '../../lib/nav';
+import {
+  isActivePath,
+  primaryNavItems,
+  secondaryNavItems,
+  type NavItem,
+} from '../../lib/nav';
 import { useApp } from '../../context/AppContext';
-import { isGuestView, roleLabel } from '../../lib/access';
+import { canCreateAutomation, isGuestView, roleLabel } from '../../lib/access';
 import { workspaceName } from '../../lib/workspaceName';
 import { useInboxWaiting } from '../inbox/conversations';
 import { useCreateAutomation } from '../../context/CreateAutomationContext';
@@ -34,7 +39,7 @@ import { useCreateAutomation } from '../../context/CreateAutomationContext';
  * So the rail is a WIDTH here, not a component. Every difference between
  * the two is stated in one place — a ternary, next to the thing it changes
  * — which is what makes drift visible in review instead of discoverable in
- * a screenshot six weeks later. Colours, the active pill, the badge, the
+ * a screenshot six weeks later. Colours, the active chip, the badge, the
  * icon metrics and the focus ring are shared outright.
  *
  * Collapsing is offered on every route and remembered (see the provider).
@@ -66,40 +71,80 @@ function AppSidebarBody() {
   // would be worse than a short one. Creating is likewise only offered to
   // people whose role can create (owners and edit-granted members).
   const canvas = workspaceAccess?.role === 'canvas' ? workspaceAccess.canvasAutomation : null;
-  const items = canvas
+  const canvasItems: NavItem[] = canvas
     ? [
         { path: `/automations/${canvas.id}`, label: canvas.name, icon: Zap },
         { path: '/settings', label: 'Settings', icon: Settings },
       ]
-    : navItems;
-  const offerCreate =
-    workspaceAccess == null ||
-    workspaceAccess.role === 'owner' ||
-    (workspaceAccess.role === 'member' && workspaceAccess.permissions.editAutomations);
+    : [];
+  const primaryItems = canvas ? canvasItems : primaryNavItems;
+  const secondaryItems = canvas ? [] : secondaryNavItems;
+  const offerCreate = canCreateAutomation(workspaceAccess);
+
+  const renderNavItem = (item: NavItem) => {
+    const active = isActivePath(location.pathname, item.path);
+    const Icon = item.icon;
+    const waiting = item.path === '/inbox' ? inboxCount : 0;
+    return (
+      <Labelled key={item.path} collapsed={collapsed} label={item.label}>
+        <Link
+          to={item.path}
+          onClick={closeMobile}
+          aria-label={
+            waiting > 0
+              ? `${item.label}, ${waiting} conversations waiting`
+              : collapsed
+                ? item.label
+                : undefined
+          }
+          aria-current={active ? 'page' : undefined}
+          className={sidebarMenuButtonClass(active, collapsed)}
+        >
+          <Icon
+            size={18}
+            strokeWidth={active ? 2.2 : 1.9}
+            className={active ? 'text-sidebar-primary' : undefined}
+          />
+          {!collapsed && <span>{item.label}</span>}
+          {waiting > 0 && (
+            <span
+              aria-hidden="true"
+              className={cn(
+                `rounded-full bg-sidebar-primary px-1.5 text-[10.5px] font-semibold
+                 leading-[17px] text-sidebar-primary-foreground`,
+                collapsed ? 'absolute -right-0.5 -top-0.5' : 'ml-auto',
+              )}
+            >
+              {waiting > 9 ? '9+' : waiting}
+            </span>
+          )}
+        </Link>
+      </Labelled>
+    );
+  };
 
   return (
     <TooltipProvider delay={150}>
       <SidebarHeader className={collapsed ? 'items-center gap-3' : undefined}>
         <div
           className={cn(
-            collapsed ? 'flex flex-col items-center gap-3' : 'flex items-start justify-between px-4',
+            collapsed ? 'flex flex-col items-center gap-3' : 'flex items-center justify-between px-2.5',
           )}
         >
-          {/* The mark at rail width: the word cannot fit, and the P is what
-              people already recognise on the tab. Not a link at either
-              width — Home is in the list directly below, and a brand that
-              silently navigates is a door nobody knows is there. */}
+          {/* Not a link at either width — Home is in the list directly below. */}
           {collapsed ? (
-            <span className="font-display text-[20px] font-bold leading-none text-sidebar-foreground">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sidebar-primary
+              font-display text-[14px] font-bold leading-none text-sidebar-primary-foreground">
               P
             </span>
           ) : (
-            <div>
-              <h1 className="font-display text-[26px] font-bold text-sidebar-foreground tracking-tight leading-none">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sidebar-primary
+                font-display text-[14px] font-bold leading-none text-sidebar-primary-foreground">
+                P
+              </span>
+              <p className="font-display text-[16px] font-semibold tracking-[-0.02em] text-sidebar-foreground">
                 Populr
-              </h1>
-              <p className="font-label text-[11px] text-sidebar-muted-foreground uppercase tracking-widest mt-1.5">
-                Creator Suite
               </p>
             </div>
           )}
@@ -134,82 +179,42 @@ function AppSidebarBody() {
             everything below it. */}
         <WorkspaceStanding collapsed={collapsed} />
 
-        {/* Create CTA — the same action as Home's "Create an automation":
-            one creation experience, two entry points. It survives the rail
+        {/* Create CTA — one creation experience, two entry points. It survives the rail
             because collapsing is now something a creator does anywhere, not
             a mode inside the builder where creating was beside the point. */}
         {offerCreate && (
-          <Labelled collapsed={collapsed} label="Create">
+          <Labelled collapsed={collapsed} label="New automation">
             <button
               type="button"
               onClick={() => {
                 closeMobile();
                 beginCreateAutomation();
               }}
-              aria-label={collapsed ? 'Create' : undefined}
+              aria-label={collapsed ? 'New automation' : undefined}
               className={cn(
-                'flex items-center justify-center bg-sidebar-accent font-semibold text-foreground',
-                'transition-colors hover:bg-secondary-fixed-dim',
-                collapsed ? 'h-11 w-11 rounded-2xl' : 'mx-1 gap-2 rounded-full px-6 py-3.5',
+                'flex items-center justify-center bg-primary text-primary-foreground shadow-xs',
+                'text-[14px] font-semibold transition-colors hover:bg-chartreuse-hover',
+                collapsed
+                  ? 'h-9 w-9 rounded-lg'
+                  : 'mx-0 h-9 w-full gap-2 rounded-lg px-4',
               )}
             >
-              <Plus size={18} strokeWidth={2.5} />
-              {!collapsed && 'Create'}
+              <Plus size={16} strokeWidth={2.5} />
+              {!collapsed && 'New automation'}
             </button>
           </Labelled>
         )}
       </SidebarHeader>
 
       <SidebarMenu className={collapsed ? 'items-center' : undefined}>
-        {items.map(item => {
-          const active = isActivePath(location.pathname, item.path);
-          const Icon = item.icon;
-          const waiting = item.path === '/inbox' ? inboxCount : 0;
-          return (
-            <Labelled key={item.path} collapsed={collapsed} label={item.label}>
-              <Link
-                to={item.path}
-                onClick={closeMobile}
-                // The real count belongs in the name even when the pill has
-                // to round it off: "9+" is a decision about width, not about
-                // how many people are waiting. At rail width the label has
-                // to be in the name too — there is nothing else to read.
-                aria-label={
-                  waiting > 0
-                    ? `${item.label}, ${waiting} conversations waiting`
-                    : collapsed
-                      ? item.label
-                      : undefined
-                }
-                aria-current={active ? 'page' : undefined}
-                className={sidebarMenuButtonClass(active, collapsed)}
-              >
-                <Icon
-                  size={20}
-                  strokeWidth={active ? 2.4 : 2}
-                  className="transition-transform group-hover:scale-110"
-                />
-                {!collapsed && <span className="text-[15px]">{item.label}</span>}
-                {waiting > 0 && (
-                  // Same lime pill either way — only where it sits changes,
-                  // because at 44px there is no row to sit at the end of.
-                  // aria-hidden because the link above already says it.
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      `rounded-full bg-sidebar-primary px-1.5 text-[10.5px] font-semibold
-                       leading-[17px] text-sidebar-primary-foreground`,
-                      collapsed ? 'absolute -right-0.5 -top-0.5' : 'ml-auto',
-                    )}
-                  >
-                    {waiting > 9 ? '9+' : waiting}
-                  </span>
-                )}
-              </Link>
-            </Labelled>
-          );
-        })}
+        {primaryItems.map(renderNavItem)}
       </SidebarMenu>
+
+      {secondaryItems.length > 0 && (
+        <SidebarMenu className={cn('mt-auto flex-none', collapsed && 'items-center')}>
+          {secondaryItems.map(renderNavItem)}
+        </SidebarMenu>
+      )}
 
       <SidebarFooter className={collapsed ? 'flex justify-center' : undefined}>
         <AccountMenu onNavigate={closeMobile} compact={collapsed} />
@@ -263,7 +268,7 @@ function WorkspaceStanding({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div role="note" className="mx-1 rounded-2xl bg-sidebar-muted px-3.5 py-2.5">
+    <div role="note" className="mx-0 rounded-xl bg-sidebar-muted ring-1 ring-sidebar-border px-3 py-2">
       <p className="font-label text-[10px] uppercase tracking-widest text-sidebar-muted-foreground">
         You're in
       </p>

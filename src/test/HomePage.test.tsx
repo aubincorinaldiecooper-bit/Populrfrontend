@@ -6,17 +6,15 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import HomePage from '../pages/HomePage';
 import AppSidebar from '../components/app/AppSidebar';
 import { CreateAutomationProvider } from '../context/CreateAutomationContext';
-import type { DashboardData, ConnectedAccount } from '../lib/api';
+import type { DashboardData, ConnectedAccount, Conversation } from '../lib/api';
 
-/* Home, refocused: one primary action (Create an automation), one attention
- * banner, marketer tiles, and per-automation performance from the account
+/* Home, refocused: a task-first greeting, waiting conversations, marketer
+ * tiles, and per-automation performance from the account
  * each automation actually runs on. What this suite pins, per the brief:
  *
  *   - the attention count appears once, and its banner opens Inbox already
  *     filtered to conversations needing a human;
- *   - Create an automation opens the creation experience directly — with
- *     several connected accounts it first asks "Run this automation from…",
- *     and the sidebar's Create is the SAME action;
+ *   - creation stays in the sidebar, including account selection;
  *   - Warm leads is gone from Home;
  *   - metrics a channel can't measure are omitted, never faked as 0%;
  *   - two automations on two different Instagram accounts each show their
@@ -34,13 +32,25 @@ const IG_POPULR = {
 } as unknown as ConnectedAccount;
 
 const appState = { accounts: [IG_AUBIN] as ConnectedAccount[], showToast: vi.fn() };
+const mockUseConversationsQuery = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
   useApp: () => appState,
 }));
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { name: 'Aubin' } }),
+}));
+
 vi.mock('../components/inbox/conversations', () => ({
-  useInboxWaiting: () => ({ count: 0, refresh: () => {} }),
+  useInboxWaiting: () => {
+    const conversations = mockUseConversationsQuery('').data?.conversations as Conversation[] | undefined;
+    return {
+      count: conversations?.filter(conversation => conversation.waiting > 0).length ?? 0,
+      refresh: () => {},
+    };
+  },
+  useConversationsQuery: (search: string) => mockUseConversationsQuery(search),
 }));
 
 // The sidebar's account menu needs the auth session; this suite is about
@@ -67,6 +77,24 @@ function dashboard(overrides: Partial<DashboardData> = {}): DashboardData {
     recentActivity: [],
     ...overrides,
   };
+}
+
+function waitingConversations(count: number): Conversation[] {
+  return Array.from({ length: count }, (_, index) => ({
+    contactId: `contact-${index + 1}`,
+    handle: `person${index + 1}`,
+    name: `Person ${index + 1}`,
+    avatarUrl: null,
+    platform: 'instagram',
+    lastMessage: {
+      text: `Question ${index + 1}`,
+      direction: 'inbound',
+      channel: 'dm',
+      at: new Date().toISOString(),
+    },
+    waiting: 1,
+    latestInboxItemId: `item-${index + 1}`,
+  }));
 }
 
 const mockFetchDashboard = vi.fn();
@@ -106,30 +134,37 @@ beforeEach(() => {
   vi.clearAllMocks();
   appState.accounts = [IG_AUBIN];
   mockCreateFlow.mockResolvedValue({ id: 'flow_9', name: 'New automation' });
+  mockUseConversationsQuery.mockReturnValue({
+    data: { conversations: [] },
+    isLoading: false,
+    isError: false,
+  });
 });
 
 describe('the north-star action', () => {
-  it('Create an automation goes straight into the builder — never the list first', async () => {
+  it('keeps the duplicate creation action off the Home header', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard());
-    const user = userEvent.setup();
     renderHome();
     await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
 
-    await user.click(screen.getAllByRole('button', { name: /Create an automation/ })[0]);
-    await waitFor(() => expect(screen.getByText('BUILDER PAGE')).toBeInTheDocument());
-    // One connected account: it is chosen for the creator, bound at creation.
-    expect(mockCreateFlow).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acc-aubin' }));
-    expect(screen.queryByText('AUTOMATIONS LIST')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Create an automation/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New automation' })).not.toBeInTheDocument();
   });
 
-  it('several connected accounts: it first asks which account to run from', async () => {
+  it('several connected accounts: the sidebar action first asks which account to run from', async () => {
     appState.accounts = [IG_POPULR, IG_AUBIN];
-    mockFetchDashboard.mockResolvedValue(dashboard());
     const user = userEvent.setup();
-    renderHome();
-    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
-
-    await user.click(screen.getAllByRole('button', { name: /Create an automation/ })[0]);
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <CreateAutomationProvider>
+          <Routes>
+            <Route path="/" element={<AppSidebar />} />
+            <Route path="/automations/:flowId" element={<p>BUILDER PAGE</p>} />
+          </Routes>
+        </CreateAutomationProvider>
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'New automation' }));
     const dialog = await screen.findByRole('dialog', { name: 'Create an automation' });
     expect(within(dialog).getByText('Run this automation from')).toBeInTheDocument();
     expect(within(dialog).getByText('@populr')).toBeInTheDocument();
@@ -151,29 +186,74 @@ describe('the north-star action', () => {
         </CreateAutomationProvider>
       </MemoryRouter>,
     );
-    await user.click(screen.getAllByRole('button', { name: /Create/ })[0]);
+    await user.click(screen.getByRole('button', { name: 'New automation' }));
     await waitFor(() => expect(screen.getByText('BUILDER PAGE')).toBeInTheDocument());
     expect(mockCreateFlow).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acc-aubin' }));
   });
 });
 
 describe('attention', () => {
-  it('the count appears once, and its banner opens Inbox filtered to needs-you', async () => {
+  it('uses the Inbox waiting count instead of dashboard totals and links to needs-you', async () => {
     mockFetchDashboard.mockResolvedValue(dashboard({
-      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 40, activeAutomations: 3 },
+      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 7, activeAutomations: 3 },
     }));
+    mockUseConversationsQuery.mockReturnValue({
+      data: { conversations: waitingConversations(3) },
+      isLoading: false,
+      isError: false,
+    });
     const user = userEvent.setup();
     renderHome();
 
-    await waitFor(() => expect(screen.getByText('40 conversations need you')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('3 conversations need you')).toBeInTheDocument());
+    expect(screen.queryByText('7 conversations need you')).not.toBeInTheDocument();
+    expect(screen.getByText("Here's who's waiting on you, and how your automations are doing."))
+      .toBeInTheDocument();
     expect(screen.getByText('Questions your automations handed over to you.')).toBeInTheDocument();
     // The duplicate metric card is gone: the attention count exists exactly
     // once, and no tile re-states it under another name.
     expect(screen.queryByText('Need your reply')).not.toBeInTheDocument();
     expect(screen.getAllByText(/conversations need you/)).toHaveLength(1);
 
-    await user.click(screen.getByText('40 conversations need you'));
+    await user.click(screen.getByText('3 conversations need you'));
     expect(screen.getByText(/INBOX PAGE/)).toHaveTextContent('?f=needs-you');
+  });
+
+  it('shows at most three waiting conversations and each Reply opens that thread', async () => {
+    mockFetchDashboard.mockResolvedValue(dashboard({
+      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 5, activeAutomations: 3 },
+    }));
+    mockUseConversationsQuery.mockReturnValue({
+      data: { conversations: waitingConversations(5) },
+      isLoading: false,
+      isError: false,
+    });
+    renderHome();
+
+    const replies = await screen.findAllByRole('link', { name: 'Reply' });
+    expect(replies).toHaveLength(3);
+    expect(replies[0]).toHaveAttribute('href', '/inbox?c=contact-1');
+    expect(replies[1]).toHaveAttribute('href', '/inbox?c=contact-2');
+    expect(replies[2]).toHaveAttribute('href', '/inbox?c=contact-3');
+    expect(screen.queryByText('Person 4')).not.toBeInTheDocument();
+    expect(screen.getByText('Question 1')).toBeInTheDocument();
+    expect(mockUseConversationsQuery).toHaveBeenCalledWith('');
+  });
+
+  it('keeps the waiting section and subtitle hidden until conversations load', async () => {
+    mockFetchDashboard.mockResolvedValue(dashboard({
+      totals: { contacts: 42, warmLeads: 7, hotLeads: 2, needsReply: 7, activeAutomations: 3 },
+    }));
+    mockUseConversationsQuery.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('Live automations')).toBeInTheDocument());
+    expect(screen.queryByText(/conversations need you/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/waiting on you/)).not.toBeInTheDocument();
   });
 });
 
@@ -219,11 +299,12 @@ describe('performance, honestly', () => {
       ],
     }));
     renderHome();
-    await waitFor(() => expect(screen.getByText('Automation performance')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Running for you')).toBeInTheDocument());
 
     const rowA = screen.getByText('Booking inquiries').closest('a')!;
     expect(within(rowA).getByText(/Instagram · @aubin/)).toBeInTheDocument();
     expect(within(rowA).getByText('Live')).toBeInTheDocument();
+    expect(rowA.querySelector(':scope > div')).toHaveClass('bg-primary', 'text-primary-foreground');
     expect(within(rowA).getByText('1,240')).toBeInTheDocument();
     expect(within(rowA).getByText(/34% replied/)).toBeInTheDocument();
     expect(within(rowA).getByText(/71% read/)).toBeInTheDocument();
@@ -236,7 +317,7 @@ describe('performance, honestly', () => {
     expect(within(rowB).getByText(/41% replied/)).toBeInTheDocument();
     expect(within(rowB).queryByText(/read/)).not.toBeInTheDocument();
 
-    expect(screen.getByRole('link', { name: /View all automations/ })).toHaveAttribute('href', '/automations');
+    expect(screen.getByRole('link', { name: /All automations/ })).toHaveAttribute('href', '/automations');
   });
 
   it('the tile grid stacks on small screens instead of forcing four columns', async () => {
@@ -283,7 +364,7 @@ describe('normal Home behavior stays intact', () => {
     }));
     renderHome();
     await waitFor(() => expect(screen.getByText('Set up your first automation')).toBeInTheDocument());
-    expect(screen.queryByText('Live automations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Running for you')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /do it now/ })).toHaveAttribute('href', '/channels');
   });
 

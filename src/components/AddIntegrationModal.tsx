@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -84,6 +84,7 @@ function IntegrationPicker({
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CatalogToolkit[]>([]);
+  const [activeCategory, setActiveCategory] = useState('All');
   // Starts true because this always searches on mount (an empty query, which
   // the backend answers with the featured apps). Initialising it here rather
   // than flipping it in an effect keeps the first paint honest and keeps
@@ -192,15 +193,32 @@ function IntegrationPicker({
       });
   };
 
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const toolkit of results) {
+      for (const category of new Set(toolkit.categories)) {
+        counts.set(category, (counts.get(category) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([category]) => category);
+  }, [results]);
+  const visibleResults =
+    activeCategory === 'All'
+      ? results
+      : results.filter(toolkit => toolkit.categories.includes(activeCategory));
+
   return (
     <>
       <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div className="min-w-0">
             <DialogTitle className="text-[17px] font-semibold text-foreground">
-              Add an integration
+              Add a tool
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-              Search the apps Populr can connect. Pick one and you&apos;ll be sent to sign in.
+              Pick an app and sign in. Your automations can then use it.
             </DialogDescription>
           </div>
           <button
@@ -223,11 +241,30 @@ function IntegrationPicker({
             <Input
               autoFocus
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => {
+                setQuery(e.target.value);
+                setActiveCategory('All');
+              }}
               placeholder="Search apps — calendar, store, CRM…"
               className="pl-9"
               aria-label="Search apps"
             />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {['All', ...categories].map(category => (
+              <button
+                key={category}
+                type="button"
+                aria-pressed={activeCategory === category}
+                onClick={() => setActiveCategory(category)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors
+                  ${activeCategory === category
+                    ? 'bg-foreground text-background'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+              >
+                {category.charAt(0).toUpperCase() + category.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -263,7 +300,7 @@ function IntegrationPicker({
           )}
 
           <ul className="space-y-1">
-            {results.map(toolkit => {
+            {visibleResults.map(toolkit => {
               const busy = connecting === toolkit.slug;
               return (
                 <li key={toolkit.slug}>

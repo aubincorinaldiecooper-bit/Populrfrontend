@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import IntegrationsPage from '../pages/IntegrationsPage';
+import { render } from './render';
 import { appContext } from './appContext.mock';
 import type { Integration, CatalogToolkit } from '../lib/api';
 
@@ -74,6 +75,11 @@ function renderPage() {
   );
 }
 
+async function openPicker() {
+  const buttons = await screen.findAllByRole('button', { name: /Add a tool/i });
+  await userEvent.click(buttons[0]);
+}
+
 describe('IntegrationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,10 +105,10 @@ describe('IntegrationsPage', () => {
     expect(screen.queryByText(/of \d+ connected/)).not.toBeInTheDocument();
   });
 
-  it('points a workspace with nothing connected at what integrations are for', async () => {
+  it('points a workspace with nothing connected at what tools are for', async () => {
     mockFetchIntegrations.mockResolvedValue({ configured: true, integrations: [] });
     renderPage();
-    expect(await screen.findByText(/No apps connected yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No tools connected yet/i)).toBeInTheDocument();
     expect(screen.getByText(/inside an automation/i)).toBeInTheDocument();
   });
 
@@ -113,6 +119,9 @@ describe('IntegrationsPage', () => {
     });
     renderPage();
     expect(await screen.findByText('Needs reconnecting')).toBeInTheDocument();
+    expect(screen.getByText(/Shopify stopped working/)).toBeInTheDocument();
+    expect(screen.getByText(/Reconnect it so your automations keep running/)).toBeInTheDocument();
+    expect(screen.getByText('1 tool · 1 needs attention')).toBeInTheDocument();
     expect(screen.queryByText('Not connected')).not.toBeInTheDocument();
   });
 
@@ -122,7 +131,9 @@ describe('IntegrationsPage', () => {
     mockConnectUrl.mockResolvedValue('https://auth.composio.dev/hosted/abc');
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Add integration/i }));
+    await openPicker();
+    expect(screen.getByRole('heading', { name: 'Add a tool' })).toBeInTheDocument();
+    expect(screen.getByText('Pick an app and sign in. Your automations can then use it.')).toBeInTheDocument();
     expect(await screen.findByText('Calendly')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Connect' }));
@@ -136,7 +147,7 @@ describe('IntegrationsPage', () => {
     mockFetchIntegrations.mockResolvedValue({ configured: true, integrations: [] });
     mockSearchCatalog.mockResolvedValue([toolkit({ connected: true })]);
     renderPage();
-    await userEvent.click(await screen.findByRole('button', { name: /Add integration/i }));
+    await openPicker();
     expect(await screen.findByText('Calendly')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
   });
@@ -149,7 +160,7 @@ describe('IntegrationsPage', () => {
     mockConnectUrl.mockResolvedValue(undefined as unknown as string);
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Add integration/i }));
+    await openPicker();
     await userEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalled());
@@ -162,7 +173,9 @@ describe('IntegrationsPage', () => {
     mockDisconnect.mockRejectedValue(new Error('Couldn’t reach that app just now.'));
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions for Shopify' }));
+    expect(await screen.findByRole('menuitem', { name: 'Reconnect' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Disconnect' }));
     // The question is asked before anything happens; confirm it.
     const confirms = await screen.findAllByRole('button', { name: 'Disconnect' });
     await userEvent.click(confirms[confirms.length - 1]);
@@ -172,7 +185,7 @@ describe('IntegrationsPage', () => {
     expect(tone).toBe('error');
     // Still connected on screen — the backend only marks it disconnected
     // once the provider confirms, so clearing the row here would be a lie.
-    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getAllByText('Connected').length).toBeGreaterThan(0);
   });
 
   it('offers no Disconnect for an app that is already disconnected', async () => {
@@ -192,13 +205,78 @@ describe('IntegrationsPage', () => {
     mockFetchIntegrations.mockResolvedValue({ configured: false, integrations: [] });
     renderPage();
     expect(await screen.findByText(/aren['’]t switched on yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Add integration/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add a tool/i })).not.toBeInTheDocument();
   });
 
-  it('shows the failure rather than an empty list when integrations cannot be loaded', async () => {
+  it('shows the failure rather than an empty list when tools cannot be loaded', async () => {
     mockFetchIntegrations.mockRejectedValue(new Error('Populr is unreachable.'));
     renderPage();
-    expect(await screen.findByText(/Couldn['’]t load integrations/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn['’]t load your tools/i)).toBeInTheDocument();
     expect(screen.getByText('Populr is unreachable.')).toBeInTheDocument();
+  });
+
+  it('filters catalog results by category and resets to All when the query changes', async () => {
+    mockFetchIntegrations.mockResolvedValue({ configured: true, integrations: [] });
+    mockSearchCatalog.mockResolvedValue([
+      toolkit({ name: 'Calendly', categories: ['scheduling'] }),
+      toolkit({ slug: 'shopify', name: 'Shopify', categories: ['ecommerce'] }),
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+    await openPicker();
+    await screen.findByText('Calendly');
+    expect(screen.getByRole('button', { name: 'Scheduling' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ecommerce' }));
+
+    expect(screen.getByText('Shopify')).toBeInTheDocument();
+    expect(screen.queryByText('Calendly')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ecommerce' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(screen.getByRole('textbox', { name: 'Search apps' }), 'calendar');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('lists connections in a simple table with the existing actions', async () => {
+    mockFetchIntegrations.mockResolvedValue({
+      configured: true,
+      integrations: [
+        integration({ connectedAt: '2025-09-15T12:00:00.000Z' }),
+        integration({
+          slug: 'notion',
+          name: 'Notion',
+          status: 'reconnect_required',
+          connectionId: 'ca_2',
+        }),
+      ],
+    });
+    renderPage();
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Tool' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Connected' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    expect(within(table).getByText('Sep 15')).toBeInTheDocument();
+    expect(screen.queryByText('What Populr can do')).not.toBeInTheDocument();
+    expect(screen.queryByText('Used in')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More actions for Shopify' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+  });
+
+  it('summarizes multiple broken tools without naming automations', async () => {
+    mockFetchIntegrations.mockResolvedValue({
+      configured: true,
+      integrations: [
+        integration({ status: 'reconnect_required' }),
+        integration({ slug: 'notion', name: 'Notion', status: 'reconnect_required', connectionId: 'ca_2' }),
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findAllByText(/2 tools stopped working/)).toHaveLength(2);
+    const table = await screen.findByRole('table');
+    expect(within(table).getAllByRole('button', { name: 'Reconnect' })).toHaveLength(2);
+    expect(screen.queryByText(/Free guide DM/)).not.toBeInTheDocument();
   });
 });

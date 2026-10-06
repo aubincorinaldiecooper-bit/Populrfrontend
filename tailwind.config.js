@@ -166,7 +166,9 @@ export default {
         'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
       },
       boxShadow: {
-        card: '0 4px 16px rgba(17, 17, 17, 0.06)',
+        xs: '0 1px 2px rgba(17,17,17,0.04)',
+        card: '0 1px 2px rgba(17,17,17,0.04), 0 4px 12px -6px rgba(17,17,17,0.06)',
+        'card-hover': '0 1px 2px rgba(17,17,17,0.05), 0 12px 28px -12px rgba(17,17,17,0.14)',
         drawer: '-4px 0 24px rgba(17, 17, 17, 0.08)',
       },
       keyframes: {

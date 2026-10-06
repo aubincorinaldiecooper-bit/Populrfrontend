@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
  * creator acts on, it's text.
  */
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-full px-2 text-[12px] font-medium leading-5 whitespace-nowrap',
+  'inline-flex items-center gap-1 rounded-full px-2 text-[12px] font-medium leading-5 whitespace-nowrap ring-1 ring-inset ring-black/[0.04]',
   {
     variants: {
       variant: {

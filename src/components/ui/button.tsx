@@ -18,8 +18,9 @@ import { cn } from '@/lib/utils';
  *   <Link to="/x" className={buttonVariants({ variant: 'outline' })}>…
  */
 const buttonVariants = cva(
-  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl
-   text-sm font-semibold transition-all
+  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg
+   text-sm font-semibold transition-[background-color,box-shadow,color,border-color]
+   active:translate-y-px motion-reduce:active:translate-y-0
    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chartreuse/50
    focus-visible:ring-offset-2 focus-visible:ring-offset-cream
    disabled:pointer-events-none disabled:opacity-60
@@ -27,16 +28,16 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-chartreuse-hover',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-[#333]',
-        outline: 'border border-border bg-transparent font-medium text-foreground hover:bg-muted',
+        default: 'bg-primary text-primary-foreground shadow-xs hover:bg-chartreuse-hover',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-[#2a2a2a] shadow-xs',
+        outline: 'border border-border bg-card font-medium text-foreground shadow-xs hover:bg-muted hover:border-border-strong',
         ghost: 'font-medium text-muted-foreground hover:text-foreground hover:bg-muted',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
       },
       size: {
-        default: 'px-5 py-2.5',
-        sm: 'px-3.5 py-2 text-[12.5px]',
-        lg: 'px-6 py-3',
+        default: 'h-10 px-4',
+        sm: 'h-8 px-3 text-[12.5px]',
+        lg: 'h-11 px-5',
         icon: 'h-9 w-9 p-0',
       },
     },

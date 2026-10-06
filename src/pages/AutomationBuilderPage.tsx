@@ -87,7 +87,7 @@ const ANCHORED_EDITOR_MIN_CONTENT = 708;
 /**
  * Both thresholds are arithmetic over the chrome actually on screen, and
  * the sidebar's width is a creator's choice now — collapsing it hands the
- * canvas 208px, which is most of a panel. Reading a constant instead would
+ * canvas 176px, which is most of a panel. Reading a constant instead would
  * make the builder refuse a layout it has the room for, which is exactly
  * the benefit someone collapses the navigation to get.
  *
@@ -120,7 +120,7 @@ export default function AutomationBuilderPage() {
 
   // The chrome the canvas is actually competing with. Collapsing the
   // navigation is a creator's choice on every route now, and it hands this
-  // page 208px — most of a panel — so every threshold below is measured
+  // page 176px — most of a panel — so every threshold below is measured
   // against the width on screen rather than the widest one possible.
   const { collapsed: navCollapsed } = useSidebar();
   const sidebarWidth = navCollapsed ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH;
@@ -254,9 +254,9 @@ export default function AutomationBuilderPage() {
    * proximity is the point — but on a small canvas a floating card obscures
    * more than it helps, so it becomes a bottom sheet.
    *
-   * "Small" is about the CANVAS, not the window: the 280px sidebar shows
-   * from 768px up, so a 768px tablet has a 488px content column and an
-   * anchored 320px card would leave it 168px of canvas. The anchored card
+   * "Small" is about the CANVAS, not the window: the 248px sidebar shows
+   * from 768px up, so a 768px tablet has a 520px content column and an
+   * anchored 320px card would leave it 200px of canvas. The anchored card
    * earns its place once the content column has the ~708px it always needed
    * — see anchoredEditorMinWidth().
    */
@@ -400,7 +400,7 @@ export default function AutomationBuilderPage() {
     };
     // Answered once on subscribing, not only on the next crossing. The
     // threshold itself moves now — expanding the navigation raises it by
-    // 208px — and a viewport that was wide enough a moment ago can be on the
+    // 176px — and a viewport that was wide enough a moment ago can be on the
     // wrong side of the new line without having changed at all. matchMedia
     // reports crossings, and constructing a MediaQueryList is not one, so
     // waiting for `change` here would leave both columns open on a canvas

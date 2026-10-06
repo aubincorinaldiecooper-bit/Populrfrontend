@@ -226,14 +226,14 @@ export default function AccountMenu({
             <button
               aria-label="Account menu"
               className="group relative flex h-10 w-10 items-center justify-center rounded-full
-                transition-colors hover:bg-surface-container-high focus-visible:outline-none
+                transition-colors hover:bg-sidebar-muted focus-visible:outline-none
                 focus-visible:ring-2 focus-visible:ring-[#C5FF3D]"
             >
               {identity.avatarUrl ? (
-                <img src={identity.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover border border-surface-variant" />
+                <img src={identity.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover border border-sidebar-border" />
               ) : (
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-high
-                  border border-surface-variant text-[12px] font-semibold text-on-surface-variant">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-primary
+                  text-[12px] font-semibold text-sidebar-primary-foreground">
                   {identity.initials}
                 </span>
               )}
@@ -247,18 +247,18 @@ export default function AccountMenu({
   }
 
   return (
-    <div className="flex items-center gap-3 w-full p-2 rounded-full hover:bg-surface-container-high transition-colors">
+    <div className="flex items-center gap-3 w-full p-2 rounded-xl transition-colors hover:bg-sidebar-muted">
       {identity.avatarUrl ? (
-        <img src={identity.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-surface-variant flex-shrink-0" />
+        <img src={identity.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-sidebar-border flex-shrink-0" />
       ) : (
-        <div className="w-10 h-10 rounded-full bg-surface-container-high border border-surface-variant flex items-center justify-center text-[13px] font-semibold text-on-surface-variant flex-shrink-0">
+        <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center text-[13px] font-semibold text-sidebar-primary-foreground flex-shrink-0">
           {identity.initials}
         </div>
       )}
       <div className="text-left flex-1 min-w-0">
-        <p className="font-semibold text-[14px] text-on-surface truncate">{identity.name}</p>
+        <p className="font-semibold text-[14px] text-sidebar-foreground truncate">{identity.name}</p>
         {identity.email && (
-          <p className="font-label text-[11px] text-on-surface-variant truncate">{identity.email}</p>
+          <p className="font-label text-[11px] text-sidebar-muted-foreground truncate">{identity.email}</p>
         )}
       </div>
       <DropdownMenu>
@@ -266,7 +266,7 @@ export default function AccountMenu({
           render={
             <button
               aria-label="Account menu"
-              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-on-surface-variant hover:bg-surface-container-highest transition-colors"
+              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sidebar-muted-foreground hover:bg-sidebar-muted hover:text-sidebar-foreground transition-colors"
             >
               <MoreVertical size={18} />
             </button>

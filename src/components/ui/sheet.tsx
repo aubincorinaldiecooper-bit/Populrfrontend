@@ -54,7 +54,7 @@ const SheetContent = React.forwardRef<
       <BaseDialog.Popup
         ref={ref}
         className={cn(
-          `fixed z-[50] bg-sidebar border-sidebar-border outline-none
+          `fixed z-[50] bg-background border-border outline-none
            transition-transform duration-300 ease-[cubic-bezier(0.24,1,0.4,1)]`,
           sides[side],
           className,

@@ -1,14 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Card } from '@/components/ui/card';
 import { Page } from '@/components/ui/page';
-import { Button } from '@/components/ui/button';
-import { AlertCircle, Loader2, Plug, Plus, RefreshCw } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Loader2,
+  MoreHorizontal,
+  Plug,
+  Plus,
+  RefreshCw,
+} from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import EmptyState from '../components/EmptyState';
 import ConfirmDialog from '../components/app/ConfirmDialog';
 import AddIntegrationModal from '../components/AddIntegrationModal';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 import { useApp } from '../context/AppContext';
 import { isOwnerView } from '../lib/access';
 import {
@@ -67,7 +83,7 @@ function IntegrationMark({ integration }: { integration: Integration }) {
   const [failed, setFailed] = useState(false);
   const showLogo = integration.logoUrl && !failed;
   return (
-    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted sm:h-10 sm:w-10 sm:rounded-xl">
       {showLogo ? (
         <img
           src={integration.logoUrl!}
@@ -79,6 +95,138 @@ function IntegrationMark({ integration }: { integration: Integration }) {
         <Plug size={18} className="text-muted-foreground" />
       )}
     </div>
+  );
+}
+
+function IntegrationRow({
+  integration,
+  canManage,
+  busy,
+  onReconnect,
+  onDisconnect,
+}: {
+  integration: Integration;
+  canManage: boolean;
+  busy: boolean;
+  onReconnect: (integration: Integration) => void;
+  onDisconnect: (integration: Integration) => void;
+}) {
+  const pill = statusPillProps(integration.status);
+  const needsReconnect = integration.status === 'reconnect_required';
+  const connectedDate = integration.connectedAt ? new Date(integration.connectedAt) : null;
+  const connectedAtLabel =
+    connectedDate && Number.isFinite(connectedDate.getTime())
+      ? connectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      : '—';
+  const connectedColumn =
+    integration.status === 'connected'
+      ? connectedAtLabel
+      : integration.status === 'reconnect_required'
+        ? 'Stopped working'
+        : integration.status === 'pending'
+          ? 'Waiting for you to finish signing in'
+          : 'Disconnected';
+
+  const moreActions = (includeReconnect: boolean) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`More actions for ${integration.name}`}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'h-8 w-8 sm:h-9 sm:w-9')}
+          >
+            <MoreHorizontal size={17} />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        {includeReconnect && (
+          <DropdownMenuItem onClick={() => onReconnect(integration)}>
+            <RefreshCw size={14} /> Reconnect
+          </DropdownMenuItem>
+        )}
+        {includeReconnect && <DropdownMenuSeparator />}
+        <DropdownMenuItem destructive onClick={() => onDisconnect(integration)}>
+          Disconnect
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  return (
+    <tr className={cn('transition-colors hover:bg-muted/40', needsReconnect && 'bg-destructive/5')}>
+      <td className="w-[40%] px-2 py-3 sm:w-[40%] sm:px-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <IntegrationMark integration={integration} />
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-foreground sm:text-[14px]">
+              {integration.name}
+            </p>
+            {integration.blurb && (
+              <p className="truncate text-[11px] text-muted-foreground sm:text-[12px]">
+                {integration.blurb}
+              </p>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="w-[28%] px-1 py-3 sm:w-[24%] sm:px-4">
+        <StatusPill
+          status={pill.status}
+          label={pill.label}
+          className="max-w-full whitespace-normal px-1.5 text-[10px] sm:whitespace-nowrap sm:px-2 sm:text-xs"
+        />
+      </td>
+      <td className="hidden px-4 py-3 text-[12px] text-muted-foreground sm:table-cell sm:w-[20%]">
+        {connectedColumn}
+      </td>
+      <td className="w-[32%] px-2 py-3 text-right sm:w-[16%] sm:px-4">
+        {canManage && (
+          <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end sm:gap-1.5">
+            {busy ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 whitespace-nowrap px-1.5 text-[11px] sm:h-9 sm:px-3 sm:text-[13px]"
+                disabled
+              >
+                <Loader2 size={13} className="animate-spin" /> Working…
+              </Button>
+            ) : integration.status === 'connected' ? (
+              moreActions(true)
+            ) : integration.status === 'reconnect_required' ? (
+              <>
+                <Button
+                  size="sm"
+                  className="h-8 whitespace-nowrap px-1.5 text-[11px] sm:h-9 sm:px-3 sm:text-[13px]"
+                  onClick={() => onReconnect(integration)}
+                >
+                  <RefreshCw size={13} /> Reconnect
+                </Button>
+                {moreActions(false)}
+              </>
+            ) : integration.status === 'pending' ? (
+              <Button
+                size="sm"
+                className="h-8 whitespace-nowrap px-1.5 text-[10px] sm:h-9 sm:px-3 sm:text-[13px]"
+                onClick={() => onReconnect(integration)}
+              >
+                Finish connecting
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="h-8 whitespace-nowrap px-1.5 text-[11px] sm:h-9 sm:px-3 sm:text-[13px]"
+                onClick={() => onReconnect(integration)}
+              >
+                <RefreshCw size={13} /> Reconnect
+              </Button>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -117,7 +265,7 @@ export default function IntegrationsPage() {
         // The page shows the failure rather than an empty list: "nothing
         // connected" and "we couldn't ask" look identical otherwise, and
         // only one of them is worth retrying.
-        setLoadError(err instanceof Error ? err.message : 'Couldn’t load integrations.');
+        setLoadError(err instanceof Error ? err.message : 'Couldn’t load your tools.');
       })
       .then(() => {
         setLoading(false);
@@ -213,13 +361,13 @@ export default function IntegrationsPage() {
         showToast(
           data.revoked > 0
             ? `Refreshed. ${data.revoked} connection${data.revoked === 1 ? '' : 's'} no longer active.`
-            : 'Integrations refreshed.',
+            : 'Tools refreshed.',
           data.revoked > 0 ? 'info' : 'success',
         );
       })
       .catch((err: unknown) => {
         console.error('[integrations] sync failed:', err);
-        showToast(err instanceof Error ? err.message : 'Couldn’t refresh integrations.', 'error');
+        showToast(err instanceof Error ? err.message : 'Couldn’t refresh tools.', 'error');
       })
       .then(() => {
         setSyncing(false);
@@ -227,28 +375,52 @@ export default function IntegrationsPage() {
   };
 
   const canManage = ownerView && configured && backendConfigured;
+  const connectedCount = integrations.filter(
+    integration => integration.status === 'connected',
+  ).length;
+  const needsAttentionCount = integrations.filter(
+    integration => integration.status === 'reconnect_required',
+  ).length;
+  const pendingCount = integrations.filter(
+    integration => integration.status === 'pending',
+  ).length;
+  const summaryParts = [
+    `${integrations.length} ${integrations.length === 1 ? 'tool' : 'tools'}`,
+    ...(connectedCount ? [`${connectedCount} connected`] : []),
+    ...(needsAttentionCount
+      ? [`${needsAttentionCount} ${needsAttentionCount === 1 ? 'needs' : 'need'} attention`]
+      : []),
+    ...(pendingCount ? [`${pendingCount} finishing up`] : []),
+  ];
+  const brokenIntegrations = integrations.filter(
+    integration => integration.status === 'reconnect_required',
+  );
 
   return (
-    <Page className="max-w-[880px]">
+    <Page className="max-w-[1040px]">
       <PageHeader
-        title="Integrations"
-        subtitle="Connect the apps your business runs on, then use them as steps in your automations."
+        title="Tools"
+        subtitle="Apps your automations can use, like booking a call, looking up an order or saving a lead."
         action={
           canManage ? (
             <div className="flex items-center gap-2">
-              {integrations.length > 0 && (
-                <Button variant="outline" onClick={() => void runSync()} disabled={syncing}>
-                  <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
-                  {syncing ? 'Refreshing…' : 'Refresh'}
-                </Button>
-              )}
+              <Button variant="outline" onClick={() => void runSync()} disabled={syncing}>
+                <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
+                {syncing ? 'Refreshing…' : 'Refresh'}
+              </Button>
               <Button onClick={() => setPicking(true)}>
-                <Plus size={14} /> Add integration
+                <Plus size={14} /> Add a tool
               </Button>
             </div>
           ) : undefined
         }
       />
+
+      {!loading && !loadError && configured && backendConfigured && (
+        <p className="mb-5 text-[12px] text-muted-foreground">
+          {summaryParts.join(' · ')}
+        </p>
+      )}
 
       {!backendConfigured && (
         <Card className="mb-6 flex items-start gap-3 p-5">
@@ -270,7 +442,7 @@ export default function IntegrationsPage() {
           <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-warning" />
           <div>
             <p className="text-sm font-semibold text-foreground">
-              Integrations aren&apos;t switched on yet
+              Tools aren&apos;t switched on yet
             </p>
             <p className="mt-1 text-[13px] text-muted-foreground">
               Connecting apps needs a Composio API key on the backend.
@@ -283,7 +455,7 @@ export default function IntegrationsPage() {
         <Card className="mb-6 flex items-start gap-3 p-5">
           <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-destructive" />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">Couldn&apos;t load integrations</p>
+            <p className="text-sm font-semibold text-foreground">Couldn&apos;t load your tools</p>
             <p className="mt-1 text-[13px] text-muted-foreground">{loadError}</p>
             <Button variant="outline" className="mt-3" onClick={() => void load()}>
               <RefreshCw size={14} /> Try again
@@ -292,18 +464,18 @@ export default function IntegrationsPage() {
         </Card>
       )}
 
-      {loading && <p className="text-[13px] text-muted-foreground">Loading integrations…</p>}
+      {loading && <p className="text-[13px] text-muted-foreground">Loading tools…</p>}
 
       {!loading && !loadError && integrations.length === 0 && configured && backendConfigured && (
         <Card className="p-2">
           <EmptyState
             icon="integrations"
-            title="No apps connected yet"
+            title="No tools connected yet"
             description="Connect your calendar, store or CRM and Populr can use it inside an automation — booking the call, looking up the order, logging the lead."
             action={
               canManage ? (
                 <Button onClick={() => setPicking(true)}>
-                  <Plus size={14} /> Add integration
+                  <Plus size={14} /> Add a tool
                 </Button>
               ) : undefined
             }
@@ -312,75 +484,95 @@ export default function IntegrationsPage() {
       )}
 
       {!loading && !loadError && integrations.length > 0 && (
-        <div className="space-y-3">
-          {integrations.map(integration => {
-            const busy = busySlug === integration.slug;
-            const pill = statusPillProps(integration.status);
-            const needsReconnect = integration.status === 'reconnect_required';
-            return (
-              <Card key={integration.slug} className="p-4">
-                <div className="flex items-center gap-3">
-                  <IntegrationMark integration={integration} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[14px] font-semibold text-foreground">
-                        {integration.name}
-                      </span>
-                      <StatusPill status={pill.status} label={pill.label} />
-                    </div>
-                    {integration.blurb && (
-                      <p className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
-                        {integration.blurb}
-                      </p>
+        <>
+          <div className="mb-4 space-y-2">
+            {brokenIntegrations.map(integration => {
+              const busy = busySlug === integration.slug;
+              return (
+                <div
+                  key={`reconnect-${integration.slug}`}
+                  className="flex items-center gap-3 rounded-xl bg-foreground p-3 text-background"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/20 text-destructive">
+                    <AlertTriangle size={17} />
+                  </span>
+                  <p className="min-w-0 flex-1 text-[12px] leading-relaxed">
+                    {brokenIntegrations.length === 1 ? (
+                      <>
+                        <strong className="font-semibold">
+                          {integration.name} stopped working
+                        </strong>
+                        {' · '}Reconnect it so your automations keep running.
+                      </>
+                    ) : (
+                      <>
+                        <strong className="font-semibold">
+                          {brokenIntegrations.length} tools stopped working
+                        </strong>
+                        {' · '}Reconnect them so your automations keep running.
+                      </>
                     )}
-                    {needsReconnect && (
-                      <p className="mt-1 text-[12px] leading-relaxed text-destructive">
-                        The connection lapsed — reconnect to keep the automations using it working.
-                      </p>
-                    )}
-                  </div>
-
+                  </p>
                   {canManage && (
-                    <div className="flex flex-shrink-0 items-center gap-2">
-                      {busy ? (
-                        <Button variant="secondary" disabled>
-                          <Loader2 size={14} className="animate-spin" /> Working…
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant={needsReconnect ? 'default' : 'ghost'}
-                            onClick={() => void reconnect(integration)}
-                          >
-                            {needsReconnect ? (
-                              <>
-                                <RefreshCw size={14} /> Reconnect
-                              </>
-                            ) : (
-                              'Reconnect'
-                            )}
-                          </Button>
-                          {/* Only where there is something to disconnect.
-                              An already-disconnected row keeps Reconnect as
-                              its way back, but offering Disconnect on it
-                              asks a destructive question about a grant that
-                              is already gone — and the revoke behind it
-                              would fail at the provider, surfacing an error
-                              for an action that had nothing to do. */}
-                          {integration.status !== 'disconnected' && (
-                            <Button variant="outline" onClick={() => setConfirmOff(integration)}>
-                              Disconnect
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                    <Button
+                      className="shrink-0"
+                      onClick={() => void reconnect(integration)}
+                      disabled={busy}
+                    >
+                      {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      Reconnect
+                    </Button>
                   )}
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed text-left">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th scope="col" className="w-[40%] px-2 py-3 text-[11px] font-medium text-muted-foreground sm:px-4">
+                      Tool
+                    </th>
+                    <th scope="col" className="w-[28%] px-1 py-3 text-[11px] font-medium text-muted-foreground sm:w-[24%] sm:px-4">
+                      Status
+                    </th>
+                    <th scope="col" className="hidden px-4 py-3 text-[11px] font-medium text-muted-foreground sm:table-cell sm:w-[20%]">
+                      Connected
+                    </th>
+                    <th scope="col" className="w-[32%] px-2 py-3 text-right text-[11px] font-medium text-muted-foreground sm:w-[16%] sm:px-4">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {integrations.map(integration => (
+                    <IntegrationRow
+                      key={integration.slug}
+                      integration={integration}
+                      canManage={canManage}
+                      busy={busySlug === integration.slug}
+                      onReconnect={target => void reconnect(target)}
+                      onDisconnect={target => setConfirmOff(target)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {!loading && !loadError && configured && backendConfigured && (
+        <p className="mt-6 text-[12px] text-muted-foreground">
+          Looking for Instagram or TikTok? Those are your{' '}
+          <Link to="/channels" className="font-medium text-foreground underline underline-offset-2">
+            Channels
+          </Link>
+          , the accounts Populr replies from.
+        </p>
       )}
 
       <AddIntegrationModal
