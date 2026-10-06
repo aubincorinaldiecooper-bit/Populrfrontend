@@ -35,4 +35,11 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  // Context modules export their provider and its `useX` hook together; Fast Refresh falls back to a full reload for these two files
+  {
+    files: ['src/context/AppContext.tsx', 'src/context/AuthContext.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
