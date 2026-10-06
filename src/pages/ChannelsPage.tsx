@@ -426,7 +426,7 @@ export default function ChannelsPage() {
           disabled={connectedCount === 0}
           className={cn(buttonVariants(), 'text-[13px] py-2.5 px-4 disabled:opacity-40 disabled:cursor-not-allowed')}
         >
-          Create an automation <ArrowRight size={14} />
+          New automation <ArrowRight size={14} />
         </button>
       </div>
 

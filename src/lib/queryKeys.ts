@@ -9,6 +9,7 @@
  */
 export const queryKeys = {
   notifications: ['notifications'] as const,
+  flows: ['flows'] as const,
   /** The empty search is the unfiltered list — the one the badge counts. */
   conversations: (search = '') => ['conversations', search] as const,
   /**

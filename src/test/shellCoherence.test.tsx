@@ -68,7 +68,7 @@ function mountAt(path: string, page: React.ReactNode = <div>page stub</div>) {
 function expectFullSidebar() {
   // The brand block and the Create CTA — the things the old rail dropped.
   expect(screen.getAllByText('Populr').length).toBeGreaterThan(0);
-  expect(screen.getAllByRole('button', { name: 'Create' }).length).toBeGreaterThan(0);
+  expect(screen.getAllByRole('button', { name: 'New automation' }).length).toBeGreaterThan(0);
   // Every primary destination, by name — an icon-only rail can't pass this.
   for (const item of navItems) {
     expect(screen.getAllByRole('link', { name: item.label }).length).toBeGreaterThan(0);

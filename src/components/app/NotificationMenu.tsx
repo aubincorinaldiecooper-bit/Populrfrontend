@@ -47,8 +47,8 @@ export default function NotificationMenu() {
               <span
                 aria-hidden="true"
                 className="absolute right-0.5 top-0.5 h-[15px] min-w-[15px] rounded-full
-                  bg-sidebar-primary px-1 text-center text-[9.5px] font-semibold
-                  leading-[15px] text-sidebar-primary-foreground"
+                  bg-foreground px-1 text-center text-[9.5px] font-semibold
+                  leading-[15px] text-background"
               >
                 {count > 9 ? '9+' : count}
               </span>

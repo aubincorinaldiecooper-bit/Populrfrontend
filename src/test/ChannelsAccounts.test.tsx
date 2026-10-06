@@ -218,7 +218,7 @@ describe('ChannelsPage — real accounts, automations framing', () => {
   it('frames the page around automations, not the retired Opportunities flow', () => {
     renderPage();
     expect(screen.getByText(/accounts your automations run on/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Create an automation/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /New automation/ })).toBeInTheDocument();
     expect(screen.queryByText(/meaningful engagement/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Go to Opportunities/i)).not.toBeInTheDocument();
   });

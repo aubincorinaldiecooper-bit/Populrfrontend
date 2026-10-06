@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import IntegrationsPage from '../pages/IntegrationsPage';
+import { render } from './render';
 import { appContext } from './appContext.mock';
-import type { Integration, CatalogToolkit } from '../lib/api';
+import type { AutomationFlow, Integration, CatalogToolkit, IntegrationTool } from '../lib/api';
 
 /* Integrations — the third-party apps surface (Composio).
  *
@@ -23,6 +24,8 @@ const mockConnectUrl = vi.fn();
 const mockDisconnect = vi.fn();
 const mockSearchCatalog = vi.fn();
 const mockShowToast = vi.fn();
+const mockFetchFlows = vi.fn();
+const mockFetchIntegrationTools = vi.fn();
 
 vi.mock('../context/AppContext', () => ({
   useApp: () => appContext({ showToast: mockShowToast }),
@@ -34,6 +37,8 @@ vi.mock('../lib/api', async () => {
     ...actual,
     isBackendConfigured: () => true,
     fetchIntegrations: () => mockFetchIntegrations(),
+    fetchFlows: () => mockFetchFlows(),
+    fetchIntegrationTools: (slug: string) => mockFetchIntegrationTools(slug),
     getIntegrationConnectUrl: (slug: string, to: string) => mockConnectUrl(slug, to),
     disconnectIntegration: (id: string) => mockDisconnect(id),
     searchIntegrationCatalog: (q: string, signal?: AbortSignal) => mockSearchCatalog(q, signal),
@@ -66,6 +71,35 @@ function toolkit(over: Partial<CatalogToolkit> = {}): CatalogToolkit {
   };
 }
 
+function automationFlow(slug = 'shopify', id = 'f1', name = 'Free guide DM'): AutomationFlow {
+  return {
+    id,
+    name,
+    status: 'live',
+    accountId: null,
+    platform: 'instagram',
+    graph: {
+      schemaVersion: 1,
+      nodes: [{
+        id: 'action-1',
+        type: 'action',
+        position: { x: 0, y: 0 },
+        config: { kind: 'run_integration', toolkitSlug: slug },
+      }],
+      edges: [],
+    },
+    version: 1,
+    legacyAutomationId: null,
+    activatedAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function integrationTool(slug: string, name: string): IntegrationTool {
+  return { slug, name, description: null, parameters: [] };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/integrations']}>
@@ -74,10 +108,17 @@ function renderPage() {
   );
 }
 
+async function openPicker() {
+  const buttons = await screen.findAllByRole('button', { name: /Add a tool/i });
+  await userEvent.click(buttons[0]);
+}
+
 describe('IntegrationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchCatalog.mockResolvedValue([]);
+    mockFetchFlows.mockResolvedValue([]);
+    mockFetchIntegrationTools.mockResolvedValue([]);
     // jsdom refuses a real assignment to window.location; the page only ever
     // sets .href, so that one property is made writable for the assertions.
     Object.defineProperty(window, 'location', {
@@ -99,10 +140,10 @@ describe('IntegrationsPage', () => {
     expect(screen.queryByText(/of \d+ connected/)).not.toBeInTheDocument();
   });
 
-  it('points a workspace with nothing connected at what integrations are for', async () => {
+  it('points a workspace with nothing connected at what tools are for', async () => {
     mockFetchIntegrations.mockResolvedValue({ configured: true, integrations: [] });
     renderPage();
-    expect(await screen.findByText(/No apps connected yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No tools connected yet/i)).toBeInTheDocument();
     expect(screen.getByText(/inside an automation/i)).toBeInTheDocument();
   });
 
@@ -113,6 +154,7 @@ describe('IntegrationsPage', () => {
     });
     renderPage();
     expect(await screen.findByText('Needs reconnecting')).toBeInTheDocument();
+    expect(screen.getByText(/Shopify stopped working/)).toBeInTheDocument();
     expect(screen.queryByText('Not connected')).not.toBeInTheDocument();
   });
 
@@ -122,7 +164,9 @@ describe('IntegrationsPage', () => {
     mockConnectUrl.mockResolvedValue('https://auth.composio.dev/hosted/abc');
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Add integration/i }));
+    await openPicker();
+    expect(screen.getByRole('heading', { name: 'Add a tool' })).toBeInTheDocument();
+    expect(screen.getByText('Pick an app and sign in. Your automations can then use it.')).toBeInTheDocument();
     expect(await screen.findByText('Calendly')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Connect' }));
@@ -136,7 +180,7 @@ describe('IntegrationsPage', () => {
     mockFetchIntegrations.mockResolvedValue({ configured: true, integrations: [] });
     mockSearchCatalog.mockResolvedValue([toolkit({ connected: true })]);
     renderPage();
-    await userEvent.click(await screen.findByRole('button', { name: /Add integration/i }));
+    await openPicker();
     expect(await screen.findByText('Calendly')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
   });
@@ -149,7 +193,7 @@ describe('IntegrationsPage', () => {
     mockConnectUrl.mockResolvedValue(undefined as unknown as string);
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Add integration/i }));
+    await openPicker();
     await userEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalled());
@@ -162,7 +206,9 @@ describe('IntegrationsPage', () => {
     mockDisconnect.mockRejectedValue(new Error('Couldn’t reach that app just now.'));
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions for Shopify' }));
+    expect(await screen.findByRole('menuitem', { name: 'Reconnect' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Disconnect' }));
     // The question is asked before anything happens; confirm it.
     const confirms = await screen.findAllByRole('button', { name: 'Disconnect' });
     await userEvent.click(confirms[confirms.length - 1]);
@@ -172,7 +218,7 @@ describe('IntegrationsPage', () => {
     expect(tone).toBe('error');
     // Still connected on screen — the backend only marks it disconnected
     // once the provider confirms, so clearing the row here would be a lie.
-    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getAllByText('Connected').length).toBeGreaterThan(0);
   });
 
   it('offers no Disconnect for an app that is already disconnected', async () => {
@@ -192,13 +238,60 @@ describe('IntegrationsPage', () => {
     mockFetchIntegrations.mockResolvedValue({ configured: false, integrations: [] });
     renderPage();
     expect(await screen.findByText(/aren['’]t switched on yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Add integration/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add a tool/i })).not.toBeInTheDocument();
   });
 
-  it('shows the failure rather than an empty list when integrations cannot be loaded', async () => {
+  it('shows the failure rather than an empty list when tools cannot be loaded', async () => {
     mockFetchIntegrations.mockRejectedValue(new Error('Populr is unreachable.'));
     renderPage();
-    expect(await screen.findByText(/Couldn['’]t load integrations/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn['’]t load your tools/i)).toBeInTheDocument();
     expect(screen.getByText('Populr is unreachable.')).toBeInTheDocument();
+  });
+
+  it('filters catalog results by category and resets to All when the query changes', async () => {
+    mockFetchIntegrations.mockResolvedValue({ configured: true, integrations: [] });
+    mockSearchCatalog.mockResolvedValue([
+      toolkit({ name: 'Calendly', categories: ['scheduling'] }),
+      toolkit({ slug: 'shopify', name: 'Shopify', categories: ['ecommerce'] }),
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+    await openPicker();
+    await screen.findByText('Calendly');
+    await user.click(screen.getByRole('button', { name: 'ecommerce' }));
+
+    expect(screen.getByText('Shopify')).toBeInTheDocument();
+    expect(screen.queryByText('Calendly')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ecommerce' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(screen.getByRole('textbox', { name: 'Search apps' }), 'calendar');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows integration actions, available tool chips, and automations using the tool', async () => {
+    mockFetchIntegrations.mockResolvedValue({
+      configured: true,
+      integrations: [integration()],
+    });
+    mockFetchFlows.mockResolvedValue([automationFlow()]);
+    mockFetchIntegrationTools.mockResolvedValue([
+      integrationTool('find_order', 'Find order'),
+      integrationTool('create_customer', 'Create customer'),
+      integrationTool('update_order', 'Update order'),
+      integrationTool('cancel_order', 'Cancel order'),
+    ]);
+    renderPage();
+
+    expect(await screen.findByText('What Populr can do')).toBeInTheDocument();
+    expect(screen.getByText('Find order')).toBeInTheDocument();
+    expect(screen.getByText('Create customer')).toBeInTheDocument();
+    expect(screen.getByText('Update order')).toBeInTheDocument();
+    expect(screen.getByText('+1 more')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Free guide DM' })).toHaveAttribute(
+      'href',
+      '/automations/f1',
+    );
+
+    expect(screen.getByRole('button', { name: 'More actions for Shopify' })).toBeInTheDocument();
   });
 });

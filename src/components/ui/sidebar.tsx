@@ -130,8 +130,8 @@ function Sidebar({ className, children }: { className?: string; children: React.
         <SheetContent
           side="left"
           aria-label="Main menu"
-          className="md:hidden flex w-[248px] flex-col gap-6 overflow-y-auto px-3 py-5
-            pt-[calc(1.25rem+env(safe-area-inset-top))]"
+          className="md:hidden flex w-[248px] flex-col gap-6 overflow-y-auto border-sidebar-border
+            bg-sidebar px-3 py-5 pt-[calc(1.25rem+env(safe-area-inset-top))]"
         >
           {/* Always full: a drawer the creator deliberately opened has no
               reason to hide the labels they opened it to read. */}
@@ -233,8 +233,8 @@ function sidebarMenuButtonClass(active: boolean, collapsed = false, className?: 
       ? 'h-10 w-10 justify-center rounded-xl'
       : 'h-9 gap-2.5 rounded-lg px-2.5 text-[14px]',
     active
-      ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-xs ring-1 ring-sidebar-border'
-      : 'text-sidebar-muted-foreground hover:bg-sidebar-muted/70 hover:text-sidebar-foreground',
+      ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+      : 'text-sidebar-muted-foreground hover:bg-sidebar-muted hover:text-sidebar-foreground',
     className,
   );
 }

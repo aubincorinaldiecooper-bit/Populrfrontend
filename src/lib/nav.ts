@@ -1,4 +1,7 @@
-import { Home, Zap, MessageCircle, Users, UsersRound, Waypoints, Plug, Settings } from 'lucide-react';
+import {
+  Home, Zap, MessageCircle, Users, UsersRound, Waypoints, Wrench, Settings,
+  type LucideIcon,
+} from 'lucide-react';
 
 /**
  * Populr's primary navigation, in one place because two shells render it —
@@ -18,16 +21,23 @@ import { Home, Zap, MessageCircle, Users, UsersRound, Waypoints, Plug, Settings 
  * waiting" signal the drawer's launcher used to carry lives on this nav item
  * as a badge instead.
  */
-export const navItems = [
+export type NavItem = { path: string; label: string; icon: LucideIcon };
+
+export const primaryNavItems: NavItem[] = [
   { path: '/', label: 'Home', icon: Home },
-  { path: '/automations', label: 'Automations', icon: Zap },
   { path: '/inbox', label: 'Inbox', icon: MessageCircle },
+  { path: '/automations', label: 'Automations', icon: Zap },
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/channels', label: 'Channels', icon: Waypoints },
-  { path: '/integrations', label: 'Integrations', icon: Plug },
+  { path: '/integrations', label: 'Tools', icon: Wrench },
+];
+
+export const secondaryNavItems: NavItem[] = [
   { path: '/team', label: 'Team', icon: UsersRound },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
+
+export const navItems = [...primaryNavItems, ...secondaryNavItems];
 
 export function isActivePath(pathname: string, path: string): boolean {
   if (path === '/') return pathname === '/';

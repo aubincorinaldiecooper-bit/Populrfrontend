@@ -135,16 +135,20 @@ describe('what the nav offers depends on who is signed in', () => {
     expect(labels.some(t => t?.includes('Settings'))).toBe(true);
     expect(screen.queryByRole('link', { name: /Contacts/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Team/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Tools/ })).not.toBeInTheDocument();
     // Creating is an owner/editor capability; a canvas invitee cannot.
-    expect(screen.queryByRole('button', { name: /Create/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /New automation/ })).not.toBeInTheDocument();
   });
 
-  it('an owner sees the full map and the Create CTA', async () => {
+  it('an owner sees the full map and the New automation CTA', async () => {
     renderShell(<AppSidebar />);
-    for (const label of ['Home', 'Automations', 'Inbox', 'Contacts', 'Channels', 'Team', 'Settings']) {
+    for (const label of ['Home', 'Inbox', 'Automations', 'Contacts', 'Channels', 'Tools', 'Team', 'Settings']) {
       expect(screen.getAllByRole('link', { name: new RegExp(label) }).length).toBeGreaterThan(0);
     }
-    expect(screen.getAllByRole('button', { name: /Create/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Tools' })).toHaveAttribute('href', '/integrations');
+    expect(screen.getByRole('link', { name: 'Team' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'New automation' }).length).toBeGreaterThan(0);
   });
 });
 
@@ -253,6 +257,9 @@ describe("the header respects who is signed in", () => {
     renderShell(<AppHeader />);
 
     expect(screen.queryByRole('button', { name: /^Inbox/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Search people, automations, and pages' }),
+    ).not.toBeInTheDocument();
     // The bell stays: it calls nothing and says so honestly.
     expect(screen.getAllByRole('button', { name: 'Notifications' }).length).toBeGreaterThan(0);
   });

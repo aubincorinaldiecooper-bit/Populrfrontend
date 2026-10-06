@@ -3,6 +3,7 @@ import {
   readTrigger, readWait, triggerNodes,
   type FlowGraph, type FlowNode,
 } from './flowSchema';
+import type { AutomationFlow } from './api';
 
 /**
  * What an automation does, in the words a creator would use.
@@ -31,6 +32,20 @@ export interface FlowSummary {
 
 /** How many steps get named before the description starts to be a list. */
 const NAMED_STEPS = 3;
+
+export function automationsUsingToolkit(
+  flows: AutomationFlow[],
+  slug: string,
+): AutomationFlow[] {
+  const toolkitSlug = slug.toLowerCase();
+  return flows.filter(flow =>
+    flow.graph.nodes.some(node => {
+      if (node.type !== 'action') return false;
+      const action = readAction(node);
+      return action.kind === 'run_integration' && action.toolkitSlug === toolkitSlug;
+    }),
+  );
+}
 
 function quoted(keywords: string[]): string {
   return keywords.map(k => `“${k}”`).join(' or ');

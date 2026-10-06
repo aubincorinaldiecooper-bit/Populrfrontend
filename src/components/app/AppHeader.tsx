@@ -1,6 +1,7 @@
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import InboxMenu from './InboxMenu';
 import NotificationMenu from './NotificationMenu';
+import CommandMenu from './CommandMenu';
 import { HeaderSlotTarget } from './headerSlots';
 import { useApp } from '../../context/AppContext';
 
@@ -47,8 +48,8 @@ export default function AppHeader() {
   return (
     <header
       className="fixed top-0 left-0 right-0 z-[55] flex items-center gap-1.5
-        h-[calc(4rem+env(safe-area-inset-top))] border-b border-sidebar-border
-        bg-sidebar/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md
+        h-[calc(4rem+env(safe-area-inset-top))] border-b border-border
+        bg-background/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md
         md:sticky md:top-0 md:z-40 md:h-14 md:gap-3 md:border-border/70
         md:bg-background/80 md:px-6 md:pt-0 md:backdrop-blur-md"
     >
@@ -69,12 +70,13 @@ export default function AppHeader() {
         className="peer min-w-0 flex-1 overflow-hidden empty:hidden md:empty:block"
       />
       <span
-        className="mr-auto font-display text-[22px] font-bold text-sidebar-foreground
+        className="mr-auto font-display text-[22px] font-bold text-foreground
           peer-[:not(:empty)]:hidden md:hidden"
       >
         Populr
       </span>
       <HeaderSlotTarget slot="actions" className="flex shrink-0 items-center gap-1 md:gap-2" />
+      <CommandMenu />
       {globals}
     </header>
   );

@@ -29,6 +29,14 @@ export function canEditAutomations(access: MaybeAccess): boolean {
   return access.permissions.editAutomations;
 }
 
+export function canCreateAutomation(access: MaybeAccess): boolean {
+  return (
+    access == null ||
+    access.role === 'owner' ||
+    (access.role === 'member' && access.permissions.editAutomations)
+  );
+}
+
 /**
  * Is this session looking at somebody else's workspace?
  *

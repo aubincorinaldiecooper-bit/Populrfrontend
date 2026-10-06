@@ -87,16 +87,16 @@
     /* The sidebar's own palette. Muted/muted-foreground are Populr
      * extensions: the hover fill (#e9e8e5) and the resting item text
      * (#4c4546). */
-    --sidebar-background: 40 18% 95.5%;
-    --sidebar-foreground: 120 4% 11%;
-    --sidebar-primary: 0 0% 7%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 100%;
-    --sidebar-accent-foreground: 0 0% 7%;
-    --sidebar-border: 35 14% 88%;
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 78 100% 62%;
+    --sidebar-primary-foreground: 0 0% 7%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 18%;
     --sidebar-ring: 78 100% 62%;
-    --sidebar-muted: 45 8% 91%;
-    --sidebar-muted-foreground: 351 5% 28%;
+    --sidebar-muted: 0 0% 13%;
+    --sidebar-muted-foreground: 0 0% 62%;
   }
 
   * {

@@ -5,6 +5,6 @@
  * keeps working in the components that use it.
  */
 export const headerIconButton = `relative flex h-10 w-10 items-center justify-center rounded-full
-  text-sidebar-muted-foreground transition-colors hover:bg-sidebar-muted
-  hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2
+  text-muted-foreground transition-colors hover:bg-muted
+  hover:text-foreground focus-visible:outline-none focus-visible:ring-2
   focus-visible:ring-chartreuse`;

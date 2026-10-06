@@ -96,8 +96,8 @@ describe('the navigation collapses to a rail', () => {
     // Create survives the rail — collapsing is something a creator does
     // anywhere now, not a builder mode where creating was beside the point —
     // and it loses its word for the same reason the links do.
-    const create = within(aside).getByRole('button', { name: 'Create' });
-    expect(create.textContent).not.toContain('Create');
+    const create = within(aside).getByRole('button', { name: 'New automation' });
+    expect(create.textContent).not.toContain('New automation');
   });
 
   it('the control is one control: it says what the next click does', async () => {
