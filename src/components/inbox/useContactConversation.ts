@@ -24,7 +24,7 @@ import type { ContactDetail } from '../../lib/api';
  * open when it lands.
  */
 
-export interface ContactConversationState {
+interface ContactConversationState {
   detail: ContactDetail | null;
   loading: boolean;
   error: string | null;

@@ -25,7 +25,7 @@ import { pollRate } from '../../lib/pollRates';
  * for the truth to find its way back.
  */
 
-export interface NotificationsData {
+interface NotificationsData {
   notifications: WorkspaceNotification[];
   unread: number;
 }
@@ -52,7 +52,7 @@ export function applyRead(data: NotificationsData, id: string): NotificationsDat
  * take back a DIFFERENT row that a second click read while this request was
  * out, undoing something the creator watched happen.
  */
-export function applyUnread(data: NotificationsData, id: string): NotificationsData {
+function applyUnread(data: NotificationsData, id: string): NotificationsData {
   const target = data.notifications.find(n => n.id === id);
   if (!target || target.readAt === null) return data;
   return {
@@ -84,15 +84,6 @@ export function useNotifications() {
     enabled: isBackendConfigured(),
     refetchInterval: pollRate(live),
   });
-}
-
-/**
- * The bell's dot. However many bells render, they read one cached value and
- * share one request — the count can't disagree with the list it came from.
- */
-export function useNotificationsUnread(): { count: number } {
-  const { data } = useNotifications();
-  return { count: data?.unread ?? 0 };
 }
 
 /**

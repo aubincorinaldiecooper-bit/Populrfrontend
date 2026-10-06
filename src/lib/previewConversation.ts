@@ -39,7 +39,7 @@ export type PreviewItem =
   /** Why this message wouldn't have started the automation at all. */
   | { id: string; kind: 'blocked'; text: string };
 
-export interface ConversationInput {
+interface ConversationInput {
   graph: FlowGraph;
   result: FlowSimulationResult;
   channel: 'comment' | 'dm';
@@ -47,7 +47,7 @@ export interface ConversationInput {
   triggerText: string;
 }
 
-export interface Conversation {
+interface Conversation {
   items: PreviewItem[];
   /** True when the flow is waiting on the creator to reply, or not to. */
   awaitingReply: boolean;

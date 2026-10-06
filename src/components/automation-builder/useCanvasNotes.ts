@@ -28,7 +28,7 @@ export type Placement =
   | { nodeId: string; at: { relX: number; relY: number } }
   | { at: { x: number; y: number } };
 
-export interface CanvasNotes {
+interface CanvasNotes {
   threads: CommentThread[];
   /** Unresolved only — what paints a pin and what the header counts. */
   open: CommentThread[];
@@ -129,7 +129,7 @@ export function useCanvasNotes(flowId: string | null): CanvasNotes {
  * "Leave a note", and a right-click that goes straight to a placement — and
  * one of them is not on the canvas at all.
  */
-export interface Placing {
+interface Placing {
   /** A placement chosen and waiting for words. */
   at: Placement | null;
   /** Armed and waiting for a click to choose a place. */

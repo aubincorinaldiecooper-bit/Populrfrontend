@@ -202,10 +202,6 @@ function SidebarHeader({ className, children }: { className?: string; children: 
   return <div className={cn('flex flex-col gap-7', className)}>{children}</div>;
 }
 
-function SidebarContent({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn('flex flex-1 flex-col', className)}>{children}</div>;
-}
-
 function SidebarFooter({ className, children }: { className?: string; children: React.ReactNode }) {
   return <div className={cn('mt-auto', className)}>{children}</div>;
 }
@@ -245,7 +241,6 @@ export {
   SidebarTrigger,
   SidebarInset,
   SidebarHeader,
-  SidebarContent,
   SidebarFooter,
   SidebarMenu,
   sidebarMenuButtonClass,

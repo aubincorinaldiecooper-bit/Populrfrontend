@@ -19,7 +19,7 @@ import { fetchPostsLibrary, isBackendConfigured, syncPostsLibrary, type PostLibr
  *    "couldn't read this account" indistinguishable from "no posts here",
  *    which is the exact ambiguity Refresh exists to settle.
  */
-export interface AccountPosts {
+interface AccountPosts {
   posts: PostLibraryItem[];
   loading: boolean;
   /** Re-sync from the platform, then reload. Reports a sync that didn't work. */

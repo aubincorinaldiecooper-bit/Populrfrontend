@@ -21,7 +21,7 @@ export function isNumericParam(type: string): boolean {
   return t === 'number' || t === 'integer';
 }
 
-export function isStructuredParam(type: string): boolean {
+function isStructuredParam(type: string): boolean {
   const t = type.toLowerCase();
   return t === 'array' || t === 'object';
 }

@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
  */
 const DropdownMenu = BaseMenu.Root;
 const DropdownMenuTrigger = BaseMenu.Trigger;
-const DropdownMenuGroup = BaseMenu.Group;
 
 const DropdownMenuContent = React.forwardRef<
   HTMLDivElement,
@@ -98,7 +97,6 @@ const DropdownMenuSeparator = React.forwardRef<
 export {
   DropdownMenu,
   DropdownMenuTrigger,
-  DropdownMenuGroup,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,

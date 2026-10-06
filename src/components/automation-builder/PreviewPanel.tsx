@@ -27,7 +27,7 @@ import type { FlowSimulationResult } from '../../lib/api';
 
 const FAN = '@yourfan';
 
-export interface PreviewPanelProps {
+interface PreviewPanelProps {
   graph: FlowGraph;
   /** "Instagram" — names the surface the DM opens on. */
   platformLabel: string | null;

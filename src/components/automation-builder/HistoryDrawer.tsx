@@ -11,7 +11,7 @@ import type { HistoryEntry } from './useFlowBuilder';
  * a question worth answering well and rarely.
  */
 
-export interface HistoryDrawerProps {
+interface HistoryDrawerProps {
   history: HistoryEntry[];
   canUndo: boolean;
   onUndo: () => void;

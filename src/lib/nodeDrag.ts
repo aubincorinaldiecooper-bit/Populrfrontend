@@ -16,9 +16,9 @@ import type { NodeChange } from '@xyflow/react';
  * in their history.
  */
 
-export interface Point { x: number; y: number }
+interface Point { x: number; y: number }
 
-export interface DragUpdate {
+interface DragUpdate {
   /** Positions to hold locally: these gestures are still in flight. */
   live: Record<string, Point>;
   /** Gestures that ended — commit these, then stop holding them. */

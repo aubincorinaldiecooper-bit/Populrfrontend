@@ -101,7 +101,7 @@ export function spreadOverlaps(
   return out;
 }
 
-export type ThreadSide = 'right' | 'left' | 'bottom' | 'top';
+type ThreadSide = 'right' | 'left' | 'bottom' | 'top';
 
 interface Rect { left: number; top: number; right: number; bottom: number; }
 

@@ -36,7 +36,7 @@ import type { AutomationFlow } from '../../lib/api';
  * a page a creator scans, and put it one mis-click from Pause.
  */
 
-export interface AutomationCardProps {
+interface AutomationCardProps {
   flow: AutomationFlow;
   /** Distinct people this automation has reached; null while unknown. */
   audience: number | null;

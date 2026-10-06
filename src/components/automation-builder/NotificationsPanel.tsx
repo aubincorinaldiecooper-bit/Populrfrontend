@@ -15,7 +15,7 @@ import { shortAgo, type BuilderNotification } from '../../lib/builderNotificatio
  * automation may go live — that stays with the server.
  */
 
-export interface NotificationsPanelProps {
+interface NotificationsPanelProps {
   notifications: BuilderNotification[];
   /** Re-checking with the server after an edit. */
   checking: boolean;

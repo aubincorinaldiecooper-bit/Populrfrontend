@@ -17,7 +17,7 @@ import MenuHighlight from './MenuHighlight';
  * with it.
  */
 
-export interface SelectOption<T extends string> {
+interface SelectOption<T extends string> {
   value: T;
   label: string;
   /** One line under the label — what this choice actually does. */
@@ -27,7 +27,7 @@ export interface SelectOption<T extends string> {
   note?: string;
 }
 
-export interface SelectProps<T extends string> {
+interface SelectProps<T extends string> {
   value: T | '';
   options: SelectOption<T>[];
   onChange: (value: T) => void;

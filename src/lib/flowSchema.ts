@@ -12,11 +12,11 @@
  * inside one of them, not as a sixth shape on the canvas.
  */
 
-export const FLOW_SCHEMA_VERSION = 1;
+const FLOW_SCHEMA_VERSION = 1;
 
 export type FlowNodeType = 'trigger' | 'condition' | 'send' | 'wait' | 'action';
-export type BranchLabel = 'next' | 'yes' | 'no';
-export type MatchMode = 'contains' | 'exact' | 'any';
+type BranchLabel = 'next' | 'yes' | 'no';
+type MatchMode = 'contains' | 'exact' | 'any';
 
 export interface FlowNode {
   id: string;
@@ -76,7 +76,7 @@ export const LEAD_STAGES = ['cold', 'interested', 'warm', 'hot', 'converted'] as
 // stored graph may have been written by the AI or an older build.
 // ---------------------------------------------------------------------------
 
-export interface TriggerConfig {
+interface TriggerConfig {
   kind: 'comment' | 'dm';
   accountId: string | null;
   platform: string | null;
@@ -87,7 +87,7 @@ export interface TriggerConfig {
   allowMultipleRuns: boolean;
 }
 
-export interface ConditionConfig {
+interface ConditionConfig {
   kind: 'text_contains' | 'replied' | 'has_tag';
   keywords: string[];
   matchMode: MatchMode;
@@ -96,7 +96,7 @@ export interface ConditionConfig {
   withinMinutes: number;
 }
 
-export interface SendConfig {
+interface SendConfig {
   kind: 'dm' | 'comment_reply';
   text: string;
   linkUrl: string | null;
@@ -104,12 +104,12 @@ export interface SendConfig {
   buttons: { label: string; url?: string }[];
 }
 
-export interface WaitConfig {
+interface WaitConfig {
   kind: 'duration';
   minutes: number;
 }
 
-export interface ActionConfig {
+interface ActionConfig {
   kind: 'add_tag' | 'remove_tag' | 'set_stage' | 'notify_creator' | 'run_integration';
   tag: string | null;
   stage: string | null;

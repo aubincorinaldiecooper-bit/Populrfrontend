@@ -29,7 +29,7 @@ import { activityLines, parseOperations } from '../../lib/composerActivity';
  * the change came from the AI, the inspector, or a drag.
  */
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export interface ChangeCard {
   summary: string;
@@ -83,7 +83,7 @@ function entriesFromMessages(messages: FlowAiMessage[], graph: FlowGraph): Histo
 
 const AUTOSAVE_DELAY_MS = 700;
 /** How long an AI-touched node keeps its highlight. */
-export const HIGHLIGHT_MS = 2600;
+const HIGHLIGHT_MS = 2600;
 
 export function useFlowBuilder(flowId: string | null) {
   const [flow, setFlow] = useState<AutomationFlow | null>(null);

@@ -140,7 +140,7 @@ export function needsLayout(graph: FlowGraph): boolean {
 }
 
 /** React Flow's viewport, in the only terms this module needs. */
-export interface Viewport { x: number; y: number; zoom: number }
+interface Viewport { x: number; y: number; zoom: number }
 
 /**
  * Hold the middle still while the canvas changes width.

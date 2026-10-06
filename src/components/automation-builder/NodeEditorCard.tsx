@@ -173,7 +173,7 @@ export interface BuilderQuestion {
   field: string | null;
 }
 
-export interface NodeEditorCardProps {
+interface NodeEditorCardProps {
   node: FlowNode;
   /** "anchored" floats at the node on the canvas; "sheet" fills a bottom sheet. */
   variant: 'anchored' | 'sheet';

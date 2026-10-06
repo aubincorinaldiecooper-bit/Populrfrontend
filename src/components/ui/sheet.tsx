@@ -19,8 +19,6 @@ import { cn } from '@/lib/utils';
  */
 const Sheet = BaseDialog.Root;
 const SheetTrigger = BaseDialog.Trigger;
-const SheetClose = BaseDialog.Close;
-const SheetTitle = BaseDialog.Title;
 
 const sides = {
   left: 'inset-y-0 left-0 h-full border-r data-[starting-style]:-translate-x-full data-[ending-style]:-translate-x-full',
@@ -55,7 +53,7 @@ const SheetContent = React.forwardRef<
         ref={ref}
         className={cn(
           `fixed z-[50] bg-background border-border outline-none
-           transition-transform duration-300 ease-[cubic-bezier(0.24,1,0.4,1)]`,
+           transition-transform duration-300 [transition-timing-function:cubic-bezier(0.24,1,0.4,1)]`,
           sides[side],
           className,
         )}
@@ -67,4 +65,4 @@ const SheetContent = React.forwardRef<
   );
 });
 
-export { Sheet, SheetTrigger, SheetClose, SheetTitle, SheetContent };
+export { Sheet, SheetTrigger, SheetContent };

@@ -24,7 +24,7 @@ import type { Conversation } from '../../lib/api';
  * no longer edit or clear.
  */
 
-export interface ConversationListProps {
+interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string | null;
   search: string;

@@ -20,7 +20,7 @@ import { NODE_HEIGHT, NODE_WIDTH } from './flowLayout';
  * a DOM.
  */
 
-export type EditorSide = 'bottom' | 'top' | 'right' | 'left';
+type EditorSide = 'bottom' | 'top' | 'right' | 'left';
 
 interface Rect {
   left: number;

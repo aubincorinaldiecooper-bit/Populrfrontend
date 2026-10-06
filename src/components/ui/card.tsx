@@ -54,37 +54,4 @@ const Card = React.forwardRef<
   );
 });
 
-const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  function CardHeader({ className, ...props }, ref) {
-    return <div ref={ref} className={cn('flex flex-col gap-1 p-5 pb-3', className)} {...props} />;
-  },
-);
-
-const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  function CardTitle({ className, ...props }, ref) {
-    return <h3 ref={ref} className={cn('type-section-title', className)} {...props} />;
-  },
-);
-
-const CardDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(function CardDescription({ className, ...props }, ref) {
-  return <p ref={ref} className={cn('text-[13px] text-muted-foreground', className)} {...props} />;
-});
-
-const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  function CardContent({ className, ...props }, ref) {
-    return <div ref={ref} className={cn('p-5 pt-0', className)} {...props} />;
-  },
-);
-
-const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  function CardFooter({ className, ...props }, ref) {
-    return (
-      <div ref={ref} className={cn('flex items-center gap-2 p-5 pt-0', className)} {...props} />
-    );
-  },
-);
-
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, cardVariants };
+export { Card, cardVariants };

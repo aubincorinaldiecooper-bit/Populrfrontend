@@ -44,7 +44,6 @@ export const authClient = createAuthClient({
   plugins: [magicLinkClient()],
 });
 
-export type AuthClient = typeof authClient;
 
 // ============================================================
 // Backend API auth token — the populrbackend service verifies callers via

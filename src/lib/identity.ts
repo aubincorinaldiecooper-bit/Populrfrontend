@@ -19,7 +19,7 @@
 // ============================================================
 import type { AuthUser } from '../context/AuthContext';
 
-export interface ResolvedIdentity {
+interface ResolvedIdentity {
   /** Better Auth name -> email local-part -> "Populr user". Never invented. */
   name: string;
   /** Better Auth email, or null if unavailable. */

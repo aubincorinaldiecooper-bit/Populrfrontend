@@ -37,7 +37,7 @@ const icons = {
   info: Info,
 } as const;
 
-export interface AlertProps
+interface AlertProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof alertVariants> {
   /** Set false where the surrounding layout already carries the meaning. */
@@ -71,4 +71,4 @@ const AlertTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<H
   },
 );
 
-export { Alert, AlertTitle, alertVariants };
+export { Alert, AlertTitle };

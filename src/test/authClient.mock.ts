@@ -7,8 +7,8 @@ import { vi } from 'vitest';
  * state between tests.
  */
 /** The token cache the real module owns; tests assert the session ends. */
-export const clearApiAuthTokenMock = vi.fn();
-export const getApiAuthTokenMock = vi.fn(async () => null);
+const clearApiAuthTokenMock = vi.fn();
+const getApiAuthTokenMock = vi.fn(async () => null);
 
 export const authClientMock = {
   getSession: vi.fn(),

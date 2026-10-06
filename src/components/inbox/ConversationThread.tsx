@@ -20,7 +20,7 @@ import type { ContactDetail, ContactMessage } from '../../lib/api';
  * deliberate second action inside the panel, where it can be labelled.
  */
 
-export interface ConversationThreadProps {
+interface ConversationThreadProps {
   detail: ContactDetail;
   loading: boolean;
   sending: boolean;

@@ -15,7 +15,7 @@ const SUGGESTIONS = [
   'Capture an email before sending a link',
 ];
 
-export interface AIChatPanelProps {
+interface AIChatPanelProps {
   history: HistoryEntry[]; composing: boolean; changeCard: ChangeCard | null;
   activity: string[]; canUndo: boolean; aiConfigured: boolean; empty: boolean;
   selectedNode: FlowNode | null; onSubmit: (prompt: string) => void; onUndo: () => void;
